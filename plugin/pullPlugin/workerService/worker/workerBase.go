@@ -1,4 +1,4 @@
-package pluginBase
+package worker
 
 import (
 	"database/sql"
