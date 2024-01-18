@@ -9,7 +9,7 @@ import (
 	"github.com/drkisler/dataPedestal/portal/control"
 	"github.com/drkisler/dataPedestal/portal/module"
 	"github.com/drkisler/dataPedestal/portal/service"
-	userService "github.com/drkisler/dataPedestal/universal/userAdmin/service"
+	usrServ "github.com/drkisler/dataPedestal/universal/userAdmin/service"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/takama/daemon"
@@ -54,19 +54,19 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	r := gin.Default()
 
 	r.MaxMultipartMemory = 8 << 20
-	r.POST("/login", userService.Login)
+	r.POST("/login", usrServ.Login)
 	r.NoRoute(func(c *gin.Context) {
 
 		c.JSON(404, gin.H{"code": -1, "message": "api not found"})
 	})
 	user := r.Group("/user")
 	user.Use(common.SetHeader, utils.AuthMiddleware)
-	user.POST("/delete", userService.DeleteUser)
-	user.POST("/add", userService.AddUser)
-	user.POST("/alter", userService.AlterUser)
-	user.GET("/get", userService.QueryUser)
-	user.POST("/reset", userService.ResetPassword)
-	user.POST("/getCurrentUser", userService.GetCurrentUser)
+	user.POST("/delete", usrServ.DeleteUser)
+	user.POST("/add", usrServ.AddUser)
+	user.POST("/alter", usrServ.AlterUser)
+	user.GET("/get", usrServ.QueryUser)
+	user.POST("/reset", usrServ.ResetPassword)
+	user.POST("/checkUser", usrServ.CheckUser)
 	plugin := r.Group("/plugin")
 	plugin.Use(common.SetHeader, utils.AuthMiddleware)
 	plugin.POST("/delete", service.DeletePlugin)

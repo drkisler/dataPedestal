@@ -94,7 +94,7 @@ func ResetPassword(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, usr.ResetPassword())
 }
 
-func GetCurrentUser(ctx *gin.Context) {
+func CheckUser(ctx *gin.Context) {
 	var err error
 	var usr usrCtl.TUserControl
 	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
