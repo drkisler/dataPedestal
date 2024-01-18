@@ -66,6 +66,7 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	user.POST("/alter", userService.AlterUser)
 	user.GET("/get", userService.QueryUser)
 	user.POST("/reset", userService.ResetPassword)
+	user.POST("/getCurrentUser", userService.GetCurrentUser)
 	plugin := r.Group("/plugin")
 	plugin.Use(common.SetHeader, utils.AuthMiddleware)
 	plugin.POST("/delete", service.DeletePlugin)

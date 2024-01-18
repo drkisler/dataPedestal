@@ -38,9 +38,6 @@ type TMyPlugin struct {
 	ServerPort  int32
 	serv        *http.Server
 	workerProxy *workerService.TWorkerProxy
-	//user:password@tcp(localhost:80)/dbname?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true
-	//user:password@tcp(localhost:5555)/dbname?tls=skip-verify&autocommit=true
-
 }
 
 func CreatePullMySQLPlugin() (common.IPlugin, error) {
@@ -106,6 +103,7 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	pull.POST("/add", Add)
 	pull.POST("/alter", Alter)
 	pull.POST("/get", Get)
+	pull.POST("/setStatus", SetStatus)
 
 	mp.serv = &http.Server{
 		Addr:    fmt.Sprintf(":%d", mp.ServerPort),

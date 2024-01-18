@@ -1,6 +1,9 @@
 package common
 
-import "github.com/drkisler/utils"
+import (
+	"database/sql"
+	"github.com/drkisler/utils"
+)
 
 type IPlugin interface {
 	Load(config string) utils.TResponse
@@ -23,4 +26,15 @@ type IPlugin interface {
 	GetDebugLogDate() utils.TResponse
 	DelDebugOldLog(strDate string) utils.TResponse
 	DelDebugLog(params string) utils.TResponse
+}
+
+type IPullWorker interface {
+	OpenConnect() error
+	CloseConnect() error
+	GetKeyColumns(schema, tableName string) ([]string, error)
+	GetColumns(schema, tableName string) ([]string, error)
+	GetTables(schema string) ([]string, error)
+	ReadData(strSQL, filter string) (*sql.Rows, error)
+	CheckTable(data *sql.Rows, tableName string) error
+	WriteData(batch int, data *sql.Rows) error
 }

@@ -1,23 +1,23 @@
 package workerService
 
 import (
-	"database/sql"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
-	"github.com/jmoiron/sqlx"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 )
 
+var NewWorker TNewWorker
+
+type TNewWorker = func(connectStr string, connectBuffer, DataBuffer int, keepConnect bool) (common.IPullWorker, error)
 type TWorkerProxy struct {
 	pluginBase.TBasePlugin
 	Lock          *sync.Mutex
-	DbDriver      *sqlx.DB
+	Worker        common.IPullWorker
 	ConnectString string //datasource
 	DestDatabase  string //数据中心的数据库
 	KeepConnect   bool
@@ -30,20 +30,14 @@ type TWorkerProxy struct {
 func NewWorkerProxy(cfg *initializers.TMySQLConfig, logger *logAdmin.TLoggerAdmin) (*TWorkerProxy, error) {
 	var err error
 	var lock sync.Mutex
-	var dbDriver *sqlx.DB
-	dbDriver, err = sqlx.Open("mysql", cfg.ConnectString)
-	if err != nil {
+	var worker common.IPullWorker
+	if worker, err = NewWorker(cfg.ConnectString, cfg.ConnectBuffer, cfg.DataBuffer, cfg.KeepConnect); err != nil {
 		return nil, err
 	}
-	if err = dbDriver.Ping(); err != nil {
-		return nil, err
-	}
-	dbDriver.SetMaxOpenConns(cfg.ConnectBuffer)
-	dbDriver.SetConnMaxIdleTime(2 * time.Minute)
-	dbDriver.SetConnMaxLifetime(30 * time.Minute)
+
 	return &TWorkerProxy{TBasePlugin: pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: cfg.IsDebug, Logger: logger},
 		Lock:          &lock,
-		DbDriver:      dbDriver,
+		Worker:        worker,
 		ConnectString: cfg.ConnectString,
 		DestDatabase:  cfg.DestDatabase,
 		KeepConnect:   cfg.KeepConnect,
@@ -82,22 +76,9 @@ func (pw *TWorkerProxy) Run() {
 }
 
 func (pw *TWorkerProxy) PullTable() error {
-	if !pw.KeepConnect {
-		db, err := sqlx.Open("mysql", pw.ConnectString)
-		if err != nil {
-			return err
-		}
-		if err = db.Ping(); err != nil {
-			return err
-		}
-		db.SetMaxOpenConns(pw.ConnectBuffer)
-		db.SetConnMaxIdleTime(2 * time.Minute)
-		db.SetConnMaxLifetime(30 * time.Minute)
-		pw.DbDriver = db
-		defer func() {
-			_ = pw.DbDriver.Close()
-		}()
-
+	err := pw.Worker.OpenConnect()
+	if err != nil {
+		return err
 	}
 	tables, cnt, err := ctl.GetAllTables()
 	if err != nil {
@@ -105,26 +86,11 @@ func (pw *TWorkerProxy) PullTable() error {
 	}
 	if cnt > 0 {
 		for _, tbl := range tables {
-			if _, err := pw.ReadData(tbl.SelectSql, tbl.FilterVal); err != nil {
+			if _, err := pw.Worker.ReadData(tbl.SelectSql, tbl.FilterVal); err != nil {
 				return err
 			}
 
 		}
 	}
 	return nil
-}
-
-func (pw *TWorkerProxy) ReadData(strSQL, filter string) (*sql.Rows, error) {
-	var filterVal []any
-	for _, strVal := range strings.Split(filter, ",") {
-		filterVal = append(filterVal, strVal)
-	}
-	rows, err := pw.DbDriver.Query(strSQL, filterVal...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	return rows, nil
 }

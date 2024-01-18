@@ -56,6 +56,18 @@ func Get(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, ptc.Get())
 }
+func SetStatus(ctx *gin.Context) {
+	var ptc ctl.TPullTableControl
+	err := common.CheckRequest(ctx, &ptc)
+	if err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		return
+	}
+	ctx.JSON(http.StatusOK, ptc.SetStatus())
+}
 
 /*
 func CheckSQL(ctx *gin.Context,mp *TMyPlugin) {

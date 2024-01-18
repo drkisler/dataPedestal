@@ -7,16 +7,6 @@ import (
 	"time"
 )
 
-type IPullWorker interface {
-	OpenConnect() error
-	CloseConnect() error
-	GetKeyColumns(schema, tableName string) ([]string, error)
-	GetColumns(schema, tableName string) ([]string, error)
-	GetTables(schema string) ([]string, error)
-	ReadData(strSQL, filter string) (*sql.Rows, error)
-	CreateTable(data *sql.Rows, tableName string) error
-	WriteData(batch int, data *sql.Rows) error
-}
 type TDatabase struct {
 	KeepConnect   bool
 	ConnectBuffer int

@@ -93,3 +93,13 @@ func ResetPassword(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, usr.ResetPassword())
 }
+
+func GetCurrentUser(ctx *gin.Context) {
+	var err error
+	var usr usrCtl.TUserControl
+	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	ctx.JSON(http.StatusOK, utils.ReturnID(usr.UserID))
+}
