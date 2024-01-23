@@ -18,7 +18,7 @@ const checkPullTable = "Create " +
 	",filter_col text not null" +
 	",filter_val text not null" +
 	",key_col text not null" +
-	",buffer integer not null" +
+	",buffer integer not null" + // 读取时的缓存
 	",status text not null default 'disabled' " + //停用 disabled 启用 enabled
 	",constraint pk_PullTable primary key(user_id,table_id));"
 

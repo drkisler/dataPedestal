@@ -1,11 +1,14 @@
 package workerService
 
 import (
+	"database/sql"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
+	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
+	"github.com/drkisler/utils"
 	"slices"
 	"sync"
 	"time"
@@ -13,37 +16,43 @@ import (
 
 var NewWorker TNewWorker
 
-type TNewWorker = func(connectStr string, connectBuffer, DataBuffer int, keepConnect bool) (common.IPullWorker, error)
+type TNewWorker = func(connectStr string, connectBuffer, DataBuffer int, keepConnect bool) (clickHouse.IPullWorker, error)
 type TWorkerProxy struct {
 	pluginBase.TBasePlugin
-	Lock          *sync.Mutex
-	Worker        common.IPullWorker
-	ConnectString string //datasource
-	DestDatabase  string //数据中心的数据库
-	KeepConnect   bool
-	ConnectBuffer int
-	SkipHour      []int
-	Frequency     int
+	Lock             *sync.Mutex
+	worker           clickHouse.IPullWorker
+	clickHouseClient *clickHouse.TClickHouseClient
+	ConnectString    string //datasource
+	DestDatabase     string //数据中心的数据库
+	KeepConnect      bool
+	ConnectBuffer    int
+	SkipHour         []int
+	Frequency        int
 }
 
 // NewWorkerProxy 初始化
 func NewWorkerProxy(cfg *initializers.TMySQLConfig, logger *logAdmin.TLoggerAdmin) (*TWorkerProxy, error) {
 	var err error
 	var lock sync.Mutex
-	var worker common.IPullWorker
+	var worker clickHouse.IPullWorker
+	var chClient *clickHouse.TClickHouseClient
 	if worker, err = NewWorker(cfg.ConnectString, cfg.ConnectBuffer, cfg.DataBuffer, cfg.KeepConnect); err != nil {
 		return nil, err
 	}
+	enStr := utils.TEnString{String: cfg.DestDatabase}
+	dbCfg := *enStr.ToMap(",", "=", "")
+	chClient, err = clickHouse.NewClickHouseClient(dbCfg["Address"], dbCfg["Database"], dbCfg["User"], dbCfg["Password"])
 
 	return &TWorkerProxy{TBasePlugin: pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: cfg.IsDebug, Logger: logger},
-		Lock:          &lock,
-		Worker:        worker,
-		ConnectString: cfg.ConnectString,
-		DestDatabase:  cfg.DestDatabase,
-		KeepConnect:   cfg.KeepConnect,
-		ConnectBuffer: cfg.ConnectBuffer,
-		SkipHour:      cfg.SkipHour,
-		Frequency:     cfg.Frequency,
+		Lock:             &lock,
+		worker:           worker,
+		clickHouseClient: chClient,
+		ConnectString:    cfg.ConnectString,
+		DestDatabase:     cfg.DestDatabase,
+		KeepConnect:      cfg.KeepConnect,
+		ConnectBuffer:    cfg.ConnectBuffer,
+		SkipHour:         cfg.SkipHour,
+		Frequency:        cfg.Frequency,
 	}, nil
 }
 
@@ -63,10 +72,22 @@ func (pw *TWorkerProxy) Run() {
 					return
 				}
 				if minutes > pw.Frequency {
+					if !pw.KeepConnect {
+						if err := pw.clickHouseClient.ReConnect(); err != nil {
+							_ = pw.Logger.WriteError(err.Error())
+							return
+						}
+					}
 					if err := pw.PullTable(); err != nil {
 						_ = pw.Logger.WriteError(err.Error())
 					}
 					minutes = 0
+					if !pw.KeepConnect {
+						if err := pw.clickHouseClient.Client.Close(); err != nil {
+							_ = pw.Logger.WriteError(err.Error())
+							return
+						}
+					}
 				}
 			}
 
@@ -76,7 +97,8 @@ func (pw *TWorkerProxy) Run() {
 }
 
 func (pw *TWorkerProxy) PullTable() error {
-	err := pw.Worker.OpenConnect()
+	var rows *sql.Rows
+	err := pw.worker.OpenConnect()
 	if err != nil {
 		return err
 	}
@@ -86,7 +108,10 @@ func (pw *TWorkerProxy) PullTable() error {
 	}
 	if cnt > 0 {
 		for _, tbl := range tables {
-			if _, err := pw.Worker.ReadData(tbl.SelectSql, tbl.FilterVal); err != nil {
+			if rows, err = pw.worker.ReadData(tbl.SelectSql, tbl.FilterVal); err != nil {
+				return err
+			}
+			if err = pw.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, pw.clickHouseClient); err != nil {
 				return err
 			}
 

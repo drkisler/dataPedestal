@@ -82,8 +82,6 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	return utils.TResponse{Code: 0, Info: string(data)}
 }
 func (mp *TMyPlugin) Run() utils.TResponse {
-	// 启动工人
-
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.POST("/login", userService.Login)
