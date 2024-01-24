@@ -41,7 +41,7 @@ func (bp *TBasePlugin) Load(config string) utils.TResponse {
 		return *utils.Failure("插件名称错误")
 	}
 	bp.IsDebug = cfg.IsDebug
-	if bp.Logger, err = logAdmin.InitLogger(); err != nil {
+	if bp.Logger, err = logAdmin.GetLogger(); err != nil {
 		return *utils.Failure(err.Error())
 	}
 	return *utils.Success(nil)

@@ -10,6 +10,7 @@ import (
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
 	"github.com/drkisler/utils"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -98,6 +99,7 @@ func (pw *TWorkerProxy) Run() {
 
 func (pw *TWorkerProxy) PullTable() error {
 	var rows *sql.Rows
+	var filters []string
 	err := pw.worker.OpenConnect()
 	if err != nil {
 		return err
@@ -114,7 +116,17 @@ func (pw *TWorkerProxy) PullTable() error {
 			if err = pw.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, pw.clickHouseClient); err != nil {
 				return err
 			}
-
+			if tbl.FilterCol != "" {
+				arrFilterVal := strings.Split(tbl.FilterCol, ",")
+				filters, err = pw.clickHouseClient.GetMaxFilter(tbl.DestTable, arrFilterVal)
+				if err != nil {
+					return err
+				}
+				tbl.FilterVal = strings.Join(filters, ",")
+				if err = tbl.SetFilterVal(); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil

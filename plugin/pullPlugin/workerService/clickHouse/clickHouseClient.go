@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ClickHouse/ch-go"
 	"github.com/ClickHouse/ch-go/proto"
+	"strings"
 )
 
 type IPullWorker interface {
@@ -89,4 +90,28 @@ func (chc *TClickHouseClient) LoadData(tableName string, data []proto.InputColum
 		return err
 	}
 	return nil
+}
+
+func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterColumn []string) ([]string, error) {
+	var filterData = make([]proto.ColStr, len(filterColumn))
+	var result proto.Results
+	for i, colName := range filterColumn {
+		var resultCol proto.ResultColumn
+		//var data proto.ColStr
+		filterColumn[i] = fmt.Sprintf("cast(max(%s) as varchar) %s ", filterColumn[i], filterColumn[i])
+		resultCol.Name = colName
+		resultCol.Data = &filterData[i]
+		result = append(result, resultCol)
+	}
+	strBody := fmt.Sprintf("select %s from %s", strings.Join(filterColumn, ","), tableName)
+	if err := chc.Client.Do(chc.Ctx, ch.Query{Body: strBody, Result: result}); err != nil {
+		return nil, err
+	}
+	var filtervalue []string
+	for _, colStr := range filterData {
+		if colStr.Rows() > 0 {
+			filtervalue = append(filtervalue, colStr.Row(0))
+		}
+	}
+	return filtervalue, nil
 }

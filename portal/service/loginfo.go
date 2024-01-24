@@ -11,14 +11,6 @@ import (
 
 var logger *logAdmin.TLoggerAdmin
 
-func init() {
-	var err error
-	logger, err = logAdmin.InitLogger()
-	if err != nil {
-		panic(err)
-	}
-}
-
 type TLogServ struct {
 	LogID   int64  `json:"log_id,omitempty"`
 	LogType string `json:"log_type"`

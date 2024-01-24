@@ -2,7 +2,9 @@ package service
 
 import (
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/portal/module"
 	usrCtl "github.com/drkisler/dataPedestal/universal/userAdmin/control"
+	usrModl "github.com/drkisler/dataPedestal/universal/userAdmin/module"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -27,7 +29,21 @@ func Login(ctx *gin.Context) {
 	usr.Password = ""
 	ctx.JSON(http.StatusOK, utils.Authentication(strToken, usr))
 }
-
+func ConnectToDB(filePath string) error {
+	usrModl.DbFilePath = filePath
+	_, err := module.GetDbServ()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func CloseConnect() error {
+	db, err := usrModl.GetDbServ()
+	if err != nil {
+		return err
+	}
+	return db.CloseDB()
+}
 func DeleteUser(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
 	err := common.CheckRequest(ctx, &usr)

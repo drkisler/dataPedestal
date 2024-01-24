@@ -44,7 +44,7 @@ func GetOperater(ctx *gin.Context) (int32, string, error) {
 		return 0, "", errors.New("无权操作")
 	}
 	if account, ok = val.(string); !ok {
-		return 0, "", errors.New("accound类型错误")
+		return 0, "", errors.New("account 类型错误")
 	}
 	return id, account, nil
 }

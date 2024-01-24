@@ -24,6 +24,7 @@ func (uc *TUserControl) Login() error {
 	if uc.Password != usr.Password {
 		return fmt.Errorf("密码错误")
 	}
+	uc.UserID = usr.UserID
 	return nil
 }
 

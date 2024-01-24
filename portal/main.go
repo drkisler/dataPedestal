@@ -64,7 +64,7 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	user.POST("/delete", usrServ.DeleteUser)
 	user.POST("/add", usrServ.AddUser)
 	user.POST("/alter", usrServ.AlterUser)
-	user.GET("/get", usrServ.QueryUser)
+	user.POST("/get", usrServ.QueryUser)
 	user.POST("/reset", usrServ.ResetPassword)
 	user.POST("/checkUser", usrServ.CheckUser)
 	plugin := r.Group("/plugin")
@@ -96,7 +96,8 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
-			fmt.Printf("listen: %s\n", err.Error())
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, fmt.Sprintf("listen: %s\n", err.Error()))
+
 		}
 	}()
 
@@ -108,13 +109,13 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server Shutdown:", err)
+		_ = utils.LogServ.WriteLog(common.ERROR_PATH, "Server Shutdown:", err)
 	}
 	// 停止服务
 
 	//<-interrupt
 	//停止服务
-	utils.LogServ.WriteLog(common.INFO_PATH, "Server Shutdown")
+	_ = utils.LogServ.WriteLog(common.INFO_PATH, "Server Shutdown")
 
 	return managerName + " exited", nil
 }
@@ -141,6 +142,14 @@ func main() {
 	}
 	defer func() {
 		_ = dbs.CloseDB()
+	}()
+
+	if err = usrServ.ConnectToDB((*files.FileDirs)[common.DATABASE_TATH]); err != nil {
+		fmt.Printf("初始化user数据库失败：%s", err.Error())
+		os.Exit(1)
+	}
+	defer func() {
+		_ = usrServ.CloseConnect()
 	}()
 	/*
 		if err = utils.LogServ.WriteLog(common.INFO_PATH, "Server Shutdown"); err != nil {

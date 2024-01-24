@@ -22,16 +22,6 @@ import (
 
 const PluginName = "pluginPullMySQL"
 
-var logger *logAdmin.TLoggerAdmin
-
-func init() {
-	var err error
-	logger, err = logAdmin.InitLogger()
-	if err != nil {
-		panic(err)
-	}
-}
-
 type TBasePlugin = pluginBase.TBasePlugin
 type TMyPlugin struct {
 	TBasePlugin
@@ -55,6 +45,10 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 		return *utils.Failure(err.Error())
 	}
 	mp.ServerPort = cfg.ServerPort
+	logger, err := logAdmin.GetLogger()
+	if err != nil {
+		return *utils.Failure(err.Error())
+	}
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(&cfg, logger); err != nil {
 		return *utils.Failure(err.Error())
@@ -107,6 +101,10 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 		Addr:    fmt.Sprintf(":%d", mp.ServerPort),
 		Handler: r,
 	}
+	logger, err := logAdmin.GetLogger()
+	if err != nil {
+		return *utils.Failure(err.Error())
+	}
 	var wg sync.WaitGroup
 	var ch = make(chan int)
 	wg.Add(1)
@@ -120,7 +118,11 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	}(&wg)
 	select {
 	case <-time.After(time.Second * 2):
-		mp.workerProxy.Run()
+		wg.Add(1)
+		go func(wg *sync.WaitGroup) {
+			defer wg.Done()
+			mp.workerProxy.Run()
+		}(&wg)
 		mp.SetRunning(true)
 	case <-ch:
 		return *utils.Failure("启动http异常，清查看相关日志")
@@ -140,6 +142,7 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	if err := mp.serv.Shutdown(ctx); err != nil {
 		_ = logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
+	wg.Wait()
 
 	_ = logger.WriteInfo("插件已停止")
 

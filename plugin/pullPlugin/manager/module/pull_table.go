@@ -68,6 +68,14 @@ func (pt *TPullTable) SetStatus() error {
 	return dbs.SetPullTableStatus(pt)
 }
 
+func (pt *TPullTable) SetFilterVal() error {
+	dbs, err := GetDbServ()
+	if err != nil {
+		return err
+	}
+	return dbs.SetPullTableFilterValues(pt)
+}
+
 func GetAllTables() ([]TPullTable, int, error) {
 	dbs, err := GetDbServ()
 	if err != nil {

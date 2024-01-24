@@ -6,6 +6,7 @@ import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/utils"
 	"os"
+	"sync"
 )
 
 type TLoggerAdmin struct {
@@ -17,6 +18,9 @@ const (
 	DebugLog = "DebugLog"
 	ErrorLog = "ErrorLog"
 )
+
+var once sync.Once
+var logAdmin *TLoggerAdmin
 
 func InitLogger() (*TLoggerAdmin, error) {
 	files, err := utils.NewFilePath()
@@ -44,6 +48,16 @@ func InitLogger() (*TLoggerAdmin, error) {
 	}
 	return &TLoggerAdmin{logger}, nil
 }
+
+func GetLogger() (*TLoggerAdmin, error) {
+	var err error
+	once.Do(
+		func() {
+			logAdmin, err = InitLogger()
+		})
+	return logAdmin, err
+}
+
 func (la *TLoggerAdmin) WriteError(info string) error {
 	return la.logger[ErrorLog].PutLog(info)
 }

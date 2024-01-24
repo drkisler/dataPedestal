@@ -232,9 +232,7 @@ func (mysql *TMySQLWorker) GenTableScript(data *sql.Rows, tableName string) (*st
 	result := sb.String()
 	return &result, nil
 }
-
 func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows, clickHouseClient *clickHouse.TClickHouseClient) error {
-
 	colType, err := data.ColumnTypes()
 	if err != nil {
 		return err
@@ -248,7 +246,6 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 	for i := range scanValue {
 		scanArgs[i] = &scanValue[i]
 	}
-
 	// 初始化数据类型
 	for idx, col := range colType {
 		nullable, _ := col.Nullable()
@@ -419,7 +416,6 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 			}
 		}
 	}
-
 	rowCount := 0
 	isEmpty := true
 	for data.Next() {

@@ -46,6 +46,14 @@ func (pc *TPullTableControl) Get() *utils.TResponse {
 	}
 	return utils.Success(&result)
 }
+func (pc *TPullTableControl) SetFilterValue() *utils.TResponse {
+	var err error
+	pullTable := pc.TPullTable
+	if err = pullTable.SetFilterVal(); err != nil {
+		return utils.Failure(err.Error())
+	}
+	return utils.Success(nil)
+}
 
 func GetAllTables() ([]TPullTable, int, error) {
 	return module.GetAllTables()

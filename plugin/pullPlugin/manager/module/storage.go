@@ -224,6 +224,25 @@ func (dbs *TStorage) SetPullTableStatus(pt *TPullTable) error {
 	return nil
 }
 
+func (dbs *TStorage) SetPullTableFilterValues(pt *TPullTable) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update " +
+		"PullTable set filter_val =? where user_id = ? and table_id= ? "
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, pt.FilterVal, pt.UserID, pt.TableID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
 // GetAllTables 后台定时获取表信息进行抽取
 func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 	dbs.Lock()
