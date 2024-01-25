@@ -291,13 +291,16 @@ func (bd *TBufferData) Initialize(colName string, colType proto.ColumnType, prec
 func (bd *TBufferData) Append(val any) error {
 	var convertDecimalToNumber = func(value string) (int64, error) {
 		arrStr := strings.Split(value, ".")
-		if len(arrStr) == 2 {
-			vInt := arrStr[0]
-			vDec := arrStr[1]
-			value = vInt + PadNumberWithZeros(vDec, int(bd.Scale))
+		if len(arrStr) == 1 {
+			arrStr = make([]string, 2)
+			arrStr[0] = value
+			arrStr[1] = strings.Repeat("0", int(bd.Scale))
+		} else if len(arrStr) == 2 {
+			arrStr[1] = PadNumberWithZeros(arrStr[1], int(bd.Scale))
 		} else if len(arrStr) > 2 {
 			return 0, errors.Errorf("%v is not valid decimal", val)
 		}
+		value = strings.Join(arrStr, "")
 		result, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return 0, errors.Errorf("%v is not the type int32 or int64", val)

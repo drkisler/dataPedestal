@@ -80,7 +80,7 @@ func (dbs *TStorage) AddUser(user *TUser) (int64, error) {
 		"select min(a.user_id)+1,?,?,?,?,? " +
 		"from(select user_id from User union all select 0) a left join User b on a.user_id+1=b.user_id " +
 		"where b.user_id is null RETURNING user_id"
-	var enStr = utils.TEnString{String: user.Password}
+	var enStr = utils.TEnString{String: "123456"}
 	user.Password = enStr.Encrypt(utils.GetDefaultKey())
 	rows, err := dbs.Queryx(strSQL, user.Account, user.UserName, user.Role, user.Password, user.Status)
 	if err != nil {
