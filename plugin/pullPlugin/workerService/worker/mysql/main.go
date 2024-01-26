@@ -14,8 +14,8 @@ func main() {
 	gob.Register([]common.TLogInfo{})
 	var handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,
-		MagicCookieKey:   "PLUGIN_NAME",
-		MagicCookieValue: service.PluginName,
+		MagicCookieKey:   "SERIAL_NUMBER",
+		MagicCookieValue: service.SerialNumber,
 	}
 	workerService.NewWorker = workimpl.NewMySQLWorker
 	pl, err := service.CreatePullMySQLPlugin()
@@ -24,7 +24,7 @@ func main() {
 		return
 	}
 	pluginMap := map[string]plugin.Plugin{
-		service.PluginName: &common.PluginImplement{Impl: pl},
+		service.SerialNumber: &common.PluginImplement{Impl: pl},
 	}
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,

@@ -174,12 +174,12 @@ func Upload(ctx *gin.Context) {
 	plugin.PluginName = pluginName
 
 	//plugin.PluginFile = fileName
-	filePath := initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH] + pluginName + initializers.ManagerCfg.DirFlag
+
 	if err = plugin.InitPluginByName(); err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
-
+	filePath := initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH] + plugin.UUID + initializers.ManagerCfg.DirFlag
 	//如果已经存在则删除
 	if plugin.PluginFile != "" {
 		if _, err = os.Stat(filePath + plugin.PluginFile); err != nil {
@@ -208,7 +208,7 @@ func Download(ctx *gin.Context) {
 		return
 	}
 
-	filePath := initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH] + pluginName + initializers.ManagerCfg.DirFlag
+	filePath := initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH] + plugin.UUID + initializers.ManagerCfg.DirFlag
 	ctx.FileAttachment(filePath+plugin.PluginFile, plugin.PluginFile)
 }
 

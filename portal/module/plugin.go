@@ -1,13 +1,19 @@
 package module
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/initializers"
 )
 
 type TPluginInfo = common.TPluginInfo
 
 type TPlugin struct {
-	UserID int32 `json:"user_id,omitempty"`
+	UserID       int32  `json:"user_id,omitempty"` //用于标识谁维护的插件
+	UUID         string `json:"uuid,omitempty"`    //用于创建插件的目录
+	SerialNumber string `json:"serial_number"`     //用于匹配插件的序列号
+
 	TPluginInfo
 }
 
@@ -18,6 +24,20 @@ func (p *TPlugin) PutPlugin() (int64, error) {
 	}
 	return dbs.PutPlugin(p)
 
+}
+func (p *TPlugin) DecodeSN() (string, error) {
+	if p.PluginConfig == "" {
+		return "", fmt.Errorf("配置信息为空，请配置插件的配置信息")
+	}
+	var cfg initializers.TConfigure
+	err := json.Unmarshal([]byte(p.PluginConfig), &cfg)
+	if err != nil {
+		return "", err
+	}
+	if cfg.SerialNumber == "" {
+		return "", fmt.Errorf("序列号信息为空")
+	}
+	return cfg.SerialNumber, nil
 }
 func (p *TPlugin) InitPluginByName() error {
 	dbs, err := GetDbServ()

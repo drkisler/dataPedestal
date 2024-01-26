@@ -82,9 +82,9 @@ func (c *TPluginControl) GetPlugin() *utils.TResponse {
 		if item.PluginFile != "" {
 			item.Status = "待加载"
 		}
-		if CheckPluginExists(pluginItem.PluginName) {
+		if CheckPluginExists(pluginItem.UUID) {
 			item.Status = "待运行"
-			if pluginList[pluginItem.PluginName].Running() {
+			if pluginList[pluginItem.UUID].Running() {
 				item.Status = "运行中"
 			}
 		}
@@ -107,8 +107,12 @@ func (c *TPluginControl) UpdatePlugFileName() *utils.TResponse {
 // LoadPlugin 加载插件
 func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 	var err error
+	var sn string
 	if c.PluginName == "" {
 		return utils.Failure("pluginName is empty")
+	}
+	if sn, err = c.DecodeSN(); err != nil {
+		return utils.Failure(err.Error())
 	}
 	if err = c.InitPluginByName(); err != nil {
 		return utils.Failure(err.Error())
@@ -117,11 +121,12 @@ func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 		return utils.Failure("插件文件为空，请上传文件")
 	}
 
-	if err = LoadPlugin(c.PluginName,
-		initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH]+c.PluginName+initializers.ManagerCfg.DirFlag+c.PluginFile,
+	if err = LoadPlugin(c.UUID, sn,
+		initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH]+c.UUID+initializers.ManagerCfg.DirFlag+c.PluginFile,
 		c.PluginConfig); err != nil {
 		return utils.Failure(err.Error())
 	}
+
 	return utils.Success(nil)
 }
 
@@ -130,7 +135,7 @@ func (c *TPluginControl) UnloadPlugin() *utils.TResponse {
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
 	}
-	if err := UnloadPlugin(c.PluginName); err != nil {
+	if err := UnloadPlugin(c.UUID, c.PluginFile); err != nil {
 		return utils.Failure(err.Error())
 	}
 
@@ -140,7 +145,7 @@ func (c *TPluginControl) RunPlugin() *utils.TResponse {
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
 	}
-	plugin, err := IndexPlugin(c.PluginName)
+	plugin, err := IndexPlugin(c.UUID, c.PluginFile)
 	if err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -154,7 +159,7 @@ func (c *TPluginControl) StopPlugin() *utils.TResponse {
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
 	}
-	plugin, err := IndexPlugin(c.PluginName)
+	plugin, err := IndexPlugin(c.UUID, c.PluginFile)
 	if err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -178,16 +183,19 @@ func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 	if c.PluginFile == "" {
 		return utils.Failure("插件文件为空，请上传文件")
 	}
-	if CheckPluginExists(c.PluginName) {
-		plug, err := IndexPlugin(c.PluginName)
+	if CheckPluginExists(c.UUID) {
+		plug, err := IndexPlugin(c.UUID, c.PluginFile)
 		if err != nil {
 			return utils.Failure(err.Error())
 		}
 		result := plug.ImpPlugin.GetConfigTemplate()
 		return &result
 	}
-	plug, err := NewPlugin(c.PluginName,
-		initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH]+c.PluginName+initializers.ManagerCfg.DirFlag+c.PluginFile,
+	if c.SerialNumber, err = c.DecodeSN(); err != nil {
+		return utils.Failure(err.Error())
+	}
+	plug, err := NewPlugin(c.SerialNumber,
+		initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH]+c.UUID+initializers.ManagerCfg.DirFlag+c.PluginFile,
 	)
 	if err != nil {
 		return utils.Failure(err.Error())

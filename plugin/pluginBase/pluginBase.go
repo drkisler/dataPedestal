@@ -11,16 +11,16 @@ import (
 
 type TBasePlugin struct {
 	*common.TStatus
-	IsDebug    bool
-	Logger     *logAdmin.TLoggerAdmin
-	PluginName string
+	IsDebug      bool
+	Logger       *logAdmin.TLoggerAdmin
+	SerialNumber string
 }
 
 // GetConfigTemplate 系统配置模板
 func (bp *TBasePlugin) GetConfigTemplate() utils.TResponse {
 	var cfg initializers.TConfigure
 	cfg.IsDebug = false
-	cfg.PluginName = bp.PluginName
+	cfg.SerialNumber = bp.SerialNumber
 	var result utils.TResponse
 	result.Code = 0
 	data, err := json.Marshal(&cfg)
@@ -37,7 +37,7 @@ func (bp *TBasePlugin) Load(config string) utils.TResponse {
 	if err != nil {
 		return *utils.Failure(err.Error())
 	}
-	if cfg.PluginName != bp.PluginName {
+	if cfg.SerialNumber != bp.SerialNumber {
 		return *utils.Failure("插件名称错误")
 	}
 	bp.IsDebug = cfg.IsDebug

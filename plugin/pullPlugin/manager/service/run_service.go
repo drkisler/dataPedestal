@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const PluginName = "pullMySQL"
+const SerialNumber = "224D02E8-7F8E-4332-82DF-5E403A9BA781"
 
 type TBasePlugin = pluginBase.TBasePlugin
 type TMyPlugin struct {
@@ -30,7 +30,7 @@ type TMyPlugin struct {
 }
 
 func CreatePullMySQLPlugin() (common.IPlugin, error) {
-	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), PluginName: PluginName}}, nil
+	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), SerialNumber: SerialNumber}}, nil
 }
 
 func (mp *TMyPlugin) Load(config string) utils.TResponse {
@@ -59,7 +59,7 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	var cfg initializers.TMySQLConfig
 	cfg.IsDebug = false
-	cfg.PluginName = PluginName
+	cfg.SerialNumber = "SerialNumber"
 
 	cfg.ConnectString = "user:password@tcp(localhost:3306)/dbname?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true"
 	cfg.DestDatabase = "Address=localhost:9000,Database=default,User=default,Password=default"
