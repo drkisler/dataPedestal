@@ -9,7 +9,6 @@ import (
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
-	userService "github.com/drkisler/dataPedestal/universal/userAdmin/service"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
@@ -20,7 +19,7 @@ import (
 	"time"
 )
 
-const PluginName = "pluginPullMySQL"
+const PluginName = "pullMySQL"
 
 type TBasePlugin = pluginBase.TBasePlugin
 type TMyPlugin struct {
@@ -78,17 +77,20 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 func (mp *TMyPlugin) Run() utils.TResponse {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
-	r.POST("/login", userService.Login)
+
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"code": -1, "message": "api not found"})
 	})
-	user := r.Group("/user")
-	user.Use(common.SetHeader, utils.AuthMiddleware)
-	user.POST("/delete", userService.DeleteUser)
-	user.POST("/add", userService.AddUser)
-	user.POST("/alter", userService.AlterUser)
-	user.POST("/get", userService.QueryUser)
-	user.POST("/reset", userService.ResetPassword)
+	/*
+		r.POST("/login", userService.Login)
+		user := r.Group("/user")
+		user.Use(common.SetHeader, utils.AuthMiddleware)
+		user.POST("/delete", userService.DeleteUser)
+		user.POST("/add", userService.AddUser)
+		user.POST("/alter", userService.AlterUser)
+		user.POST("/get", userService.QueryUser)
+		user.POST("/reset", userService.ResetPassword)
+	*/
 	pull := r.Group("/pull")
 	pull.Use(common.SetHeader, utils.AuthMiddleware)
 	pull.POST("/delete", Delete)

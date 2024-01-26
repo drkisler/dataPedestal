@@ -7,9 +7,11 @@ require (
 	github.com/drkisler/utils v0.1.7
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/google/uuid v1.5.0
 	github.com/hashicorp/go-plugin v1.6.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mattn/go-sqlite3 v1.14.19
+	github.com/pkg/errors v0.9.1
 	github.com/spf13/viper v1.18.2
 	github.com/takama/daemon v1.0.0
 )
@@ -32,7 +34,6 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.1.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/uuid v1.5.0 // indirect
 	github.com/hashicorp/go-hclog v1.5.0 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect

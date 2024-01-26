@@ -5,6 +5,7 @@ import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/service"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
+	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker/mysql/workimpl"
 	"github.com/hashicorp/go-plugin"
 	"log"
 )
@@ -16,7 +17,7 @@ func main() {
 		MagicCookieKey:   "PLUGIN_NAME",
 		MagicCookieValue: service.PluginName,
 	}
-	workerService.NewWorker = NewMySQLWorker
+	workerService.NewWorker = workimpl.NewMySQLWorker
 	pl, err := service.CreatePullMySQLPlugin()
 	if err != nil {
 		log.Println(err.Error())

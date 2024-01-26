@@ -1,4 +1,4 @@
-package main
+package workimpl
 
 import (
 	"database/sql"
