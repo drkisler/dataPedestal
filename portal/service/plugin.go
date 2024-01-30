@@ -109,6 +109,7 @@ func LoadPlugin(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
+
 	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
 		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
 		return
@@ -188,6 +189,10 @@ func Upload(ctx *gin.Context) {
 	}
 	plugin.PluginFile = fileName
 	if err = ctx.SaveUploadedFile(file, filePath+plugin.PluginFile); err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	if err = os.Chmod(filePath+plugin.PluginFile, 0775); err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}

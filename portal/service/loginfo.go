@@ -7,23 +7,33 @@ import (
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"time"
 )
 
-var logger *logAdmin.TLoggerAdmin
+//var logger *logAdmin.TLoggerAdmin
 
 type TLogServ struct {
-	LogID   int64  `json:"log_id,omitempty"`
-	LogType string `json:"log_type"`
+	LogID      int64  `json:"log_id,omitempty"`
+	UserID     int32  `json:"user_id,omitempty"`
+	PluginName string `json:"plugin_name,omitempty"`
+	LogType    string `json:"log_type"`
 	common.TLogQuery
 }
 
 func GetLogDate(ctx *gin.Context) {
 	var log TLogServ
+	var logger *logAdmin.TLoggerAdmin
 	err := common.CheckRequest(ctx, &log)
 	if err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
+	/*
+		if logger, err = logAdmin.GetLogger(); err != nil {
+			ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+			return
+		}
+	*/
 	switch log.LogType {
 	case logAdmin.InfoLog:
 		ctx.JSON(http.StatusOK, logger.GetInfoLogDate())
@@ -37,8 +47,13 @@ func GetLogDate(ctx *gin.Context) {
 }
 func GetLogInfo(ctx *gin.Context) {
 	var log TLogServ
+	var logger *logAdmin.TLoggerAdmin
 	err := common.CheckRequest(ctx, &log)
 	if err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	if logger, err = logAdmin.GetLogger(); err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
@@ -46,6 +61,16 @@ func GetLogInfo(ctx *gin.Context) {
 	logQuery.LogDate = log.LogDate
 	logQuery.PageSize = log.PageSize
 	logQuery.PageIndex = log.PageIndex
+	if log.LogDate == "" {
+		log.LogDate = time.Now().Format(time.DateOnly)
+	}
+	if logQuery.PageIndex == 0 {
+		logQuery.PageIndex = 1
+	}
+	if logQuery.PageSize == 0 {
+		logQuery.PageSize = 500
+	}
+
 	params, _ := json.Marshal(logQuery)
 	switch log.LogType {
 	case logAdmin.InfoLog:
@@ -60,8 +85,13 @@ func GetLogInfo(ctx *gin.Context) {
 }
 func DelOldLog(ctx *gin.Context) {
 	var log TLogServ
+	var logger *logAdmin.TLoggerAdmin
 	err := common.CheckRequest(ctx, &log)
 	if err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	if logger, err = logAdmin.GetLogger(); err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
@@ -78,8 +108,13 @@ func DelOldLog(ctx *gin.Context) {
 }
 func DelLog(ctx *gin.Context) {
 	var log TLogServ
+	var logger *logAdmin.TLoggerAdmin
 	err := common.CheckRequest(ctx, &log)
 	if err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	if logger, err = logAdmin.GetLogger(); err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}

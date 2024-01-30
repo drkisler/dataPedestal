@@ -94,6 +94,9 @@ func (dbs *TStorage) PutPlugin(p *TPlugin) (int64, error) {
 			return -1, err
 		}
 	}
+	if result == nil {
+		return -1, fmt.Errorf("数据写入失败，请确认插件名称是否重复")
+	}
 	return result.(int64), nil
 }
 
@@ -293,13 +296,14 @@ func (dbs *TStorage) ModifyRunType(p *TPlugin) error {
 	return nil
 
 }
-func (dbs *TStorage) GetPluginNames(p *TPlugin, pageSize int32, pageIndex int32) ([]string, []string, int, error) {
+
+func (dbs *TStorage) GetPluginNames(p *TPlugin, pageSize int32, pageIndex int32) (pluginNames []string, UUIDs []string, total int, err error) {
 	dbs.Lock()
 	defer dbs.Unlock()
-	var err error
+
 	var rows *sqlx.Rows
-	strSQL := "select plugin_name " +
-		"from (select plugin_id,plugin_name from plugin where user_id= ? and plugin_type = ? order by plugin_id) t  limit ? offset (?-1)*?"
+	strSQL := "select plugin_name,uuid " +
+		"from (select plugin_id,plugin_name,uuid from plugin where user_id= ? and plugin_type = ? order by plugin_id) t  limit ? offset (?-1)*?"
 	rows, err = dbs.Queryx(strSQL, p.UserID, p.PluginType, pageSize, pageIndex, pageSize)
 	if err != nil {
 		return nil, nil, -1, err
@@ -308,22 +312,17 @@ func (dbs *TStorage) GetPluginNames(p *TPlugin, pageSize int32, pageIndex int32)
 		_ = rows.Close()
 	}()
 	var cnt = 0
-	var columns []string
-	if columns, err = rows.Columns(); err != nil {
-		return nil, nil, -1, err
-	}
-	var result []string
 	for rows.Next() {
 		var pluginName string
-		if err = rows.Scan(&pluginName); err != nil {
+		var vUUID string
+		if err = rows.Scan(&pluginName, &vUUID); err != nil {
 			return nil, nil, -1, err
 		}
 		cnt++
-		result = append(result, pluginName)
+		pluginNames = append(pluginNames, pluginName)
+		UUIDs = append(UUIDs, vUUID)
 	}
-
-	return result, columns, cnt, nil
-
+	return
 }
 func (dbs *TStorage) GetAutoRunPlugins() ([]TPlugin, error) {
 	dbs.Lock()

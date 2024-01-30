@@ -83,7 +83,7 @@ func (uc *TUserControl) DeleteUser() *utils.TResponse {
 		return utils.Failure(err.Error())
 	}
 	user := uc.TUser
-	if err = user.AlterUser(); err != nil {
+	if err = user.DeleteUser(); err != nil {
 		return utils.Failure(err.Error())
 	}
 	return utils.Success(nil)

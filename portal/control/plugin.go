@@ -111,12 +111,13 @@ func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 	if c.PluginName == "" {
 		return utils.Failure("pluginName is empty")
 	}
-	if sn, err = c.DecodeSN(); err != nil {
-		return utils.Failure(err.Error())
-	}
 	if err = c.InitPluginByName(); err != nil {
 		return utils.Failure(err.Error())
 	}
+	if sn, err = c.DecodeSN(); err != nil {
+		return utils.Failure(err.Error())
+	}
+
 	if c.PluginFile == "" {
 		return utils.Failure("插件文件为空，请上传文件")
 	}
@@ -208,14 +209,22 @@ func (c *TPluginControl) GetPluginNameList() *utils.TResponse {
 	if c.PluginType == "" {
 		return utils.Failure("PluginType is empty")
 	}
-	arrData, _, _, err := c.GetPluginNames(c.PageSize, c.PageIndex)
+	if c.PageSize == 0 {
+		c.PageSize = 20
+	}
+	if c.PageIndex == 0 {
+		c.PageIndex = 1
+	}
+
+	arrNames, arrUUIDs, _, err := c.GetPluginNames(c.PageSize, c.PageIndex)
 	if err != nil {
 		return utils.Failure(err.Error())
 	}
+	//未加载的插件不能返回
 	var pluginNames []string
-	for _, pluginItem := range arrData {
-		if CheckPluginExists(pluginItem) {
-			pluginNames = append(pluginNames, pluginItem)
+	for index, item := range arrUUIDs {
+		if CheckPluginExists(item) {
+			pluginNames = append(pluginNames, arrNames[index])
 		}
 	}
 

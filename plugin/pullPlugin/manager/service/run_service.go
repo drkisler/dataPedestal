@@ -30,29 +30,41 @@ type TMyPlugin struct {
 }
 
 func CreatePullMySQLPlugin() (common.IPlugin, error) {
-	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), SerialNumber: SerialNumber}}, nil
+	logger, err := logAdmin.GetLogger()
+	if err != nil {
+		return nil, err
+	}
+	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), Logger: logger, SerialNumber: SerialNumber}}, nil
 }
 
 func (mp *TMyPlugin) Load(config string) utils.TResponse {
 	if resp := mp.TBasePlugin.Load(config); resp.Code < 0 {
+		_ = mp.Logger.WriteError(resp.Info)
 		return resp
 	}
 
 	var cfg initializers.TMySQLConfig
 	err := json.Unmarshal([]byte(config), &cfg)
 	if err != nil {
+		_ = mp.Logger.WriteError(err.Error())
+		return *utils.Failure(err.Error())
+	}
+	if err = cfg.CheckValid(); err != nil {
+		_ = mp.Logger.WriteError(err.Error())
 		return *utils.Failure(err.Error())
 	}
 	mp.ServerPort = cfg.ServerPort
 	logger, err := logAdmin.GetLogger()
 	if err != nil {
+		_ = mp.Logger.WriteError(err.Error())
 		return *utils.Failure(err.Error())
 	}
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(&cfg, logger); err != nil {
+		_ = mp.Logger.WriteError(err.Error())
 		return *utils.Failure(err.Error())
 	}
-
+	_ = mp.Logger.WriteInfo("插件加载成功")
 	return *utils.Success(nil)
 }
 
@@ -77,7 +89,7 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 func (mp *TMyPlugin) Run() utils.TResponse {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
-
+	gin.Logger()
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"code": -1, "message": "api not found"})
 	})
@@ -141,7 +153,7 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	// 停止工人
 	mp.workerProxy.Stop()
 
-	if err := mp.serv.Shutdown(ctx); err != nil {
+	if err = mp.serv.Shutdown(ctx); err != nil {
 		_ = logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
 	wg.Wait()

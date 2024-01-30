@@ -47,6 +47,7 @@ func (dbs *TLocalLogger) Connect() error {
 	if err := dbs.Ping(); err != nil {
 		return err
 	}
+	dbs.DateQueue = make([]string, 30)
 	// load date
 	dates, _, cnt, err := dbs.GetLogDate()
 	if err != nil {
@@ -55,7 +56,7 @@ func (dbs *TLocalLogger) Connect() error {
 	if cnt == 0 {
 		return nil
 	}
-	dbs.DateQueue = make([]string, cnt)
+
 	for i, val := range dates {
 		dbs.DateQueue[i] = val
 	}
