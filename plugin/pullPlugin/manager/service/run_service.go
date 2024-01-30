@@ -71,7 +71,7 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	var cfg initializers.TMySQLConfig
 	cfg.IsDebug = false
-	cfg.SerialNumber = "SerialNumber"
+	cfg.SerialNumber = SerialNumber
 
 	cfg.ConnectString = "user:password@tcp(localhost:3306)/dbname?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true"
 	cfg.DestDatabase = "Address=localhost:9000,Database=default,User=default,Password=default"

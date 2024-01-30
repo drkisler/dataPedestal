@@ -165,6 +165,8 @@ func Upload(ctx *gin.Context) {
 		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
 		return
 	}
+	plugin.UserID = plugin.OperatorID
+
 	if multiForm, err = ctx.MultipartForm(); err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
@@ -199,12 +201,16 @@ func Upload(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, plugin.UpdatePlugFileName())
 }
-
 func Download(ctx *gin.Context) {
 	var plugin control.TPluginControl
+	var err error
 	pluginName := ctx.Query("pluginName")
 	if pluginName == "" {
 		ctx.JSON(http.StatusBadRequest, utils.Failure("需要提供插件名称"))
+		return
+	}
+	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
 		return
 	}
 	plugin.PluginName = pluginName
@@ -216,7 +222,6 @@ func Download(ctx *gin.Context) {
 	filePath := initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH] + plugin.UUID + initializers.ManagerCfg.DirFlag
 	ctx.FileAttachment(filePath+plugin.PluginFile, plugin.PluginFile)
 }
-
 func GetPluginNameList(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	err := common.CheckRequest(ctx, &plugin)

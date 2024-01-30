@@ -24,6 +24,9 @@ func signPluginControl(tmp module.TPlugin) *TPluginControl {
 func (c *TPluginControl) InsertPlugin() *utils.TResponse {
 	var id int64
 	var err error
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if id, err = c.PutPlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -31,6 +34,9 @@ func (c *TPluginControl) InsertPlugin() *utils.TResponse {
 }
 
 func (c *TPluginControl) DeletePlugin() *utils.TResponse {
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if err := c.RemovePlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -46,6 +52,9 @@ func (c *TPluginControl) AlterPlugin() *utils.TResponse {
 	if c.PluginFile == "" {
 		c.PluginFile = tmpPlugin.PluginFile
 	}
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 
 	if err := c.ModifyPlugin(); err != nil {
 		return utils.Failure(err.Error())
@@ -53,7 +62,9 @@ func (c *TPluginControl) AlterPlugin() *utils.TResponse {
 	return utils.Success(nil)
 }
 func (c *TPluginControl) AlterConfig() *utils.TResponse {
-
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if err := c.ModifyConfig(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -61,6 +72,9 @@ func (c *TPluginControl) AlterConfig() *utils.TResponse {
 }
 
 func (c *TPluginControl) SetRunType() *utils.TResponse {
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if err := c.ModifyRunType(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -70,6 +84,9 @@ func (c *TPluginControl) SetRunType() *utils.TResponse {
 func (c *TPluginControl) GetPlugin() *utils.TResponse {
 	var result []TPluginControl
 	var data utils.TRespDataSet
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	ArrData, Fields, Total, err := c.QueryPlugin(c.PageSize, c.PageIndex)
 	if err != nil {
 		return utils.Failure(err.Error())
@@ -98,6 +115,9 @@ func (c *TPluginControl) GetPlugin() *utils.TResponse {
 
 // UpdatePlugFileName 更新插件名称
 func (c *TPluginControl) UpdatePlugFileName() *utils.TResponse {
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if err := c.UpdateFile(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -108,6 +128,9 @@ func (c *TPluginControl) UpdatePlugFileName() *utils.TResponse {
 func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 	var err error
 	var sn string
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if c.PluginName == "" {
 		return utils.Failure("pluginName is empty")
 	}
@@ -133,6 +156,9 @@ func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 
 // UnloadPlugin 卸载插件不再运行
 func (c *TPluginControl) UnloadPlugin() *utils.TResponse {
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
 	}
@@ -143,6 +169,9 @@ func (c *TPluginControl) UnloadPlugin() *utils.TResponse {
 	return utils.Success(nil)
 }
 func (c *TPluginControl) RunPlugin() *utils.TResponse {
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
 	}
@@ -157,6 +186,9 @@ func (c *TPluginControl) RunPlugin() *utils.TResponse {
 	return &result
 }
 func (c *TPluginControl) StopPlugin() *utils.TResponse {
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
 	}
@@ -175,6 +207,9 @@ func (c *TPluginControl) StopPlugin() *utils.TResponse {
 
 func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 	var err error
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	if c.PluginName == "" {
 		return utils.Failure("pluginName is empty")
 	}
@@ -214,6 +249,9 @@ func (c *TPluginControl) GetPluginNameList() *utils.TResponse {
 	}
 	if c.PageIndex == 0 {
 		c.PageIndex = 1
+	}
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
 	}
 
 	arrNames, arrUUIDs, _, err := c.GetPluginNames(c.PageSize, c.PageIndex)

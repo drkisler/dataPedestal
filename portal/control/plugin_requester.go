@@ -80,6 +80,7 @@ func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
 	}
 	return &TPluginRequester{serialNumber, pluginFile, client, raw.(common.IPlugin)}, nil
 }
+
 func CheckPluginExists(UUID string) bool {
 	pluginLock.Lock()
 	defer pluginLock.Unlock()

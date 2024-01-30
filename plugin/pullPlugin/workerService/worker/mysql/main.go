@@ -26,6 +26,7 @@ func main() {
 	pluginMap := map[string]plugin.Plugin{
 		service.SerialNumber: &common.PluginImplement{Impl: pl},
 	}
+
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,

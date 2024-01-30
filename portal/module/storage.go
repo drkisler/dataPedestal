@@ -122,7 +122,7 @@ func (dbs *TStorage) GetPluginByName(userID int32, pluginName string) (*TPlugin,
 		cnt++
 	}
 	if cnt == 0 {
-		return nil, fmt.Errorf("userID,pluginName %d,%s不存在", userID, pluginName)
+		return nil, fmt.Errorf("userID[%d],pluginName[%s]不存在", userID, pluginName)
 	}
 	return &p, nil
 }

@@ -35,7 +35,7 @@ func (p *TPlugin) DecodeSN() (string, error) {
 		return "", err
 	}
 	if cfg.SerialNumber == "" {
-		return "", fmt.Errorf("序列号信息为空,请确认十分授权")
+		return "", fmt.Errorf("序列号信息为空,需要提供序列号才能使用")
 	}
 	return cfg.SerialNumber, nil
 }
