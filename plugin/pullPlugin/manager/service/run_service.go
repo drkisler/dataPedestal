@@ -30,21 +30,23 @@ type TMyPlugin struct {
 }
 
 func CreatePullMySQLPlugin() (common.IPlugin, error) {
-	logger, err := logAdmin.GetLogger()
-	if err != nil {
-		return nil, err
-	}
-	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), Logger: logger, SerialNumber: SerialNumber}}, nil
+	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), SerialNumber: SerialNumber}}, nil
 }
 
 func (mp *TMyPlugin) Load(config string) utils.TResponse {
+	logger, err := logAdmin.GetLogger()
+	if err != nil {
+		return *utils.Failure(err.Error())
+	}
+	mp.Logger = logger
+
 	if resp := mp.TBasePlugin.Load(config); resp.Code < 0 {
 		_ = mp.Logger.WriteError(resp.Info)
 		return resp
 	}
 
 	var cfg initializers.TMySQLConfig
-	err := json.Unmarshal([]byte(config), &cfg)
+	err = json.Unmarshal([]byte(config), &cfg)
 	if err != nil {
 		_ = mp.Logger.WriteError(err.Error())
 		return *utils.Failure(err.Error())
@@ -54,10 +56,14 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 		return *utils.Failure(err.Error())
 	}
 	mp.ServerPort = cfg.ServerPort
-	logger, err := logAdmin.GetLogger()
+	ok, err := common.VerifyCaptcha(SerialNumber, cfg.LicenseCode)
 	if err != nil {
 		_ = mp.Logger.WriteError(err.Error())
 		return *utils.Failure(err.Error())
+	}
+	if !ok {
+		_ = mp.Logger.WriteError(cfg.LicenseCode + "验证未通过")
+		return *utils.Failure(cfg.LicenseCode + "验证未通过")
 	}
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(&cfg, logger); err != nil {
@@ -72,7 +78,7 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	var cfg initializers.TMySQLConfig
 	cfg.IsDebug = false
 	cfg.SerialNumber = SerialNumber
-
+	cfg.LicenseCode = "授权码"
 	cfg.ConnectString = "user:password@tcp(localhost:3306)/dbname?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true"
 	cfg.DestDatabase = "Address=localhost:9000,Database=default,User=default,Password=default"
 	cfg.KeepConnect = true

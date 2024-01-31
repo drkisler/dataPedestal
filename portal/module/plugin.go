@@ -37,6 +37,9 @@ func (p *TPlugin) DecodeSN() (string, error) {
 	if cfg.SerialNumber == "" {
 		return "", fmt.Errorf("序列号信息为空,需要提供序列号才能使用")
 	}
+	if len(cfg.SerialNumber) != 36 {
+		return "", fmt.Errorf("序列号信息不正确")
+	}
 	return cfg.SerialNumber, nil
 }
 func (p *TPlugin) InitPluginByName() error {

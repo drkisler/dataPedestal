@@ -14,6 +14,7 @@ type TBasePlugin struct {
 	IsDebug      bool
 	Logger       *logAdmin.TLoggerAdmin
 	SerialNumber string
+	LicenseCode  string
 }
 
 // GetConfigTemplate 系统配置模板
@@ -21,6 +22,10 @@ func (bp *TBasePlugin) GetConfigTemplate() utils.TResponse {
 	var cfg initializers.TConfigure
 	cfg.IsDebug = false
 	cfg.SerialNumber = bp.SerialNumber
+	cfg.LicenseCode = bp.LicenseCode
+	if cfg.LicenseCode == "" {
+		cfg.LicenseCode = "授权码"
+	}
 	var result utils.TResponse
 	result.Code = 0
 	data, err := json.Marshal(&cfg)

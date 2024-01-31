@@ -98,7 +98,7 @@ func LoadPlugin(UUID, serialNumber, pluginFile, config string) error {
 	resp := req.ImpPlugin.Load(config)
 	if resp.Code < 0 {
 		req.Close()
-		return fmt.Errorf("加载插件%s失败:%s", pluginFile, resp.Info)
+		return fmt.Errorf("加载插件%s失败，请确认是否提供正确的序列号", pluginFile)
 	}
 	pluginList[UUID] = req
 	return nil

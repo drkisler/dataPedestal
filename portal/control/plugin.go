@@ -6,6 +6,7 @@ import (
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/module"
 	"github.com/drkisler/utils"
+	"os"
 	"strings"
 )
 
@@ -34,10 +35,19 @@ func (c *TPluginControl) InsertPlugin() *utils.TResponse {
 }
 
 func (c *TPluginControl) DeletePlugin() *utils.TResponse {
+	var err error
 	if c.UserID == 0 {
 		c.UserID = c.OperatorID
 	}
-	if err := c.RemovePlugin(); err != nil {
+	if err = c.InitPluginByID(); err != nil {
+		return utils.Failure(err.Error())
+	}
+
+	if err = c.RemovePlugin(); err != nil {
+		return utils.Failure(err.Error())
+	}
+
+	if err = os.RemoveAll(initializers.ManagerCfg.FileDirs[common.PLUGIN_PATH] + c.UUID + initializers.ManagerCfg.DirFlag); err != nil {
 		return utils.Failure(err.Error())
 	}
 	return utils.Success(nil)
@@ -45,17 +55,17 @@ func (c *TPluginControl) DeletePlugin() *utils.TResponse {
 
 func (c *TPluginControl) AlterPlugin() *utils.TResponse {
 	var tmpPlugin module.TPlugin
+	if c.UserID == 0 {
+		c.UserID = c.OperatorID
+	}
 	tmpPlugin.PluginID = c.PluginID
+	tmpPlugin.UserID = c.UserID
 	if err := tmpPlugin.InitPluginByID(); err != nil {
 		return utils.Failure(err.Error())
 	}
 	if c.PluginFile == "" {
 		c.PluginFile = tmpPlugin.PluginFile
 	}
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-
 	if err := c.ModifyPlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -162,6 +172,9 @@ func (c *TPluginControl) UnloadPlugin() *utils.TResponse {
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
 	}
+	if err := c.InitPluginByName(); err != nil {
+		return utils.Failure(err.Error())
+	}
 	if err := UnloadPlugin(c.UUID, c.PluginFile); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -174,6 +187,9 @@ func (c *TPluginControl) RunPlugin() *utils.TResponse {
 	}
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
+	}
+	if err := c.InitPluginByName(); err != nil {
+		return utils.Failure(err.Error())
 	}
 	plugin, err := IndexPlugin(c.UUID, c.PluginFile)
 	if err != nil {
@@ -191,6 +207,9 @@ func (c *TPluginControl) StopPlugin() *utils.TResponse {
 	}
 	if c.PluginName == "" {
 		return utils.Failure("需要指定PluginName")
+	}
+	if err := c.InitPluginByName(); err != nil {
+		return utils.Failure(err.Error())
 	}
 	plugin, err := IndexPlugin(c.UUID, c.PluginFile)
 	if err != nil {
@@ -210,6 +229,7 @@ func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 	if c.UserID == 0 {
 		c.UserID = c.OperatorID
 	}
+	newcfg := c.PluginConfig
 	if c.PluginName == "" {
 		return utils.Failure("pluginName is empty")
 	}
@@ -226,6 +246,10 @@ func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 		}
 		result := plug.ImpPlugin.GetConfigTemplate()
 		return &result
+	}
+	//客户端修改序列号配置后可以未经保存，直接提交测试
+	if newcfg != c.PluginConfig {
+		c.PluginConfig = newcfg
 	}
 	if c.SerialNumber, err = c.DecodeSN(); err != nil {
 		return utils.Failure(err.Error())
