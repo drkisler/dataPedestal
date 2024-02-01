@@ -126,9 +126,11 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 	defer dbs.Unlock()
 	var err error
 	var rows *sqlx.Rows
-	strSQL := "select user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status "
+	strSQL := "select " +
+		"user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status "
 	if pt.TableID > 0 {
-		strSQL += "from PullTable where user_id= ? and table_id = ?"
+		strSQL += "from PullTable " +
+			"where user_id= ? and table_id = ?"
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pt.TableID)
 	} else if pt.TableName != "" {
 		strSQL += "from (select * from PullTable where user_id= ? and table_name like '%" + pt.TableName + "%' order by table_id)t limit ? offset (?-1)*?"
@@ -137,7 +139,8 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 		strSQL += "from (select * from PullTable where user_id= ? and TableCode like '%" + pt.TableCode + "%'  order by table_id)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
 	} else {
-		strSQL += "from (select * from PullTable where user_id= ? order by table_id)t limit ? offset (?-1)*?"
+		strSQL += "from (select * from PullTable " +
+			"where user_id= ? order by table_id)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pt.TableID, pageSize, pageIndex, pageSize)
 	}
 	if err != nil {

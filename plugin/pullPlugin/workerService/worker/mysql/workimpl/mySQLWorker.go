@@ -34,7 +34,8 @@ func (mysql *TMySQLWorker) GetKeyColumns(schema, tableName string) ([]string, er
 	if schema == "" {
 		schema = mysql.dbName
 	}
-	strSQL := "select column_name from information_schema.key_column_usage a  " +
+	strSQL := "select column_name " +
+		"from information_schema.key_column_usage a  " +
 		"inner join information_schema.table_constraints b on a.constraint_schema=b.constraint_schema and a.table_schema=b.table_schema and a.table_name=b.table_name " +
 		"where b.constraint_name='PRIMARY' and a.table_schema=? and b.table_name=?  order by ordinal_position"
 	rows, err := mysql.DataBase.Query(strSQL, schema, tableName)
@@ -61,7 +62,8 @@ func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]string, error
 	if schema == "" {
 		schema = mysql.dbName
 	}
-	strSQL := "select column_name from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
+	strSQL := "select column_name " +
+		"from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
 	rows, err := mysql.DataBase.Query(strSQL, schema, tableName)
 	if err != nil {
 		return nil, err
@@ -87,7 +89,8 @@ func (mysql *TMySQLWorker) GetTables(schema string) ([]string, error) {
 	if schema == "" {
 		schema = mysql.dbName
 	}
-	strSQL := "select table_name from information_schema.tables where table_schema=?"
+	strSQL := "select table_name " +
+		"from information_schema.tables where table_schema=?"
 	rows, err := mysql.DataBase.Query(strSQL, schema)
 	if err != nil {
 		return nil, err
