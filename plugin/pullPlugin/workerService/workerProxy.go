@@ -2,6 +2,7 @@ package workerService
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
@@ -9,10 +10,8 @@ import (
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
 	"github.com/drkisler/utils"
-	"slices"
 	"strings"
 	"sync"
-	"time"
 )
 
 var NewWorker TNewWorker
@@ -21,14 +20,15 @@ type TNewWorker = func(connectStr string, connectBuffer, DataBuffer int, keepCon
 type TWorkerProxy struct {
 	pluginBase.TBasePlugin
 	Lock             *sync.Mutex
+	SignChan         chan int
 	worker           clickHouse.IPullWorker
 	clickHouseClient *clickHouse.TClickHouseClient
 	ConnectString    string //datasource
 	DestDatabase     string //数据中心的数据库
 	KeepConnect      bool
 	ConnectBuffer    int
-	SkipHour         []int
-	Frequency        int
+	//SkipHour         []int
+	//Frequency        int
 }
 
 // NewWorkerProxy 初始化
@@ -40,61 +40,48 @@ func NewWorkerProxy(cfg *initializers.TMySQLConfig, logger *logAdmin.TLoggerAdmi
 	if worker, err = NewWorker(cfg.ConnectString, cfg.ConnectBuffer, cfg.DataBuffer, cfg.KeepConnect); err != nil {
 		return nil, err
 	}
+	var ch = make(chan int)
 	enStr := utils.TEnString{String: cfg.DestDatabase}
 	dbCfg := *enStr.ToMap(",", "=", "")
 	chClient, err = clickHouse.NewClickHouseClient(dbCfg["Address"], dbCfg["Database"], dbCfg["User"], dbCfg["Password"])
 
 	return &TWorkerProxy{TBasePlugin: pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: cfg.IsDebug, Logger: logger},
 		Lock:             &lock,
+		SignChan:         ch,
 		worker:           worker,
 		clickHouseClient: chClient,
 		ConnectString:    cfg.ConnectString,
 		DestDatabase:     cfg.DestDatabase,
 		KeepConnect:      cfg.KeepConnect,
 		ConnectBuffer:    cfg.ConnectBuffer,
-		SkipHour:         cfg.SkipHour,
-		Frequency:        cfg.Frequency,
+		//SkipHour:         cfg.SkipHour,
+		//Frequency:        cfg.Frequency,
 	}, nil
 }
 
 // Run 运行
 func (pw *TWorkerProxy) Run() {
-
-	ticker := time.NewTicker(1 * time.Minute)
-	minutes := 0
 	pw.SetRunning(true)
 	defer pw.SetRunning(false)
-	for pw.IsRunning() {
-		select {
-		case <-ticker.C:
-			if !slices.Contains(pw.SkipHour, time.Now().Hour()) {
-				minutes++
-				if !pw.IsRunning() {
-					return
-				}
-				if minutes > pw.Frequency {
-					if !pw.KeepConnect {
-						if err := pw.clickHouseClient.ReConnect(); err != nil {
-							_ = pw.Logger.WriteError(err.Error())
-							return
-						}
-					}
-					if err := pw.PullTable(); err != nil {
-						_ = pw.Logger.WriteError(err.Error())
-					}
-					minutes = 0
-					if !pw.KeepConnect {
-						if err := pw.clickHouseClient.Client.Close(); err != nil {
-							_ = pw.Logger.WriteError(err.Error())
-							return
-						}
-					}
-				}
-			}
-
+	if !pw.KeepConnect {
+		if err := pw.clickHouseClient.ReConnect(); err != nil {
+			_ = pw.Logger.WriteError(err.Error())
+			fmt.Println(err.Error())
+			return
 		}
 	}
-
+	if err := pw.PullTable(); err != nil {
+		_ = pw.Logger.WriteError(err.Error())
+		fmt.Println(err.Error())
+	}
+	//minutes = 0
+	if !pw.KeepConnect {
+		if err := pw.clickHouseClient.Client.Close(); err != nil {
+			_ = pw.Logger.WriteError(err.Error())
+			fmt.Println(err.Error())
+			return
+		}
+	}
 }
 
 func (pw *TWorkerProxy) PullTable() error {
@@ -130,4 +117,8 @@ func (pw *TWorkerProxy) PullTable() error {
 		}
 	}
 	return nil
+}
+func (pw *TWorkerProxy) StopRun() {
+	pw.SetRunning(false)
+	pw.SignChan <- 0
 }

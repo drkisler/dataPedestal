@@ -6,14 +6,14 @@ import (
 
 type TMySQLConfig struct {
 	TConfigure
-	ConnectString string `json:"connect_string"`
-	DestDatabase  string `json:"dest_database"`
-	KeepConnect   bool   `json:"keep_connect"`
-	ConnectBuffer int    `json:"connect_buffer"`
-	DataBuffer    int    `json:"data_buffer"`
-	SkipHour      []int  `json:"skip_hour"`
-	Frequency     int    `json:"frequency"`
-	ServerPort    int32  `json:"server_port"`
+	ConnectString  string `json:"connect_string"`
+	DestDatabase   string `json:"dest_database"`
+	KeepConnect    bool   `json:"keep_connect"`
+	ConnectBuffer  int    `json:"connect_buffer"`
+	DataBuffer     int    `json:"data_buffer"`
+	SkipHour       []int  `json:"skip_hour"`
+	CronExpression string `json:"cron_expression"`
+	ServerPort     int32  `json:"server_port"`
 }
 
 func (cfg *TMySQLConfig) CheckValid() error {
@@ -35,8 +35,8 @@ func (cfg *TMySQLConfig) CheckValid() error {
 	if cfg.DataBuffer == 0 {
 		return errors.Errorf("%s 未配置", "DataBuffer")
 	}
-	if cfg.Frequency == 0 {
-		return errors.Errorf("%s 未配置", "Frequency")
+	if cfg.CronExpression == "" {
+		return errors.Errorf("%s 未配置", "cron_expression")
 	}
 	if cfg.ServerPort == 0 {
 		return errors.Errorf("%s 未配置", "ServerPort")

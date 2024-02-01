@@ -11,11 +11,12 @@ import (
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
+	"github.com/go-co-op/gocron/v2"
 	_ "github.com/go-sql-driver/mysql"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
+	"strings"
 	"time"
 )
 
@@ -24,9 +25,11 @@ const SerialNumber = "224D02E8-7F8E-4332-82DF-5E403A9BA781"
 type TBasePlugin = pluginBase.TBasePlugin
 type TMyPlugin struct {
 	TBasePlugin
-	ServerPort  int32
-	serv        *http.Server
-	workerProxy *workerService.TWorkerProxy
+	ServerPort     int32
+	serv           *http.Server
+	workerProxy    *workerService.TWorkerProxy
+	cronExpression string
+	//scheduler   gocron.Scheduler
 }
 
 func CreatePullMySQLPlugin() (common.IPlugin, error) {
@@ -65,11 +68,33 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 		_ = mp.Logger.WriteError(cfg.LicenseCode + "验证未通过")
 		return *utils.Failure(cfg.LicenseCode + "验证未通过")
 	}
+	if err = func(cronExp string) error {
+		var checkError error
+		var s gocron.Scheduler
+		if s, checkError = gocron.NewScheduler(); checkError != nil {
+			return checkError
+		}
+		defer func() { _ = s.Shutdown() }()
+		if _, checkError = s.NewJob(
+			gocron.CronJob(cronExp, len(strings.Split(cronExp, " ")) > 5),
+			gocron.NewTask(
+				func() {},
+			),
+		); checkError != nil {
+			return checkError
+		}
+		return nil
+	}(cfg.CronExpression); err != nil {
+		_ = mp.Logger.WriteError(cfg.CronExpression + "校验未通过:" + err.Error())
+		return *utils.Failure(cfg.CronExpression + "校验未通过:" + err.Error())
+	}
+	mp.cronExpression = cfg.CronExpression
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(&cfg, logger); err != nil {
 		_ = mp.Logger.WriteError(err.Error())
 		return *utils.Failure(err.Error())
 	}
+
 	_ = mp.Logger.WriteInfo("插件加载成功")
 	return *utils.Success(nil)
 }
@@ -84,7 +109,7 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	cfg.KeepConnect = true
 	cfg.ConnectBuffer = 20
 	cfg.SkipHour = []int{0, 1, 2, 3}
-	cfg.Frequency = 60
+	cfg.CronExpression = "1 * * * *"
 	cfg.ServerPort = 8902
 	data, err := json.Marshal(&cfg)
 	if err != nil {
@@ -93,6 +118,17 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	return utils.TResponse{Code: 0, Info: string(data)}
 }
 func (mp *TMyPlugin) Run() utils.TResponse {
+	scheduler, err := gocron.NewScheduler()
+	if err != nil {
+		_ = mp.Logger.WriteError(err.Error())
+		return *utils.Failure(err.Error())
+	}
+	if _, err = scheduler.NewJob(gocron.CronJob(mp.cronExpression, len(strings.Split(mp.cronExpression, " ")) > 5), gocron.NewTask(mp.workerProxy.Run)); err != nil {
+		_ = mp.Logger.WriteError(err.Error())
+
+		return *utils.Failure(err.Error())
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	gin.Logger()
@@ -125,44 +161,28 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	if err != nil {
 		return *utils.Failure(err.Error())
 	}
-	var wg sync.WaitGroup
-	var ch = make(chan int)
-	wg.Add(1)
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		if err := mp.serv.ListenAndServe(); err != nil {
-			_ = logger.WriteError(fmt.Sprintf("listen:%s", err.Error()))
-			ch <- 0
-			return
-		}
-	}(&wg)
-	select {
-	case <-time.After(time.Second * 2):
-		wg.Add(1)
-		go func(wg *sync.WaitGroup) {
-			defer wg.Done()
-			mp.workerProxy.Run()
-		}(&wg)
-		mp.SetRunning(true)
-	case <-ch:
-		return *utils.Failure("启动http异常，清查看相关日志")
-	}
+	go func() {
+		_ = mp.serv.ListenAndServe()
+	}()
 
+	scheduler.Start()
+	mp.SetRunning(true)
 	defer mp.SetRunning(false)
 
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
-	<-quit
-	_ = logger.WriteInfo("停止插件...")
+	select {
+	case <-mp.workerProxy.SignChan:
+	case <-quit:
+		_ = scheduler.Shutdown()
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// 停止工人
-	mp.workerProxy.Stop()
 
 	if err = mp.serv.Shutdown(ctx); err != nil {
 		_ = logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
-	wg.Wait()
 
 	_ = logger.WriteInfo("插件已停止")
 
@@ -170,9 +190,6 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 }
 
 func (mp *TMyPlugin) Stop() utils.TResponse {
-	mp.TBasePlugin.Stop()
-	if err := mp.serv.Shutdown(context.Background()); err != nil {
-		return *utils.Failure(err.Error())
-	}
+	mp.workerProxy.StopRun()
 	return *utils.Success(nil)
 }
