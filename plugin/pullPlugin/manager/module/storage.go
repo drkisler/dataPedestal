@@ -20,7 +20,18 @@ const checkPullTable = "Create " +
 	",key_col text not null" +
 	",buffer integer not null" + // 读取时的缓存
 	",status text not null default 'disabled' " + //停用 disabled 启用 enabled
-	",constraint pk_PullTable primary key(user_id,table_id));"
+	",constraint pk_PullTable primary key(user_id,table_id));create " +
+	"table if not exists tableColumn(" +
+	"user_id integer not null" +
+	",table_id integer not null" +
+	",column_id integer not null" +
+	",column_code text not null" +
+	",column_name text not null" +
+	",is_key text not null" +
+	",is_filter text not null" +
+	",filter_value text not null" +
+	",constraint pk_table_column primary key(user_id,table_id,column_id)" +
+	");"
 
 var DbFilePath string
 var dbService *TStorage
@@ -275,4 +286,196 @@ func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 	}
 
 	return result, cnt, nil
+}
+
+func (dbs *TStorage) AddTableColumn(col *TTableColumn) (int64, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	strSQL := "with cet_col as(select column_id from tableColumn where user_id=? and table_id=?)insert " +
+		"into tableColumn(user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value) " +
+		"select ?,?,min(a.column_id)+1," +
+		"?,?,?,?,? from (select column_id from cet_col union all select 0) a " +
+		"left join cet_col b on a.column_id+1=b.column_id " +
+		"where b.column_id is null RETURNING column_id"
+
+	rows, err := dbs.Queryx(strSQL, col.UserID, col.TableID, col.UserID, col.TableID, col.ColumnCode, col.ColumnName, col.IsKey,
+		col.IsFilter, col.FilterValue)
+	if err != nil {
+		return -1, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var result any
+	for rows.Next() {
+		if err = rows.Scan(&result); err != nil {
+			return -1, err
+		}
+	}
+	return result.(int64), nil
+}
+func (dbs *TStorage) LoadTableColumn(userid int32, tableid int32, cols []TTableColumn) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	rows, err := dbs.Queryx("select coalesce(max(column_id),0) column_id "+
+		"from tableColumn where user_id=? and table_id=?", userid, tableid)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var result any
+	for rows.Next() {
+		if err = rows.Scan(&result); err != nil {
+			return err
+		}
+	}
+
+	columnID := result.(int64)
+	var strSQL = "into tableColumn(user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value)" +
+		"values(?,?,?,?,?,?,?,?) "
+	ctx, err := dbs.Begin()
+	for i, col := range cols {
+		if err != nil {
+			return err
+		}
+		_, err = ctx.Exec(strSQL, col.UserID, col.TableID, i+int(columnID), col.ColumnCode, col.ColumnName, col.IsKey, col.IsFilter, col.FilterValue)
+		if err != nil {
+			_ = ctx.Rollback()
+			return err
+		}
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) GetColumnsByTableID(userID, tableID int32) ([]TTableColumn, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	strSQL := "select user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value " +
+		"from tableColumn where user_id = ? and table_id = ?"
+	rows, err := dbs.Queryx(strSQL, userID, tableID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var cnt = 0
+	var result []TTableColumn
+	for rows.Next() {
+		var col TTableColumn
+		if err = rows.Scan(&col.UserID, &col.TableID, &col.ColumnCode, &col.ColumnName, &col.IsKey, &col.IsFilter, &col.FilterValue); err != nil {
+			return nil, err
+		}
+		result = append(result, col)
+		cnt++
+	}
+	if cnt == 0 {
+		return nil, fmt.Errorf("userID,tableID %d,%d不存在", userID, tableID)
+	}
+	return result, nil
+}
+
+func (dbs *TStorage) AlterTableColumn(col *TTableColumn) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update " +
+		"tableColumn set column_code=?,column_name=?,is_key=?,is_filter=?,filter_value=?  " +
+		"where user_id = ? and table_id= ? and column_id= ?"
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, col.ColumnCode, col.ColumnName, col.IsKey, col.IsFilter, col.FilterValue, col.UserID, col.TableID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) AlterTableColumns(cols []TTableColumn) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update " +
+		"tableColumn set column_code=?,column_name=?,is_key=?,is_filter=?,filter_value=?  " +
+		"where user_id = ? and table_id= ? and column_id= ?"
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	for _, col := range cols {
+		_, err = ctx.Exec(strSQL, col.ColumnCode, col.ColumnName, col.IsKey, col.IsFilter, col.FilterValue, col.UserID, col.TableID)
+		if err != nil {
+			_ = ctx.Rollback()
+			return err
+		}
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) DeleteColumn(col *TTableColumn) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "delete " +
+		"from tableColumn where user_id = ? and table_id= ? and column_id=?"
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, col.UserID, col.TableID, col.ColumnID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) DeleteTableColumn(userid, tableid int32) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "delete " +
+		"from tableColumn where user_id = ? and table_id= ?"
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, userid, tableid)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) SetFilterValues(cols []TTableColumn) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update " +
+		"tableColumn set filter_val =? where user_id = ? and table_id= ? and column_id= ?"
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	for _, col := range cols {
+		_, err = ctx.Exec(strSQL, col.FilterValue, col.UserID, col.TableID, col.ColumnID)
+		if err != nil {
+			_ = ctx.Rollback()
+			return err
+		}
+	}
+	_ = ctx.Commit()
+	return nil
 }

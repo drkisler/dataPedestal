@@ -36,6 +36,7 @@ func CreatePullMySQLPlugin() (common.IPlugin, error) {
 	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), SerialNumber: SerialNumber}}, nil
 }
 
+// Load 根据配置信息设置属性，创建必要的变量
 func (mp *TMyPlugin) Load(config string) utils.TResponse {
 	logger, err := logAdmin.GetLogger()
 	if err != nil {
@@ -99,6 +100,7 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 	return *utils.Success(nil)
 }
 
+// GetConfigTemplate 向客户端返回配置信息的样例，必须提供serialNumber 和 licenseKey
 func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	var cfg initializers.TMySQLConfig
 	cfg.IsDebug = false
@@ -117,6 +119,8 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	}
 	return utils.TResponse{Code: 0, Info: string(data)}
 }
+
+// Run 启动程序，启动前必须先Load
 func (mp *TMyPlugin) Run() utils.TResponse {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
@@ -125,7 +129,6 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	}
 	if _, err = scheduler.NewJob(gocron.CronJob(mp.cronExpression, len(strings.Split(mp.cronExpression, " ")) > 5), gocron.NewTask(mp.workerProxy.Run)); err != nil {
 		_ = mp.Logger.WriteError(err.Error())
-
 		return *utils.Failure(err.Error())
 	}
 
@@ -135,23 +138,15 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"code": -1, "message": "api not found"})
 	})
-	/*
-		r.POST("/login", userService.Login)
-		user := r.Group("/user")
-		user.Use(common.SetHeader, utils.AuthMiddleware)
-		user.POST("/delete", userService.DeleteUser)
-		user.POST("/add", userService.AddUser)
-		user.POST("/alter", userService.AlterUser)
-		user.POST("/get", userService.QueryUser)
-		user.POST("/reset", userService.ResetPassword)
-	*/
+
 	pull := r.Group("/pull")
 	pull.Use(common.SetHeader, utils.AuthMiddleware)
 	pull.POST("/delete", Delete)
 	pull.POST("/add", Add)
 	pull.POST("/alter", Alter)
-	pull.POST("/get", Get)
+	pull.POST("/getPullTables", Get)
 	pull.POST("/setStatus", SetStatus)
+	pull.GET("/getTables", mp.GetSourceTables)
 
 	mp.serv = &http.Server{
 		Addr:    fmt.Sprintf(":%d", mp.ServerPort),
@@ -189,7 +184,23 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	return *utils.Success(nil)
 }
 
+// Stop 停止程序，释放资源
 func (mp *TMyPlugin) Stop() utils.TResponse {
 	mp.workerProxy.StopRun()
 	return *utils.Success(nil)
+}
+
+// GetSourceTables 从数据源中获取表清单
+func (mp *TMyPlugin) GetSourceTables(ctx *gin.Context) {
+	tables, err := mp.workerProxy.GetSourceTables("")
+	if err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	var data utils.TRespDataSet
+	data.ArrData = tables
+	data.Total = len(tables)
+	data.Fields = []string{"table_code"}
+	ctx.JSON(http.StatusOK, utils.Success(&data))
+	return
 }

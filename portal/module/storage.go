@@ -174,8 +174,9 @@ func (dbs *TStorage) QueryPlugin(p *TPlugin, pageSize int32, pageIndex int32) ([
 	} else {
 		strSQL += "from " +
 			"(select * from plugin where user_id= ? order by plugin_id)t limit ? offset (?-1)*?"
-		rows, err = dbs.Queryx(strSQL, p.UserID, p.PluginID, pageSize, pageIndex, pageSize)
+		rows, err = dbs.Queryx(strSQL, p.UserID, pageSize, pageIndex, pageSize)
 	}
+
 	if err != nil {
 		return nil, nil, -1, err
 	}

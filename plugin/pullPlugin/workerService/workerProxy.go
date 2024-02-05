@@ -54,8 +54,6 @@ func NewWorkerProxy(cfg *initializers.TMySQLConfig, logger *logAdmin.TLoggerAdmi
 		DestDatabase:     cfg.DestDatabase,
 		KeepConnect:      cfg.KeepConnect,
 		ConnectBuffer:    cfg.ConnectBuffer,
-		//SkipHour:         cfg.SkipHour,
-		//Frequency:        cfg.Frequency,
 	}, nil
 }
 
@@ -121,4 +119,8 @@ func (pw *TWorkerProxy) PullTable() error {
 func (pw *TWorkerProxy) StopRun() {
 	pw.SetRunning(false)
 	pw.SignChan <- 0
+}
+
+func (pw *TWorkerProxy) GetSourceTables(schema string) ([]string, error) {
+	return pw.worker.GetTables(schema)
 }
