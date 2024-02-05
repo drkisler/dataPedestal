@@ -26,12 +26,12 @@ func (col *TTableColumn) LoadColumn(cols []TTableColumn) error {
 	}
 	return dbs.LoadTableColumn(col.UserID, col.TableID, cols)
 }
-func (col *TTableColumn) GetTableColumn(userID, tableID int32) ([]TTableColumn, error) {
+func (col *TTableColumn) GetTableColumn() ([]TTableColumn, []string, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return dbs.GetColumnsByTableID(userID, tableID)
+	return dbs.GetColumnsByTableID(col)
 }
 func (col *TTableColumn) AlterColumn() error {
 	dbs, err := GetDbServ()
@@ -59,7 +59,7 @@ func (col *TTableColumn) DeleteTableColumn() error {
 	if err != nil {
 		return err
 	}
-	return dbs.DeleteTableColumn(col.UserID, col.TableID)
+	return dbs.DeleteTableColumn(col)
 }
 func (col *TTableColumn) SetFilerVal(cols []TTableColumn) error {
 	dbs, err := GetDbServ()

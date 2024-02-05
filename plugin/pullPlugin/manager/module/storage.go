@@ -351,32 +351,36 @@ func (dbs *TStorage) LoadTableColumn(userid int32, tableid int32, cols []TTableC
 	return nil
 }
 
-func (dbs *TStorage) GetColumnsByTableID(userID, tableID int32) ([]TTableColumn, error) {
+func (dbs *TStorage) GetColumnsByTableID(col *TTableColumn) ([]TTableColumn, []string, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
 	strSQL := "select user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value " +
 		"from tableColumn where user_id = ? and table_id = ?"
-	rows, err := dbs.Queryx(strSQL, userID, tableID)
+	rows, err := dbs.Queryx(strSQL, col.UserID, col.TableID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, nil, err
+	}
 	var cnt = 0
 	var result []TTableColumn
 	for rows.Next() {
 		var col TTableColumn
 		if err = rows.Scan(&col.UserID, &col.TableID, &col.ColumnCode, &col.ColumnName, &col.IsKey, &col.IsFilter, &col.FilterValue); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		result = append(result, col)
 		cnt++
 	}
 	if cnt == 0 {
-		return nil, fmt.Errorf("userID,tableID %d,%d不存在", userID, tableID)
+		return nil, nil, fmt.Errorf("userID,tableID %d,%d不存在", col.UserID, col.TableID)
 	}
-	return result, nil
+	return result, columns, nil
 }
 
 func (dbs *TStorage) AlterTableColumn(col *TTableColumn) error {
@@ -440,7 +444,7 @@ func (dbs *TStorage) DeleteColumn(col *TTableColumn) error {
 	return nil
 }
 
-func (dbs *TStorage) DeleteTableColumn(userid, tableid int32) error {
+func (dbs *TStorage) DeleteTableColumn(col *TTableColumn) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
@@ -450,7 +454,7 @@ func (dbs *TStorage) DeleteTableColumn(userid, tableid int32) error {
 	if err != nil {
 		return err
 	}
-	_, err = ctx.Exec(strSQL, userid, tableid)
+	_, err = ctx.Exec(strSQL, col.UserID, col.TableID)
 	if err != nil {
 		_ = ctx.Rollback()
 		return err
