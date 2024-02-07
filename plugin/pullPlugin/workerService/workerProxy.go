@@ -121,6 +121,9 @@ func (pw *TWorkerProxy) StopRun() {
 	pw.SignChan <- 0
 }
 
-func (pw *TWorkerProxy) GetSourceTables(schema string) ([]string, error) {
+func (pw *TWorkerProxy) GetSourceTables(schema string) ([]clickHouse.TableInfo, error) {
 	return pw.worker.GetTables(schema)
+}
+func (pw *TWorkerProxy) GetTableColumns(schemaName, tableName string) ([]clickHouse.ColumnInfo, error) {
+	return pw.worker.GetColumns(schemaName, tableName)
 }

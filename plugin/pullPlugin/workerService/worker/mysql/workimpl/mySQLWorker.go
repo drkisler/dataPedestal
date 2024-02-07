@@ -30,39 +30,11 @@ func NewMySQLWorker(connectStr string, connectBuffer, DataBuffer int, keepConnec
 	return &TMySQLWorker{*dbw, strDBName}, nil
 }
 
-func (mysql *TMySQLWorker) GetKeyColumns(schema, tableName string) ([]string, error) {
+func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]clickHouse.ColumnInfo, error) {
 	if schema == "" {
 		schema = mysql.dbName
 	}
-	strSQL := "select column_name " +
-		"from information_schema.key_column_usage a  " +
-		"inner join information_schema.table_constraints b on a.constraint_schema=b.constraint_schema and a.table_schema=b.table_schema and a.table_name=b.table_name " +
-		"where b.constraint_name='PRIMARY' and a.table_schema=? and b.table_name=?  order by ordinal_position"
-	rows, err := mysql.DataBase.Query(strSQL, schema, tableName)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var data []string
-	for rows.Next() {
-		var val string
-		if err = rows.Scan(&val); err != nil {
-			return nil, err
-
-		}
-		data = append(data, val)
-	}
-
-	return data, nil
-
-}
-func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]string, error) {
-	if schema == "" {
-		schema = mysql.dbName
-	}
-	strSQL := "select column_name " +
+	strSQL := "select column_name column_code,coalesce(column_comment,'') column_name,if(column_key='PRI','是','否') is_key " +
 		"from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
 	rows, err := mysql.DataBase.Query(strSQL, schema, tableName)
 	if err != nil {
@@ -73,10 +45,10 @@ func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]string, error
 		_ = rows.Close()
 
 	}()
-	var data []string
+	var data []clickHouse.ColumnInfo
 	for rows.Next() {
-		var val string
-		if err = rows.Scan(&val); err != nil {
+		var val clickHouse.ColumnInfo
+		if err = rows.Scan(&val.ColumnCode, &val.ColumnName, &val.IsKey); err != nil {
 			return nil, err
 
 		}
@@ -85,11 +57,11 @@ func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]string, error
 	return data, nil
 
 }
-func (mysql *TMySQLWorker) GetTables(schema string) ([]string, error) {
+func (mysql *TMySQLWorker) GetTables(schema string) ([]clickHouse.TableInfo, error) {
 	if schema == "" {
 		schema = mysql.dbName
 	}
-	strSQL := "select table_name " +
+	strSQL := "select table_name table_code,coalesce(table_comment,'') table_comment " +
 		"from information_schema.tables where table_schema=?"
 	rows, err := mysql.DataBase.Query(strSQL, schema)
 	if err != nil {
@@ -99,10 +71,10 @@ func (mysql *TMySQLWorker) GetTables(schema string) ([]string, error) {
 	defer func() {
 		_ = rows.Close()
 	}()
-	var data []string
+	var data []clickHouse.TableInfo
 	for rows.Next() {
-		var val string
-		if err = rows.Scan(&val); err != nil {
+		var val clickHouse.TableInfo
+		if err = rows.Scan(&val.TableCode, &val.TableName); err != nil {
 			return nil, err
 
 		}
@@ -120,9 +92,15 @@ func (mysql *TMySQLWorker) GenTableScript(data *sql.Rows, tableName string) (*st
 		strSchema = ""
 		strTableName = tableName
 	}
-	keyCols, err := mysql.GetKeyColumns(strSchema, strTableName)
+	Cols, err := mysql.GetColumns(strSchema, strTableName)
 	if err != nil {
 		return nil, err
+	}
+	var KeyColumns []string
+	for _, col := range Cols {
+		if col.IsKey == "是" {
+			KeyColumns = append(KeyColumns, col.ColumnCode)
+		}
 	}
 	colType, err := data.ColumnTypes()
 	if err != nil {
@@ -228,8 +206,8 @@ func (mysql *TMySQLWorker) GenTableScript(data *sql.Rows, tableName string) (*st
 		}
 
 	}
-	if len(keyCols) > 0 {
-		sb.AppendStr(fmt.Sprintf(" PRIMARY KEY(%s)", strings.Join(keyCols, ",")))
+	if len(KeyColumns) > 0 {
+		sb.AppendStr(fmt.Sprintf(" PRIMARY KEY(%s)", strings.Join(KeyColumns, ",")))
 	}
 	sb.AppendStr(")ENGINE=MergeTree --PARTITION BY toYYYYMM(datetimeColumnName) ORDER BY(orderColumn) ")
 	result := sb.String()

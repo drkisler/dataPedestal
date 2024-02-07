@@ -12,12 +12,22 @@ import (
 type IPullWorker interface {
 	OpenConnect() error
 	CloseConnect() error
-	GetKeyColumns(schema, tableName string) ([]string, error)
-	GetColumns(schema, tableName string) ([]string, error)
-	GetTables(schema string) ([]string, error)
+	// GetKeyColumns(schema, tableName string) ([]string, error)
+	GetColumns(schema, tableName string) ([]ColumnInfo, error)
+	GetTables(schema string) ([]TableInfo, error)
 	ReadData(strSQL, filter string) (*sql.Rows, error)
 	GenTableScript(data *sql.Rows, tableName string) (*string, error)
 	WriteData(tableName string, batch int, data *sql.Rows, client *TClickHouseClient) error
+}
+
+type TableInfo struct {
+	TableCode string `json:"table_code"`
+	TableName string `json:"table_name,omitempty"`
+}
+type ColumnInfo struct {
+	ColumnCode string `json:"column_code,omitempty"`
+	ColumnName string `json:"column_name,omitempty"`
+	IsKey      string `json:"is_key,omitempty"`
 }
 
 type TClickHouseClient struct {

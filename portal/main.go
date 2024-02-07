@@ -56,9 +56,9 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	r.MaxMultipartMemory = 8 << 20
 	r.POST("/login", usrServ.Login)
 	r.NoRoute(func(c *gin.Context) {
-
 		c.JSON(404, gin.H{"code": -1, "message": "api not found"})
 	})
+
 	user := r.Group("/user")
 	user.Use(common.SetHeader, utils.AuthMiddleware)
 	user.POST("/delete", usrServ.DeleteUser)

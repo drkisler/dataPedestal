@@ -140,13 +140,14 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	})
 
 	pull := r.Group("/pull")
-	pull.Use(common.SetHeader, utils.AuthMiddleware)
+	//pull.Use(common.SetHeader, utils.AuthMiddleware)
 	pull.POST("/delete", Delete)
 	pull.POST("/add", Add)
 	pull.POST("/alter", Alter)
 	pull.POST("/getPullTables", Get)
 	pull.POST("/setStatus", SetStatus)
 	pull.GET("/getTables", mp.GetSourceTables)
+	pull.GET("/getTableColumn", mp.GetTableColumns)
 
 	mp.serv = &http.Server{
 		Addr:    fmt.Sprintf(":%d", mp.ServerPort),
@@ -159,7 +160,6 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	go func() {
 		_ = mp.serv.ListenAndServe()
 	}()
-
 	scheduler.Start()
 	mp.SetRunning(true)
 	defer mp.SetRunning(false)
@@ -171,16 +171,13 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	case <-quit:
 		_ = scheduler.Shutdown()
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err = mp.serv.Shutdown(ctx); err != nil {
 		_ = logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
-
 	_ = logger.WriteInfo("插件已停止")
-
 	return *utils.Success(nil)
 }
 
@@ -192,7 +189,8 @@ func (mp *TMyPlugin) Stop() utils.TResponse {
 
 // GetSourceTables 从数据源中获取表清单
 func (mp *TMyPlugin) GetSourceTables(ctx *gin.Context) {
-	tables, err := mp.workerProxy.GetSourceTables("")
+	strSchema := ctx.DefaultQuery("schema", "")
+	tables, err := mp.workerProxy.GetSourceTables(strSchema)
 	if err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
@@ -200,7 +198,26 @@ func (mp *TMyPlugin) GetSourceTables(ctx *gin.Context) {
 	var data utils.TRespDataSet
 	data.ArrData = tables
 	data.Total = len(tables)
-	data.Fields = []string{"table_code"}
+	data.Fields = []string{"table_code", "table_name"}
+	ctx.JSON(http.StatusOK, utils.Success(&data))
+	return
+}
+func (mp *TMyPlugin) GetTableColumns(ctx *gin.Context) {
+	strSchemaName := ctx.DefaultQuery("schema", "")
+	strTableName := ctx.Query("table")
+	if strTableName == "" {
+		ctx.JSON(http.StatusOK, utils.Failure("table is empty"))
+		return
+	}
+	cols, err := mp.workerProxy.GetTableColumns(strSchemaName, strTableName)
+	if err != nil {
+		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		return
+	}
+	var data utils.TRespDataSet
+	data.ArrData = cols
+	data.Total = len(cols)
+	data.Fields = []string{"column_code", "column_name", "is_key"}
 	ctx.JSON(http.StatusOK, utils.Success(&data))
 	return
 }
