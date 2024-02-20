@@ -3,8 +3,8 @@ package control
 import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
-	"github.com/drkisler/dataPedestal/portal/module"
 	"github.com/drkisler/utils"
 	"github.com/hashicorp/go-plugin"
 	"os/exec"
@@ -37,21 +37,21 @@ func RunPlugins() {
 	}
 	for _, item := range plugins {
 		if serialNumber, err = item.DecodeSN(); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.DecodeSN()", item.UUID, item.PluginName, item.PluginConfig, err.Error())
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.DecodeSN()", item.PluginUUID, item.PluginFile, item.PluginConfig, err.Error())
 		}
 		if req, err = NewPlugin(serialNumber,
-			initializers.PortalCfg.FileDirs[common.PLUGIN_PATH]+item.UUID+initializers.PortalCfg.DirFlag+item.PluginFile,
+			initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+item.PluginUUID+initializers.HostConfig.DirFlag+item.PluginFile,
 		); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.NewPlugin()", item.UUID, item.PluginName, item.PluginFile, err.Error())
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
 			return
 		}
 		resp := req.ImpPlugin.Load(item.PluginConfig)
 		if resp.Code < 0 {
 			req.Close()
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "加载插件%s失败:%s", item.UUID, item.PluginName, resp.Info)
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "加载插件%s失败:%s", item.PluginUUID, item.PluginFile, resp.Info)
 			return
 		}
-		pluginList[item.UUID] = req
+		pluginList[item.PluginUUID] = req
 		req.ImpPlugin.Run()
 	}
 

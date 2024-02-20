@@ -9,6 +9,7 @@ import (
 	"github.com/drkisler/dataPedestal/portal/control"
 	"github.com/drkisler/dataPedestal/portal/module"
 	"github.com/drkisler/dataPedestal/portal/service"
+	"github.com/drkisler/dataPedestal/universal/messager"
 	usrServ "github.com/drkisler/dataPedestal/universal/userAdmin/service"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ import (
 
 const (
 	managerName = "pluginService"
-	serverDesc  = "插件托管服务"
+	serverDesc  = "插件服务门户"
 	usageHelp   = "Usage: pluginService install | remove | start | stop | status"
 )
 
@@ -91,7 +92,7 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	logs.POST("/delLog", service.DelLog)
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", initializers.ManagerCfg.ServicePort),
+		Addr:    fmt.Sprintf(":%d", initializers.PortalCfg.ServicePort),
 		Handler: r,
 	}
 	go func() {
@@ -128,7 +129,7 @@ func main() {
 		os.Exit(1)
 	}
 	//读取配置文件
-	if err = initializers.ManagerCfg.LoadConfig(files); err != nil {
+	if err = initializers.PortalCfg.LoadConfig(files); err != nil {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
@@ -159,12 +160,21 @@ func main() {
 	*/
 	// 自动启动相关插件
 	control.RunPlugins()
-
 	srv, err := daemon.New(managerName, serverDesc, daemon.SystemDaemon)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
+
+	// region 创建并启动心跳检测服务
+	respondent, err := messager.NewVote(initializers.PortalCfg.SurveyUrl)
+	if err != nil {
+		fmt.Printf("创建心跳检测服务失败：%s", err.Error())
+	}
+	respondent.Run()
+	defer respondent.Stop()
+	// endregion
+
 	servDaemon := &TManagerDaemon{srv}
 	status, err := servDaemon.Manage()
 	if err != nil {

@@ -6,19 +6,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-var ManagerCfg TManagerCfg
-
-type TManagerCfg struct {
+type TAppBaseConfig struct {
 	IsDebug     string `mapstructure:"server.is_debug"`
-	WorkerCount int32  `mapstructure:"server.worker_count"`
 	ServicePort int32  `mapstructure:"server.service_port"`
-	//PluginPath  string `mapstructure:"server.plugin_path"`
-	DirFlag  string
-	MapVal   map[string]any
-	FileDirs map[string]string //日志文件
+	DirFlag     string
+	MapVal      map[string]any
+	FileDirs    map[string]string //日志文件
 }
 
-func (cfg *TManagerCfg) LoadConfig(filer *utils.TFilepath) error {
+func (cfg *TAppBaseConfig) LoadConfig(filer *utils.TFilepath) error {
 	filePath := fmt.Sprintf("%sconfig%s", filer.CurrentPath, filer.DirFlag)
 	configure := utils.ConfigServ{FilePath: filePath, FileName: "config.toml", FileType: "toml"}
 	err := configure.GetConfig(cfg)
@@ -36,13 +32,12 @@ func (cfg *TManagerCfg) LoadConfig(filer *utils.TFilepath) error {
 	//用于方便读取配置信息
 	cfg.MapVal = make(map[string]any)
 	cfg.MapVal["IsDebug"] = cfg.IsDebug
-	cfg.MapVal["WorkerCount"] = cfg.WorkerCount
 	cfg.MapVal["ServicePort"] = cfg.ServicePort
 	cfg.MapVal["DirFlag"] = filer.DirFlag
 	return nil
 }
 
-func (cfg *TManagerCfg) GetString(key string) (string, error) {
+func (cfg *TAppBaseConfig) GetString(key string) (string, error) {
 	val, ok := cfg.MapVal[key]
 	if !ok {
 		return "", fmt.Errorf("%s不存在", key)
@@ -53,7 +48,7 @@ func (cfg *TManagerCfg) GetString(key string) (string, error) {
 	}
 	return result, nil
 }
-func (cfg *TManagerCfg) GetInt(key string) (int, error) {
+func (cfg *TAppBaseConfig) GetInt(key string) (int, error) {
 	val, ok := cfg.MapVal[key]
 	if !ok {
 		return -1, fmt.Errorf("%s不存在", key)
@@ -64,7 +59,7 @@ func (cfg *TManagerCfg) GetInt(key string) (int, error) {
 	}
 	return int(result), nil
 }
-func (cfg *TManagerCfg) GetMap(key string) (map[string]string, error) {
+func (cfg *TAppBaseConfig) GetMap(key string) (map[string]string, error) {
 	val, ok := cfg.MapVal[key]
 	if !ok {
 		return nil, fmt.Errorf("%s不存在", key)

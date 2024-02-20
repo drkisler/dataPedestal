@@ -13,7 +13,7 @@ type TPlugin struct {
 	UserID       int32  `json:"user_id,omitempty"` //用于标识谁维护的插件
 	UUID         string `json:"uuid,omitempty"`    //用于创建插件的目录
 	SerialNumber string `json:"serial_number"`     //用于匹配插件的序列号
-
+	ServiceUrl   string `json:"service_url"`       //插件的服务地址
 	TPluginInfo
 }
 
