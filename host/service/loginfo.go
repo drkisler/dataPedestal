@@ -2,7 +2,7 @@ package service
 
 import (
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/worker/control"
+	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
