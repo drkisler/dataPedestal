@@ -23,28 +23,23 @@ type TPluginControl struct {
 func signPluginControl(tmp module.TPlugin) *TPluginControl {
 	return &TPluginControl{0, "", 500, 1, tmp, "待上传", ""}
 }
-func (c *TPluginControl) InsertPlugin() *utils.TResponse {
-	if err := c.AddPlugin(); err != nil {
-		return utils.Failure(err.Error())
-	}
-	return utils.Success(nil)
+func (c *TPluginControl) InsertPlugin() error {
+	return c.AddPlugin()
 }
 
-func (c *TPluginControl) DeletePlugin() *utils.TResponse {
+func (c *TPluginControl) DeletePlugin() error {
 	var err error
-
 	if err = c.InitByUUID(); err != nil {
-		return utils.Failure(err.Error())
+		return err
 	}
-
 	if err = c.DelPlugin(); err != nil {
-		return utils.Failure(err.Error())
+		return err
 	}
 
 	if err = os.RemoveAll(initializers.HostConfig.FileDirs[common.PLUGIN_PATH] + c.PluginUUID + initializers.HostConfig.DirFlag); err != nil {
-		return utils.Failure(err.Error())
+		return err
 	}
-	return utils.Success(nil)
+	return nil
 }
 
 func (c *TPluginControl) AlterConfig() *utils.TResponse {

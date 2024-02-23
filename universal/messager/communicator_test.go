@@ -2,23 +2,18 @@ package messager
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/universal/logAdmin"
 	"testing"
 	"time"
 )
 
 func TestPeak(t *testing.T) {
-	logger, err := logAdmin.InitLogger()
+
+	speaker1, err := NewCommunicator("ipc:///tmp/speaker1.ipc", handleRequest, handleResult)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	speaker1, err := NewCommunicator("ipc:///tmp/speaker1.ipc", handleRequest, handleResult, logger)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	speaker2, err := NewCommunicator("ipc:///tmp/speaker2.ipc", handleRequest, handleResult, logger)
+	speaker2, err := NewCommunicator("ipc:///tmp/speaker2.ipc", handleRequest, handleResult)
 	if err != nil {
 		t.Error(err)
 		return

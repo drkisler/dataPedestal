@@ -14,7 +14,7 @@ import (
 */
 
 type TRespondent struct {
-	Self []byte
+	Self []byte // 自己的host路由地址，用于代理调用。
 	sock mangos.Socket
 	common.TStatus
 	Wg *sync.WaitGroup

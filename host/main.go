@@ -9,6 +9,7 @@ import (
 	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/host/service"
 	"github.com/drkisler/dataPedestal/initializers"
+	"github.com/drkisler/dataPedestal/universal/fileService"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	usrServ "github.com/drkisler/dataPedestal/universal/userAdmin/service"
 	"github.com/drkisler/utils"
@@ -69,23 +70,23 @@ func createAndStartGinService() {
 	r := gin.Default()
 	plugin := r.Group("/plugin")
 	plugin.Use(common.SetHeader, utils.AuthMiddleware)
-	plugin.POST("/delete", service.DeletePlugin)                 //删除插件，删除前需要停止插件
-	plugin.POST("/getTempConfig", service.GetTempConfig)         //获取插件配置模板
-	plugin.POST("/getPluginNameList", service.GetPluginNameList) //获取插件清单
-	plugin.POST("/setRunType", service.SetRunType)               //设置运行类型
-	plugin.POST("/upload", service.Upload)                       //上传插件
-	plugin.POST("/updateConfig", service.UpdateConfig)           //修改配置信息
-	plugin.POST("/loadPlugin", service.LoadPlugin)               //加载插件
-	plugin.POST("/unloadPlugin", service.UnloadPlugin)           //卸载插件
-	plugin.POST("/runPlugin", service.RunPlugin)                 //运行插件
-	plugin.POST("/stopPlugin", service.StopPlugin)               //停止插件
+	//plugin.POST("/delete", service.DeletePlugin)                 //删除插件，删除前需要停止插件，内部发送 portal --> host(tcp://hostAddr:port)
+	plugin.POST("/getTempConfig", service.GetTempConfig) //获取插件配置模板,转发
+	//plugin.POST("/getPluginNameList", service.GetPluginNameList) //获取插件清单，内部发送 portal --> host
+	plugin.POST("/setRunType", service.SetRunType) //设置运行类型,转发
+	//plugin.POST("/upload", service.Upload)                       //上传插件，内部发送 portal --> host
+	plugin.POST("/updateConfig", service.UpdateConfig) //修改配置信息,转发
+	plugin.POST("/loadPlugin", service.LoadPlugin)     //加载插件,转发
+	plugin.POST("/unloadPlugin", service.UnloadPlugin) //卸载插件,转发
+	plugin.POST("/runPlugin", service.RunPlugin)       //运行插件,转发
+	plugin.POST("/stopPlugin", service.StopPlugin)     //停止插件,转发
 
 	logs := r.Group("/logger")
 	logs.Use(common.SetHeader, utils.AuthMiddleware)
-	logs.POST("/getLogDate", service.GetLogDate) //获取日志清单
-	logs.POST("/getLogInfo", service.GetLogInfo) //获取日志信息
-	logs.POST("/delOldLog", service.DelOldLog)   //删除旧日志
-	logs.POST("/delLog", service.DelLog)         //删除指定日志
+	logs.POST("/getLogDate", service.GetLogDate) //获取日志清单,转发
+	logs.POST("/getLogInfo", service.GetLogInfo) //获取日志信息,转发
+	logs.POST("/delOldLog", service.DelOldLog)   //删除旧日志,转发
+	logs.POST("/delLog", service.DelLog)         //删除指定日志,转发
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", initializers.HostConfig.ServicePort),
@@ -130,12 +131,34 @@ func main() {
 	// endregion
 
 	// region 创建并启动应答服务
-	respondent, err := messager.NewRespondent(initializers.HostConfig.SurveyUrl, initializers.HostConfig.SelfUrl)
+	respondent, err := messager.NewRespondent(initializers.HostConfig.SurveyUrl, initializers.HostConfig.GetSelfUrl())
 	if err != nil {
 		fmt.Printf("创建心跳应答服务失败：%s", err.Error())
+		os.Exit(1)
 	}
 	respondent.Run()
 	defer respondent.Stop()
+	// endregion
+
+	// region 创建并启动对话服务
+	msg, err := messager.NewCommunicator(fmt.Sprintf("tcp://%s:%d", initializers.HostConfig.SelfIP, initializers.HostConfig.MessagePort),
+		service.HandleOperate, service.HandleResult)
+	if err != nil {
+		fmt.Printf("创建心跳消息服务失败：%s", err.Error())
+		os.Exit(1)
+	}
+	msg.Start()
+	defer msg.Stop()
+	// endregion
+
+	// region 创建并启动文件服务
+	fs, err := fileService.NewFileService(initializers.HostConfig.FileServPort, service.HandleReceiveFile)
+	if err != nil {
+		fmt.Printf("创建文件服务失败：%s", err.Error())
+		os.Exit(1)
+	}
+	fs.Start()
+	defer fs.Stop()
 	// endregion
 
 	// region 初始化数据库

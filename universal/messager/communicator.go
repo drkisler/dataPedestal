@@ -3,7 +3,7 @@ package messager
 import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/universal/logAdmin"
+	"github.com/drkisler/utils"
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol"
 	"go.nanomsg.org/mangos/v3/protocol/rep"
@@ -22,7 +22,6 @@ type TActor struct {
 	Mouth         mangos.Socket
 	Ears          mangos.Socket
 	Status        common.TStatus
-	Logger        *logAdmin.TLoggerAdmin
 	Wg            *sync.WaitGroup
 	DataChan      chan *TMessage
 	HandleRequest FHandleData
@@ -86,7 +85,7 @@ func DecodeMessage(data []byte) (*TMessage, error) {
 	return &result, nil
 }
 
-func NewCommunicator(self string, hRequest, hResult FHandleData, msgLogger *logAdmin.TLoggerAdmin) (*TActor, error) {
+func NewCommunicator(self string, hRequest, hResult FHandleData) (*TActor, error) {
 	var result TActor
 	var status common.TStatus
 	var lock sync.Mutex
@@ -99,7 +98,6 @@ func NewCommunicator(self string, hRequest, hResult FHandleData, msgLogger *logA
 		Running: false,
 	}
 	result.Status = status
-	result.Logger = msgLogger
 	if ear, err = rep.NewSocket(); err != nil {
 		return nil, err
 	}
@@ -165,14 +163,14 @@ func (actor *TActor) Receive() {
 		var err error
 		if data, err = actor.Ears.Recv(); err != nil {
 			if err != protocol.ErrRecvTimeout {
-				_ = actor.Logger.WriteError(err.Error())
+				_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
 			}
 			time.Sleep(time.Millisecond * 200)
 			continue
 		}
 		msg, err := DecodeMessage(data)
 		if err != nil {
-			_ = actor.Logger.WriteError(err.Error())
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
 			continue
 		}
 
@@ -189,13 +187,13 @@ func (actor *TActor) Receive() {
 		confermMsg := NewMessage(actor.Self, MessageConfirm, []byte("ok"))
 
 		if data, err = EncodeMessage(confermMsg); err != nil {
-			_ = actor.Logger.WriteError(err.Error())
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
 			continue
 		}
 
 		if err = actor.Ears.Send(data); err != nil {
 			if err != protocol.ErrSendTimeout {
-				_ = actor.Logger.WriteError(err.Error())
+				_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
 			}
 			continue
 		}

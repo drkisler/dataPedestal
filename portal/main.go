@@ -16,6 +16,8 @@ import (
 	"github.com/takama/daemon"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -31,30 +33,14 @@ type TManagerDaemon struct {
 	daemon.Daemon
 }
 
-func (serv *TManagerDaemon) Manage() (string, error) {
-	if len(os.Args) > 1 {
-		command := os.Args[1]
-		switch command {
-		case "install":
-			return serv.Install()
-		case "remove":
-			return serv.Remove()
-		case "start":
-			return serv.Start()
-		case "stop":
-			return serv.Stop()
-		case "status":
-			return serv.Status()
-		default:
-			return usageHelp, nil
-		}
-	}
-
+func createAndStartGinService() {
 	gin.SetMode(gin.ReleaseMode)
 	//启动服务
 	r := gin.Default()
-
 	r.MaxMultipartMemory = 8 << 20
+
+	r.Any("/api/:uuid", reverseProxy("http://localhost:8080"))
+
 	r.POST("/login", usrServ.Login)
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"code": -1, "message": "api not found"})
@@ -117,6 +103,38 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	//<-interrupt
 	//停止服务
 	_ = utils.LogServ.WriteLog(common.INFO_PATH, "Server Shutdown")
+}
+func reverseProxy(target string) gin.HandlerFunc {
+	remoteUrl, _ := url.Parse(target)
+	proxy := httputil.NewSingleHostReverseProxy(remoteUrl)
+	return func(c *gin.Context) {
+		c.Request.URL.Host = remoteUrl.Host
+		c.Request.URL.Scheme = remoteUrl.Scheme
+		c.Request.Header.Set("X-Forwarded-Host", c.Request.Header.Get("Host"))
+		c.Request.Host = remoteUrl.Host
+		proxy.ServeHTTP(c.Writer, c.Request)
+	}
+}
+func (serv *TManagerDaemon) Manage() (string, error) {
+	if len(os.Args) > 1 {
+		command := os.Args[1]
+		switch command {
+		case "install":
+			return serv.Install()
+		case "remove":
+			return serv.Remove()
+		case "start":
+			return serv.Start()
+		case "stop":
+			return serv.Stop()
+		case "status":
+			return serv.Status()
+		default:
+			return usageHelp, nil
+		}
+	}
+
+	createAndStartGinService()
 
 	return managerName + " exited", nil
 }
