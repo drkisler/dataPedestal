@@ -28,14 +28,6 @@ func GetTempConfig(pluginUUID []byte) []byte {
 	return result
 }
 
-/*// GetPluginList 获取插件清单
-func GetPluginList() []byte {
-	var plugin control.TPluginControl
-	result := plugin.GetPlugins()
-	data, _ := json.Marshal(result)
-	return data
-}*/
-
 // SetRunType 设置插件运行方式
 func SetRunType(pluginUUID []byte) []byte {
 	var plugin control.TPluginControl

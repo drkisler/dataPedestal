@@ -347,3 +347,8 @@ func (c *TPluginControl) GetPluginNameList() *utils.TResponse {
 	}
 	return utils.RespData(int32(len(result)), columns, result, nil)
 }
+
+func (c *TPluginControl) GetHostList() *utils.TResponse {
+	hosts := Survey.GetHostList()
+	return utils.RespData(int32(len(hosts)), []string{"host_uuid", "host_name", "host_ip", "message_port", "file_serv_port"}, hosts, nil)
+}

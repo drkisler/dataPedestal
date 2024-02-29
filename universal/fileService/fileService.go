@@ -26,11 +26,12 @@ func (fm *TFileMeta) CheckValid() bool {
 }
 
 type TFileService struct {
-	port     int32
-	metaFunc FHandleFileMeta
-	wg       sync.WaitGroup
-	stopChan chan int32
-	listener net.Listener
+	port      int32
+	metaFunc  FHandleFileMeta
+	wg        sync.WaitGroup
+	stopChan  chan int32
+	listener  net.Listener
+	isRunning bool
 }
 
 // NewFileService 创建文件服务
@@ -39,6 +40,7 @@ func NewFileService(port int32, metaFunc FHandleFileMeta) (*TFileService, error)
 	if err != nil {
 		return nil, err
 	}
+
 	return &TFileService{
 		port:     port,
 		stopChan: make(chan int32, 1),
@@ -50,38 +52,34 @@ func NewFileService(port int32, metaFunc FHandleFileMeta) (*TFileService, error)
 
 func (fs *TFileService) Start() {
 	fs.wg.Add(1)
-	go fs.run(&fs.wg, &fs.stopChan, fs.metaFunc)
-
+	fs.isRunning = true
+	go fs.run()
 }
 
 // Stop 停止服务
 func (fs *TFileService) Stop() {
-	fs.stopChan <- 1
+	_ = fs.listener.Close()
+	fs.isRunning = false
 	fs.wg.Wait()
 }
 
-func (fs *TFileService) run(wg *sync.WaitGroup, stopChan *chan int32, metaFunc FHandleFileMeta) {
-	defer wg.Done()
+func (fs *TFileService) run() {
+	defer fs.wg.Done()
 	var connWg sync.WaitGroup
-	for {
-		select {
-		case <-*stopChan:
-			_ = fs.listener.Close()
-			connWg.Wait()
-		default:
-			conn, err := fs.listener.Accept()
-			if err != nil {
-				break
-			}
-			connWg.Add(1)
-			go func(conn net.Conn, wg *sync.WaitGroup) {
-				defer func() {
-					_ = conn.Close()
-					wg.Done()
-				}()
-				metaFunc(ReceiveFile(conn))
-			}(conn, &connWg)
+	for fs.isRunning {
+		conn, err := fs.listener.Accept()
+		if err != nil {
+			//屏蔽下面的异步处理
+			continue
 		}
+		connWg.Add(1)
+		go func(conn net.Conn, wg *sync.WaitGroup) {
+			defer func() {
+				_ = conn.Close()
+				wg.Done()
+			}()
+			fs.metaFunc(ReceiveFile(conn))
+		}(conn, &connWg)
 	}
 
 }

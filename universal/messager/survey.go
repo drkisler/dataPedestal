@@ -20,6 +20,7 @@ type TSurvey struct {
 	common.TStatus
 	Wg          *sync.WaitGroup
 	respondents map[string]common.TPluginHost
+	hosts       map[string]*common.THostInfo
 }
 
 func NewVote(url string) (*TSurvey, error) {
@@ -107,6 +108,10 @@ func (t *TSurvey) Stop() {
 func (t *TSurvey) SetRespondents(value map[string]common.TPluginHost) {
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
+	t.hosts = make(map[string]*common.THostInfo)
+	for _, v := range value {
+		t.hosts[v.HostInfo.HostUUID] = v.HostInfo
+	}
 	t.respondents = value
 }
 func (t *TSurvey) GetRespondents() map[string]common.TPluginHost {
@@ -114,16 +119,25 @@ func (t *TSurvey) GetRespondents() map[string]common.TPluginHost {
 	defer t.Lock.Unlock()
 	return t.respondents
 }
-func (t *TSurvey) GetHostInfo(strUUID string) (*common.THostInfo, error) {
-	if strUUID == "" {
+
+func (t *TSurvey) GetHostInfoByHostUUID(strHostUUID string) (*common.THostInfo, error) {
+	if strHostUUID == "" {
 		return nil, fmt.Errorf("hostUUID is empty")
 	}
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
-	for _, v := range t.respondents {
-		if v.HostInfo.HostUUID == strUUID {
-			return v.HostInfo, nil
-		}
+	result, ok := t.hosts[strHostUUID]
+	if !ok {
+		return nil, fmt.Errorf("hostUUID not found")
 	}
-	return nil, fmt.Errorf("hostUUID not found")
+	return result, nil
+}
+func (t *TSurvey) GetHostList() []common.THostInfo {
+	t.Lock.Lock()
+	defer t.Lock.Unlock()
+	var result []common.THostInfo
+	for _, v := range t.hosts {
+		result = append(result, *v)
+	}
+	return result
 }

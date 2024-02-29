@@ -239,6 +239,7 @@ func GetPluginNameList(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, plugin.GetPluginNameList())
 }
 
+// PubPlugin PubPlugin 将插件发布到指定host中
 func PubPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	var hostInfo *common.THostInfo
@@ -252,7 +253,7 @@ func PubPlugin(ctx *gin.Context) {
 		return
 	}
 
-	if hostInfo, err = control.Survey.GetHostInfo(ctx.Param("hostUUID")); err != nil {
+	if hostInfo, err = control.Survey.GetHostInfoByHostUUID(ctx.Param("hostUUID")); err != nil {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
@@ -273,4 +274,14 @@ func PubPlugin(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, utils.Success(nil))
 
+}
+
+// GetHosts 从control中的Survey中获取host信息
+func GetHosts(ctx *gin.Context) {
+	var plugin control.TPluginControl
+	var err error
+	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		return
+	}
+	ctx.JSON(http.StatusOK, plugin.GetHostList())
 }

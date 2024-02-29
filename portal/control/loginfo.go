@@ -33,20 +33,6 @@ func (log *TLogControl) CheckValid() error {
 	return nil
 }
 
-/*func (log *TLogControl) parsePluginRequester() (*TPluginRequester, error) {
-	var err error
-	var plugin TPluginControl
-	var pluginReq *TPluginRequester
-	plugin.PluginUUID = log.PluginUUID
-	if err = plugin.InitByUUID(); err != nil {
-		return nil, err
-	}
-	if pluginReq, err = IndexPlugin(plugin.PluginUUID, plugin.PluginFile); err != nil {
-		return nil, err
-	}
-	return pluginReq, nil
-}*/
-
 func (log *TLogControl) OperateLog(opType messager.OperateType) *utils.TResponse {
 	var err error
 	var logData []byte
@@ -73,70 +59,3 @@ func (log *TLogControl) OperateLog(opType messager.OperateType) *utils.TResponse
 	}
 	return utils.Failure("当前插件需要发布")
 }
-
-/*
-func (log *TLogControl) GetLogDate() *utils.TResponse {
-	var err error
-	var pluginReq *TPluginRequester
-	var result utils.TResponse
-	if pluginReq, err = log.parsePluginRequester(); err != nil {
-		return utils.Failure(err.Error())
-	}
-	switch log.LogType {
-	case logAdmin.InfoLog:
-		result = pluginReq.ImpPlugin.GetInfoLogDate()
-	case logAdmin.ErrorLog:
-		result = pluginReq.ImpPlugin.GetErrLogDate()
-	case logAdmin.DebugLog:
-		result = pluginReq.ImpPlugin.GetDebugLogDate()
-	default:
-		result = *utils.Failure("log_type error")
-	}
-	return &result
-}
-func (log *TLogControl) DelOldLog() *utils.TResponse {
-	var err error
-	var pluginReq *TPluginRequester
-	var result utils.TResponse
-	if pluginReq, err = log.parsePluginRequester(); err != nil {
-		return utils.Failure(err.Error())
-	}
-	switch log.LogType {
-	case logAdmin.InfoLog:
-		result = pluginReq.ImpPlugin.DelInfoOldLog(log.LogDate)
-	case logAdmin.ErrorLog:
-		result = pluginReq.ImpPlugin.DelErrOldLog(log.LogDate)
-	case logAdmin.DebugLog:
-		result = pluginReq.ImpPlugin.DelDebugOldLog(log.LogDate)
-	default:
-		result = *utils.Failure("log_type error")
-	}
-	return &result
-}
-func (log *TLogControl) DelLog() *utils.TResponse {
-	var err error
-	var logParam []byte
-	var pluginReq *TPluginRequester
-	var result utils.TResponse
-	var logData common.TLogInfo
-	if pluginReq, err = log.parsePluginRequester(); err != nil {
-		return utils.Failure(err.Error())
-	}
-	logData.LogID = log.LogID
-	logData.LogDate = log.LogDate
-	if logParam, err = json.Marshal(logData); err != nil {
-		return utils.Failure(err.Error())
-	}
-	switch log.LogType {
-	case logAdmin.InfoLog:
-		result = pluginReq.ImpPlugin.DelInfoLog(string(logParam))
-	case logAdmin.ErrorLog:
-		result = pluginReq.ImpPlugin.DelErrLog(string(logParam))
-	case logAdmin.DebugLog:
-		result = pluginReq.ImpPlugin.DelDebugLog(string(logParam))
-	default:
-		result = *utils.Failure("log_type error")
-	}
-
-	return &result
-}*/

@@ -13,7 +13,6 @@ import (
 	usrServ "github.com/drkisler/dataPedestal/universal/userAdmin/service"
 	"github.com/drkisler/utils"
 	"github.com/takama/daemon"
-	"log"
 	"os"
 	"os/signal"
 )
@@ -60,59 +59,11 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	log.Println("Shutdown worker ...")
+	//log.Println("Shutdown worker ...")
 
 	_ = utils.LogServ.WriteLog(common.INFO_PATH, "worker Shutdown")
 	return managerName + " exited", nil
 }
-
-/*func createAndStartGinService() {
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
-	plugin := r.Group("/plugin")
-	plugin.Use(common.SetHeader, utils.AuthMiddleware)
-	//plugin.POST("/delete", service.DeletePlugin)                 //删除插件，删除前需要停止插件，内部发送 portal --> host(tcp://hostAddr:port)
-	plugin.POST("/getTempConfig", service.GetTempConfig) //获取插件配置模板,转发，get from plugin
-	//plugin.POST("/getPluginNameList", service.GetPluginNameList) //获取插件清单，内部发送 portal --> host
-	plugin.POST("/setRunType", service.SetRunType) //设置运行类型,转发
-	//plugin.POST("/upload", service.Upload)                       //上传插件，内部发送 portal --> host
-	plugin.POST("/updateConfig", service.UpdateConfig) //修改配置信息,转发
-	plugin.POST("/loadPlugin", service.LoadPlugin)     //加载插件,转发  set plugin load
-	plugin.POST("/unloadPlugin", service.UnloadPlugin) //卸载插件,转发  set plugin unload
-	plugin.POST("/runPlugin", service.RunPlugin)       //运行插件,转发  run plugin
-	plugin.POST("/stopPlugin", service.StopPlugin)     //停止插件,转发  stop plugin
-
-	logs := r.Group("/logger")
-	logs.Use(common.SetHeader, utils.AuthMiddleware)
-	logs.POST("/getLogDate", service.GetLogDate) //获取日志清单,转发
-	logs.POST("/getLogInfo", service.GetLogInfo) //获取日志信息,转发
-	logs.POST("/delOldLog", service.DelOldLog)   //删除旧日志,转发
-	logs.POST("/delLog", service.DelLog)         //删除指定日志,转发
-
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", initializers.HostConfig.ServicePort),
-		Handler: r,
-	}
-	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, fmt.Sprintf("listen: %s\n", err.Error()))
-
-		}
-	}()
-
-	quit := make(chan os.Signal)
-	signal.Notify(quit, os.Interrupt)
-	<-quit
-	log.Println("Shutdown worker ...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		_ = utils.LogServ.WriteLog(common.ERROR_PATH, "worker Shutdown:", err)
-	}
-	_ = utils.LogServ.WriteLog(common.INFO_PATH, "worker Shutdown")
-
-}*/
 
 func main() {
 	gob.Register([]common.TLogInfo{})

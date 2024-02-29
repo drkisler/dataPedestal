@@ -70,6 +70,7 @@ func createAndStartGinService() {
 	plugin.POST("/getTempConfig", service.GetTempConfig)         //获取模板
 	plugin.POST("/getPluginNameList", service.GetPluginNameList) //获取加载后的插件列表
 	plugin.POST("/pubPlugin/:hostUUID", service.PubPlugin)
+	plugin.GET("/getHosts", service.GetHosts)
 	logs := r.Group("/logger")
 	logs.Use(common.SetHeader, utils.AuthMiddleware)
 	logs.POST("/getLogDate", service.GetLogDate)

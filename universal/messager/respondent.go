@@ -58,7 +58,7 @@ func (r *TRespondent) start() {
 	for r.IsRunning() {
 		if !connected {
 			if err = r.sock.Dial(r.serverUrl); err != nil {
-				fmt.Println(err.Error())
+				//fmt.Println(err.Error())
 				time.Sleep(time.Second * 2)
 				continue
 			}
@@ -85,6 +85,7 @@ func (r *TRespondent) start() {
 }
 
 func (r *TRespondent) Stop() {
+
 	r.SetRunning(false)
 	r.Wg.Wait()
 	_ = r.sock.Close()
