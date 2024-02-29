@@ -1,60 +1,69 @@
 package service
 
 import (
-	"github.com/drkisler/dataPedestal/common"
+	"encoding/json"
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/utils"
-	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 //var logger *logAdmin.TLoggerAdmin
 
-func preHandleLogRequest(ctx *gin.Context) (*control.TLogControl, error) {
+func GetLogDate(data []byte) []byte {
 	var log control.TLogControl
-	err := common.CheckRequest(ctx, &log)
-	if err != nil {
-		return nil, err
+	var err error
+	if err = json.Unmarshal(data, &log); err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
 	}
 	if err = log.CheckValid(); err != nil {
-		return nil, err
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
 	}
-	log.UserID, _, err = common.GetOperater(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &log, nil
+	result, _ := json.Marshal(log.GetLogDate)
+	return result
 }
 
-func GetLogDate(ctx *gin.Context) {
-	log, err := preHandleLogRequest(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
+func GetLogInfo(data []byte) []byte {
+	var log control.TLogControl
+	var err error
+	if err = json.Unmarshal(data, &log); err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
 	}
-	ctx.JSON(http.StatusOK, log.GetLogDate())
+	if err = log.CheckValid(); err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
+	}
+	result, _ := json.Marshal(log.GetLogInfo)
+	return result
 }
-func GetLogInfo(ctx *gin.Context) {
-	log, err := preHandleLogRequest(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
+
+func DelOldLog(data []byte) []byte {
+	var log control.TLogControl
+	var err error
+	if err = json.Unmarshal(data, &log); err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
 	}
-	ctx.JSON(http.StatusOK, log.GetLogInfo())
+	if err = log.CheckValid(); err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
+	}
+	result, _ := json.Marshal(log.DelOldLog)
+	return result
 }
-func DelOldLog(ctx *gin.Context) {
-	log, err := preHandleLogRequest(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
+
+func DelLog(data []byte) []byte {
+	var log control.TLogControl
+	var err error
+	if err = json.Unmarshal(data, &log); err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
 	}
-	ctx.JSON(http.StatusOK, log.DelOldLog())
-}
-func DelLog(ctx *gin.Context) {
-	log, err := preHandleLogRequest(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
+	if err = log.CheckValid(); err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
 	}
-	ctx.JSON(http.StatusOK, log.DelLog())
+	result, _ := json.Marshal(log.DelLog)
+	return result
 }

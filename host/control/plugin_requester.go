@@ -24,24 +24,24 @@ type TPluginRequester struct {
 	PluginFile   string
 	Client       *plugin.Client
 	ImpPlugin    common.IPlugin
+	PluginPort   int32
+}
+
+func GetLoadedPlugins() map[string]*TPluginRequester {
+	return pluginList
 }
 
 // RunPlugins 系统启动时自动运行相关插件,记录相关的错误
 func RunPlugins() {
 	var req *TPluginRequester
-	var serialNumber string
 	plugins, err := module.GetAutoRunPlugins()
 	if err != nil {
 		_ = utils.LogServ.WriteLog(common.ERROR_PATH, "module.GetAutoRunPlugins()", err.Error())
 		return
 	}
 	for _, item := range plugins {
-		if serialNumber, err = item.DecodeSN(); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.DecodeSN()", item.PluginUUID, item.PluginFile, item.PluginConfig, err.Error())
-		}
-		if req, err = NewPlugin(serialNumber,
-			initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+item.PluginUUID+initializers.HostConfig.DirFlag+item.PluginFile,
-		); err != nil {
+		if req, err = NewPlugin(item.SerialNumber,
+			initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+item.PluginUUID+initializers.HostConfig.DirFlag+item.PluginFile); err != nil {
 			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
 			return
 		}
@@ -51,6 +51,8 @@ func RunPlugins() {
 			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "加载插件%s失败:%s", item.PluginUUID, item.PluginFile, resp.Info)
 			return
 		}
+		//resp.Code 返回插件运行的端口，如果有的话
+		req.PluginPort = resp.Code
 		pluginList[item.PluginUUID] = req
 		req.ImpPlugin.Run()
 	}
@@ -78,7 +80,7 @@ func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TPluginRequester{serialNumber, pluginFile, client, raw.(common.IPlugin)}, nil
+	return &TPluginRequester{serialNumber, pluginFile, client, raw.(common.IPlugin), 0}, nil
 }
 
 func CheckPluginExists(UUID string) bool {

@@ -16,13 +16,15 @@ import (
 func main() {
 	if len(os.Args) > 1 {
 		if os.Args[1] == "Enjoy0r" {
-			LicenseCode, err := common.GenerateCaptcha(service.SerialNumber)
-			if err != nil {
-				log.Println(err.Error())
-				return
-			}
-			fmt.Println(fmt.Sprintf("serial number : %s", service.SerialNumber))
-			fmt.Println(fmt.Sprintf("license code : %s", LicenseCode))
+			/*
+				LicenseCode, err := common.GenerateCaptcha(service.SerialNumber)
+				if err != nil {
+					log.Println(err.Error())
+					return
+				}
+				fmt.Println(fmt.Sprintf("license code : %s", LicenseCode))
+			*/
+			fmt.Println(service.SerialNumber)
 			return
 		}
 		if os.Args[1] == "test" {

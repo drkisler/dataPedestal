@@ -97,7 +97,8 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 	}
 
 	_ = mp.Logger.WriteInfo("插件加载成功")
-	return *utils.Success(nil)
+	//需要返回端口号，如果没有则返回0
+	return *utils.ReturnID(cfg.ServerPort)
 }
 
 // GetConfigTemplate 向客户端返回配置信息的样例，必须提供serialNumber 和 licenseKey

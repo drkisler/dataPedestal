@@ -7,6 +7,7 @@ require (
 	github.com/drkisler/utils v0.1.7
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-co-op/gocron/v2 v2.2.2
+	github.com/go-playground/assert/v2 v2.2.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-plugin v1.6.0
@@ -19,6 +20,7 @@ require (
 )
 
 require (
+	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
 	github.com/dmarkham/enumer v1.5.9 // indirect

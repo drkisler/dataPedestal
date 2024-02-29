@@ -1,16 +1,57 @@
 package module
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/initializers"
 )
 
 type TPluginInfo = common.TPluginInfo
 type TPlugin struct {
-	PluginUUID string `json:"plugin_uuid"` //插件的UUID
 	TPluginInfo
+}
+
+// ToByte 将 PluginUUID、PluginFile、RunType、PluginConfig 写入二进制串中,包括长度信息
+func (p *TPlugin) ToByte() []byte {
+	var result []byte
+	//PluginUUID、PluginFile、RunType 长度<256
+	appendData := func(source string, withLength bool) {
+		data := []byte(source)
+		length := len(data)
+		if withLength {
+			result = append(result, uint8(length))
+			result = append(result, data...)
+		} else {
+			result = append(result, data...)
+		}
+	}
+	appendData(p.PluginUUID, true)
+	appendData(p.PluginFile, true)
+	appendData(p.RunType, true)
+	appendData(p.PluginConfig, false)
+	return result
+}
+
+// FromByte 从二进制串中提取 PluginUUID、PluginFile、RunType、PluginConfig
+func (p *TPlugin) FromByte(source []byte) error {
+	var index int
+	var length int
+	var err error
+	//PluginUUID、PluginFile、RunType 长度<256
+	getData := func(withLength bool) string {
+		if withLength {
+			length = int(source[index])
+			index++
+			data := source[index : index+length]
+			index += length
+			return string(data)
+		}
+		data := source[index:]
+		return string(data)
+	}
+	p.PluginUUID = getData(true)
+	p.PluginFile = getData(true)
+	p.RunType = getData(true)
+	p.PluginConfig = getData(false)
+	return err
 }
 
 func (p *TPlugin) AddPlugin() error {
@@ -71,24 +112,6 @@ func (p *TPlugin) AlterConfig() error {
 		return err
 	}
 	return dbs.AlterPluginConfig(p.PluginUUID, p.PluginConfig)
-}
-
-func (p *TPlugin) DecodeSN() (string, error) {
-	if p.PluginConfig == "" {
-		return "", fmt.Errorf("配置信息为空，请配置插件的配置信息")
-	}
-	var cfg initializers.TConfigure
-	err := json.Unmarshal([]byte(p.PluginConfig), &cfg)
-	if err != nil {
-		return "", err
-	}
-	if cfg.SerialNumber == "" {
-		return "", fmt.Errorf("序列号信息为空,需要提供序列号才能使用")
-	}
-	if len(cfg.SerialNumber) != 36 {
-		return "", fmt.Errorf("序列号信息不正确")
-	}
-	return cfg.SerialNumber, nil
 }
 
 func GetAutoRunPlugins() ([]TPlugin, error) {

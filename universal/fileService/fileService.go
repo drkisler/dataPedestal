@@ -12,16 +12,17 @@ import (
 )
 
 type TFileMeta struct {
-	FileName   string `json:"file_name"`
-	FileSize   int64  `json:"file_size"`
-	FileUUID   string `json:"file_uuid"`
-	FileConfig string `json:"file_config"`
-	RunType    string `json:"run_type"`
+	FileName     string `json:"file_name"`
+	FileSize     int64  `json:"file_size"`
+	FileUUID     string `json:"file_uuid"` // pluginUUID
+	FileConfig   string `json:"file_config"`
+	SerialNumber string `json:"serial_number"`
+	RunType      string `json:"run_type"`
 }
 type FHandleFileMeta func(meta *TFileMeta, err error)
 
 func (fm *TFileMeta) CheckValid() bool {
-	return fm.FileName != "" && fm.FileSize > 0 && fm.FileUUID != "" && fm.FileConfig != "" && fm.RunType != ""
+	return fm.FileName != "" && fm.FileSize > 0 && fm.FileUUID != "" && fm.FileConfig != "" && fm.SerialNumber != "" && fm.RunType != ""
 }
 
 type TFileService struct {

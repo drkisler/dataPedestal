@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/gob"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
@@ -13,13 +12,10 @@ import (
 	"github.com/drkisler/dataPedestal/universal/messager"
 	usrServ "github.com/drkisler/dataPedestal/universal/userAdmin/service"
 	"github.com/drkisler/utils"
-	"github.com/gin-gonic/gin"
 	"github.com/takama/daemon"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"time"
 )
 
 /*
@@ -61,25 +57,30 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 			return usageHelp, nil
 		}
 	}
-	createAndStartGinService()
+	quit := make(chan os.Signal)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+	log.Println("Shutdown worker ...")
+
+	_ = utils.LogServ.WriteLog(common.INFO_PATH, "worker Shutdown")
 	return managerName + " exited", nil
 }
 
-func createAndStartGinService() {
+/*func createAndStartGinService() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	plugin := r.Group("/plugin")
 	plugin.Use(common.SetHeader, utils.AuthMiddleware)
 	//plugin.POST("/delete", service.DeletePlugin)                 //删除插件，删除前需要停止插件，内部发送 portal --> host(tcp://hostAddr:port)
-	plugin.POST("/getTempConfig", service.GetTempConfig) //获取插件配置模板,转发
+	plugin.POST("/getTempConfig", service.GetTempConfig) //获取插件配置模板,转发，get from plugin
 	//plugin.POST("/getPluginNameList", service.GetPluginNameList) //获取插件清单，内部发送 portal --> host
 	plugin.POST("/setRunType", service.SetRunType) //设置运行类型,转发
 	//plugin.POST("/upload", service.Upload)                       //上传插件，内部发送 portal --> host
 	plugin.POST("/updateConfig", service.UpdateConfig) //修改配置信息,转发
-	plugin.POST("/loadPlugin", service.LoadPlugin)     //加载插件,转发
-	plugin.POST("/unloadPlugin", service.UnloadPlugin) //卸载插件,转发
-	plugin.POST("/runPlugin", service.RunPlugin)       //运行插件,转发
-	plugin.POST("/stopPlugin", service.StopPlugin)     //停止插件,转发
+	plugin.POST("/loadPlugin", service.LoadPlugin)     //加载插件,转发  set plugin load
+	plugin.POST("/unloadPlugin", service.UnloadPlugin) //卸载插件,转发  set plugin unload
+	plugin.POST("/runPlugin", service.RunPlugin)       //运行插件,转发  run plugin
+	plugin.POST("/stopPlugin", service.StopPlugin)     //停止插件,转发  stop plugin
 
 	logs := r.Group("/logger")
 	logs.Use(common.SetHeader, utils.AuthMiddleware)
@@ -111,7 +112,7 @@ func createAndStartGinService() {
 	}
 	_ = utils.LogServ.WriteLog(common.INFO_PATH, "worker Shutdown")
 
-}
+}*/
 
 func main() {
 	gob.Register([]common.TLogInfo{})
@@ -128,10 +129,21 @@ func main() {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
+	if err = initializers.HostConfig.InitConfig(); err != nil {
+		fmt.Printf("初始化配置文件失败：%s", err.Error())
+		os.Exit(1)
+	}
 	// endregion
 
 	// region 创建并启动应答服务
-	respondent, err := messager.NewRespondent(initializers.HostConfig.SurveyUrl, initializers.HostConfig.GetSelfUrl())
+	// cfg.SelfName, cfg.SelfIP, cfg.WebServPort, cfg.MessagePort, cfg.FileServPort
+	control.SetHostInfo(
+		initializers.HostConfig.SelfIP,
+		initializers.HostConfig.SelfName,
+		initializers.HostConfig.MessagePort,
+		initializers.HostConfig.FileServPort,
+	)
+	respondent, err := messager.NewRespondent(initializers.HostConfig.SurveyUrl, control.GetHostInfo)
 	if err != nil {
 		fmt.Printf("创建心跳应答服务失败：%s", err.Error())
 		os.Exit(1)
@@ -141,10 +153,10 @@ func main() {
 	// endregion
 
 	// region 创建并启动对话服务
-	msg, err := messager.NewCommunicator(fmt.Sprintf("tcp://%s:%d", initializers.HostConfig.SelfIP, initializers.HostConfig.MessagePort),
-		service.HandleOperate, service.HandleResult)
+	msg, err := messager.NewMessageServer(fmt.Sprintf("tcp://%s:%d", initializers.HostConfig.SelfIP, initializers.HostConfig.MessagePort),
+		service.HandleOperate)
 	if err != nil {
-		fmt.Printf("创建心跳消息服务失败：%s", err.Error())
+		fmt.Printf("创建消息服务失败：%s", err.Error())
 		os.Exit(1)
 	}
 	msg.Start()
@@ -184,6 +196,7 @@ func main() {
 	// region 自动启动相关插件
 	control.RunPlugins()
 	// endregion
+
 	// region 启动系统服务
 	srv, err := daemon.New(managerName, serverDesc, daemon.SystemDaemon)
 	if err != nil {

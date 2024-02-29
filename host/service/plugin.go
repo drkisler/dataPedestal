@@ -1,104 +1,93 @@
 package service
 
 import (
-	"github.com/drkisler/dataPedestal/common"
+	"encoding/json"
 	"github.com/drkisler/dataPedestal/host/control"
-	"github.com/drkisler/utils"
-	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
-func SetRunType(ctx *gin.Context) {
+// DeletePlugin 删除制定的插件
+func DeletePlugin(pluginUUID []byte) []byte {
+	strUUID := string(pluginUUID)
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
-	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, plugin.SetRunType())
+	plugin.PluginUUID = strUUID
+	resp := plugin.DeletePlugin()
+	result, _ := json.Marshal(resp)
+	return result
 }
-func RunPlugin(ctx *gin.Context) {
-	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
-	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, plugin.RunPlugin())
-}
-func StopPlugin(ctx *gin.Context) {
-	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
-	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, plugin.StopPlugin())
-}
-func LoadPlugin(ctx *gin.Context) {
-	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
-	}
 
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
+// GetTempConfig 获取插件配置文件模板
+func GetTempConfig(pluginUUID []byte) []byte {
+	var plugin control.TPluginControl
+	strUUID := string(pluginUUID[:36])
+	plugin.PluginUUID = strUUID
+	if len(pluginUUID) > 36 {
+		plugin.PluginConfig = string(pluginUUID[36:])
 	}
+	resp := plugin.GetPluginTmpCfg()
+	result, _ := json.Marshal(resp)
+	return result
+}
 
-	ctx.JSON(http.StatusOK, plugin.LoadPlugin())
-}
-func UnloadPlugin(ctx *gin.Context) {
+/*// GetPluginList 获取插件清单
+func GetPluginList() []byte {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
-	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
-	}
+	result := plugin.GetPlugins()
+	data, _ := json.Marshal(result)
+	return data
+}*/
 
-	ctx.JSON(http.StatusOK, plugin.UnloadPlugin())
-}
-func UpdateConfig(ctx *gin.Context) {
+// SetRunType 设置插件运行方式
+func SetRunType(pluginUUID []byte) []byte {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
-	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, plugin.AlterConfig())
+	plugin.PluginUUID = string(pluginUUID[:36])
+	plugin.RunType = string(pluginUUID[36:])
+	result := plugin.SetRunType()
+	data, _ := json.Marshal(result)
+	return data
 }
-func GetTempConfig(ctx *gin.Context) {
+
+// UnloadPlugin 卸载插件
+func UnloadPlugin(pluginUUID []byte) []byte {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
-		return
-	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, plugin.GetPluginTmpCfg())
+	plugin.PluginUUID = string(pluginUUID[:36])
+	resp := plugin.UnloadPlugin()
+	result, _ := json.Marshal(resp)
+	return result
+}
+
+// LoadPlugin 加载插件
+func LoadPlugin(pluginUUID []byte) []byte {
+	var plugin control.TPluginControl
+	plugin.PluginUUID = string(pluginUUID[:36])
+	resp := plugin.LoadPlugin()
+	result, _ := json.Marshal(resp)
+	return result
+}
+
+// RunPlugin 运行插件
+func RunPlugin(pluginUUID []byte) []byte {
+	var plugin control.TPluginControl
+	plugin.PluginUUID = string(pluginUUID[:36])
+	resp := plugin.RunPlugin()
+	result, _ := json.Marshal(resp)
+	return result
+}
+
+// StopPlugin 停止插件
+func StopPlugin(pluginUUID []byte) []byte {
+	var plugin control.TPluginControl
+	plugin.PluginUUID = string(pluginUUID[:36])
+	resp := plugin.StopPlugin()
+	result, _ := json.Marshal(resp)
+	return result
+}
+
+// UpdateConfig 更新插件配置
+func UpdateConfig(pluginUUID []byte) []byte {
+	var plugin control.TPluginControl
+	plugin.PluginUUID = string(pluginUUID[:36])
+	plugin.PluginConfig = string(pluginUUID[36:])
+	resp := plugin.UpdateConfig()
+	result, _ := json.Marshal(resp)
+	return result
 }

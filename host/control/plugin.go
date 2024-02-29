@@ -1,14 +1,18 @@
 package control
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/utils"
+	"github.com/google/uuid"
 	"os"
 	"strings"
 )
+
+var HostInfo common.THostInfo
 
 type TPluginControl struct {
 	OperatorID   int32  `json:"operator_id,omitempty"`
@@ -16,35 +20,50 @@ type TPluginControl struct {
 	PageSize     int32  `json:"page_size,omitempty"`
 	PageIndex    int32  `json:"page_index,omitempty"`
 	module.TPlugin
-	Status       string `json:"status"` //待上传、待加载、待运行、运行中
-	SerialNumber string `json:"serial_number,omitempty"`
+	Status string `json:"status"` //待上传、待加载、待运行、运行中
+	//SerialNumber string `json:"serial_number,omitempty"`
+}
+
+func SetHostInfo(hostIP, hostName string, msgPort, filePort int32) {
+	HostInfo.HostUUID = uuid.New().String()
+	HostInfo.HostIP = hostIP
+	HostInfo.HostName = hostName
+	HostInfo.MessagePort = msgPort
+	HostInfo.FileServPort = filePort
 }
 
 func signPluginControl(tmp module.TPlugin) *TPluginControl {
-	return &TPluginControl{0, "", 500, 1, tmp, "待上传", ""}
+	return &TPluginControl{0, "", 50, 1, tmp, "待上传"}
 }
 func (c *TPluginControl) InsertPlugin() error {
 	return c.AddPlugin()
 }
 
-func (c *TPluginControl) DeletePlugin() error {
+func (c *TPluginControl) DeletePlugin() *utils.TResponse {
 	var err error
 	if err = c.InitByUUID(); err != nil {
-		return err
+		return utils.Failure(err.Error())
+	}
+	plugin, err := IndexPlugin(c.PluginUUID, c.PluginFile)
+	if err == nil {
+		if plugin.ImpPlugin.Running().Info == "true" {
+			return utils.Failure("该插件正在运行中，不能删除")
+		}
 	}
 	if err = c.DelPlugin(); err != nil {
-		return err
+		return utils.Failure(err.Error())
 	}
-
 	if err = os.RemoveAll(initializers.HostConfig.FileDirs[common.PLUGIN_PATH] + c.PluginUUID + initializers.HostConfig.DirFlag); err != nil {
-		return err
+		return utils.Failure(err.Error())
 	}
-	return nil
+	return utils.Success(nil)
 }
 
-func (c *TPluginControl) AlterConfig() *utils.TResponse {
-
-	if err := c.TPlugin.AlterConfig(); err != nil {
+func (c *TPluginControl) UpdateConfig() *utils.TResponse {
+	if c.PluginUUID == "" || c.PluginConfig == "" {
+		return utils.Failure("参数错误")
+	}
+	if err := c.AlterConfig(); err != nil {
 		return utils.Failure(err.Error())
 	}
 	return utils.Success(nil)
@@ -56,7 +75,29 @@ func (c *TPluginControl) SetRunType() *utils.TResponse {
 	}
 	return utils.Success(nil)
 }
-
+func GetHostInfo() []byte {
+	var pluginCtl TPluginControl
+	ArrData, _, Total, err := pluginCtl.GetPluginList()
+	if err != nil {
+		result, _ := json.Marshal(utils.Failure(err.Error()))
+		return result
+	}
+	if Total == 0 {
+		return common.ToPluginHostBytes(nil, &HostInfo)
+	}
+	pluginPort := make(map[string]int32)
+	for _, pluginItem := range ArrData {
+		var port int32 = -1 //默认端口为-1，表示未加载
+		if CheckPluginExists(pluginItem.PluginUUID) {
+			port = 0 //端口为-1，表示已加载未运行
+			if pluginList[pluginItem.PluginUUID].Running() {
+				port = pluginList[pluginItem.PluginUUID].PluginPort // 端口>0，表示已运行
+			}
+		}
+		pluginPort[pluginItem.PluginUUID] = port
+	}
+	return common.ToPluginHostBytes(&pluginPort, &HostInfo)
+}
 func (c *TPluginControl) GetPlugins() *utils.TResponse {
 	var result []TPluginControl
 	var data utils.TRespDataSet
@@ -68,15 +109,13 @@ func (c *TPluginControl) GetPlugins() *utils.TResponse {
 	for _, pluginItem := range ArrData {
 		var item *TPluginControl
 		item = signPluginControl(pluginItem)
-		item.Status = "待上传"
-		if item.PluginFile != "" {
-			item.Status = "待加载"
-		}
+		item.Status = "待加载"
 		if CheckPluginExists(pluginItem.PluginUUID) {
 			item.Status = "待运行"
 			if pluginList[pluginItem.PluginUUID].Running() {
 				item.Status = "运行中"
 			}
+
 		}
 		result = append(result, *item)
 	}
@@ -86,7 +125,7 @@ func (c *TPluginControl) GetPlugins() *utils.TResponse {
 	return utils.Success(&data)
 }
 
-// UpdatePlugFileName 更新插件名称
+// UpdatePlugFileName 更新插件文件名称
 func (c *TPluginControl) UpdatePlugFileName() *utils.TResponse {
 	if err := c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
@@ -103,22 +142,14 @@ func (c *TPluginControl) UpdatePlugFileName() *utils.TResponse {
 // LoadPlugin 加载插件
 func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 	var err error
-	var sn string
-	if c.PluginName == "" {
-		return utils.Failure("pluginName is empty")
-	}
 	if err = c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
-	if sn, err = c.DecodeSN(); err != nil {
-		return utils.Failure(err.Error())
-	}
-
 	if c.PluginFile == "" {
 		return utils.Failure("插件文件为空，请上传文件")
 	}
 
-	if err = LoadPlugin(c.PluginUUID, sn,
+	if err = LoadPlugin(c.PluginUUID, c.SerialNumber,
 		initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
 		c.PluginConfig); err != nil {
 		return utils.Failure(err.Error())
@@ -129,9 +160,7 @@ func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 
 // UnloadPlugin 卸载插件不再运行
 func (c *TPluginControl) UnloadPlugin() *utils.TResponse {
-	if c.PluginName == "" {
-		return utils.Failure("需要指定PluginName")
-	}
+
 	if err := c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -142,9 +171,7 @@ func (c *TPluginControl) UnloadPlugin() *utils.TResponse {
 	return utils.Success(nil)
 }
 func (c *TPluginControl) RunPlugin() *utils.TResponse {
-	if c.PluginName == "" {
-		return utils.Failure("需要指定PluginName")
-	}
+
 	if err := c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -156,12 +183,10 @@ func (c *TPluginControl) RunPlugin() *utils.TResponse {
 		return utils.Failure(fmt.Sprintf("%s is running", c.PluginName))
 	}
 	result := plugin.ImpPlugin.Run()
+
 	return &result
 }
 func (c *TPluginControl) StopPlugin() *utils.TResponse {
-	if c.PluginName == "" {
-		return utils.Failure("需要指定PluginName")
-	}
 	if err := c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -180,10 +205,9 @@ func (c *TPluginControl) StopPlugin() *utils.TResponse {
 
 func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 	var err error
+	var pluginReq *TPluginRequester
+	//获取模板需要提供序列号
 	newCfg := c.PluginConfig
-	if c.PluginName == "" {
-		return utils.Failure("pluginName is empty")
-	}
 	if err = c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -191,19 +215,15 @@ func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 		return utils.Failure("插件文件为空，请上传文件")
 	}
 	if CheckPluginExists(c.PluginUUID) {
-		plug, err := IndexPlugin(c.PluginUUID, c.PluginFile)
-		if err != nil {
+		if pluginReq, err = IndexPlugin(c.PluginUUID, c.PluginFile); err != nil {
 			return utils.Failure(err.Error())
 		}
-		result := plug.ImpPlugin.GetConfigTemplate()
+		result := pluginReq.ImpPlugin.GetConfigTemplate()
 		return &result
 	}
 	//客户端修改序列号配置后可以未经保存，直接提交测试
 	if newCfg != c.PluginConfig {
 		c.PluginConfig = newCfg
-	}
-	if c.SerialNumber, err = c.DecodeSN(); err != nil {
-		return utils.Failure(err.Error())
 	}
 	plug, err := NewPlugin(c.SerialNumber,
 		initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
@@ -215,7 +235,7 @@ func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 	return &result
 
 }
-func (c *TPluginControl) GetLoadedUUIDs() *utils.TResponse {
+func (c *TPluginControl) GetLoadedPlugins() *utils.TResponse {
 	if c.PluginType == "" {
 		return utils.Failure("PluginType is empty")
 	}
@@ -238,7 +258,7 @@ func (c *TPluginControl) GetLoadedUUIDs() *utils.TResponse {
 		}
 	}
 	var data utils.TRespDataSet
-	data.ArrData, data.Fields, data.Total = UUIDs, []string{"UUID"}, len(UUIDs)
+	data.ArrData, data.Fields, data.Total = UUIDs, []string{"plugin_uuid"}, len(UUIDs)
 	var result utils.TResponse
 	result.Code, result.Data, result.Info = 0, &data, strings.Join(UUIDs, ",")
 	return &result

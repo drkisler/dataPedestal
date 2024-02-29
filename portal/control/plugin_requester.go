@@ -1,17 +1,6 @@
 package control
 
-import (
-	"fmt"
-	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/initializers"
-	"github.com/drkisler/dataPedestal/portal/module"
-	"github.com/drkisler/utils"
-	"github.com/hashicorp/go-plugin"
-	"os/exec"
-	"sync"
-)
-
-func init() {
+/*func init() {
 	pluginList = make(map[string]*TPluginRequester)
 	pluginLock = new(sync.Mutex)
 }
@@ -25,38 +14,39 @@ type TPluginRequester struct {
 	Client       *plugin.Client
 	ImpPlugin    common.IPlugin
 }
-
+*/
 // RunPlugins 系统启动时自动运行相关插件,记录相关的错误
-func RunPlugins() {
+/*func RunPlugins() {
 	var req *TPluginRequester
-	var serialNumber string
 	plugins, err := module.GetAutoRunPlugins()
 	if err != nil {
 		_ = utils.LogServ.WriteLog(common.ERROR_PATH, "module.GetAutoRunPlugins()", err.Error())
 		return
 	}
 	for _, item := range plugins {
-		if serialNumber, err = item.DecodeSN(); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.DecodeSN()", item.UUID, item.PluginName, item.PluginConfig, err.Error())
-		}
-		if req, err = NewPlugin(serialNumber,
-			initializers.PortalCfg.FileDirs[common.PLUGIN_PATH]+item.UUID+initializers.PortalCfg.DirFlag+item.PluginFile,
-		); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.NewPlugin()", item.UUID, item.PluginName, item.PluginFile, err.Error())
+		if req, err = NewPlugin(initializers.PortalCfg.FileDirs[common.PLUGIN_PATH] + item.PluginUUID + initializers.PortalCfg.DirFlag + item.PluginFile); err != nil {
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.NewPlugin()", item.PluginUUID, item.PluginName, item.PluginFile, err.Error())
 			return
 		}
 		resp := req.ImpPlugin.Load(item.PluginConfig)
 		if resp.Code < 0 {
 			req.Close()
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "加载插件%s失败:%s", item.UUID, item.PluginName, resp.Info)
+			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "加载插件%s失败:%s", item.PluginUUID, item.PluginName, resp.Info)
 			return
 		}
-		pluginList[item.UUID] = req
+		pluginList[item.PluginUUID] = req
 		req.ImpPlugin.Run()
 	}
 
-}
-func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
+}*/
+/*
+func NewPlugin(pluginFile string) (*TPluginRequester, error) {
+	out, err := exec.Command(pluginFile, "Enjoy0r").Output()
+	if err != nil {
+		return nil, err
+	}
+	serialNumber := string(out)
+
 	var handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,
 		MagicCookieKey:   "SERIAL_NUMBER",
@@ -86,12 +76,14 @@ func CheckPluginExists(UUID string) bool {
 	defer pluginLock.Unlock()
 	_, ok := pluginList[UUID]
 	return ok
-}
-func LoadPlugin(UUID, serialNumber, pluginFile, config string) error {
+}*/
+
+/*
+func LoadPlugin(UUID, pluginFile, config string) error {
 	if CheckPluginExists(UUID) {
 		return fmt.Errorf("%s is loaded", pluginFile)
 	}
-	req, err := NewPlugin(serialNumber, pluginFile)
+	req, err := NewPlugin(pluginFile)
 	if err != nil {
 		return err
 	}
@@ -118,8 +110,9 @@ func UnloadPlugin(UUID, pluginFile string) error {
 	defer pluginLock.Unlock()
 	delete(pluginList, UUID)
 	return nil
-}
-func IndexPlugin(UUID, pluginFile string) (*TPluginRequester, error) {
+}*/
+
+/*func IndexPlugin(UUID, pluginFile string) (*TPluginRequester, error) {
 	pluginLock.Lock()
 	defer pluginLock.Unlock()
 	result, ok := pluginList[UUID]
@@ -130,9 +123,10 @@ func IndexPlugin(UUID, pluginFile string) (*TPluginRequester, error) {
 }
 func (pr *TPluginRequester) Close() {
 	pr.Client.Kill()
-}
-
+}*/
+/*
 func (pr *TPluginRequester) Running() bool {
 	resp := pr.ImpPlugin.Running()
 	return resp.Info == "true"
 }
+*/

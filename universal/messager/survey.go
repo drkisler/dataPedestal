@@ -3,6 +3,7 @@ package messager
 import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/utils"
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol/surveyor"
 	_ "go.nanomsg.org/mangos/v3/transport/all"
@@ -18,10 +19,13 @@ type TSurvey struct {
 	sock mangos.Socket
 	common.TStatus
 	Wg          *sync.WaitGroup
-	respondents []string
+	respondents map[string]common.TPluginHost
 }
 
 func NewVote(url string) (*TSurvey, error) {
+	if url == "" {
+		return nil, fmt.Errorf("url is empty")
+	}
 	var err error
 	var lock sync.Mutex
 	var socket mangos.Socket
@@ -42,7 +46,7 @@ func NewVote(url string) (*TSurvey, error) {
 			Running: false,
 		},
 		Wg:          &wg,
-		respondents: []string{},
+		respondents: make(map[string]common.TPluginHost),
 	}, nil
 }
 func (t *TSurvey) Run() {
@@ -64,24 +68,32 @@ loopOuter:
 			timeNumber = timeNumber + 1
 			if timeNumber >= 20 {
 				timeNumber = 0
-				var buffer []string
-				err := t.sock.Send([]byte{MessageVote})
+				buffer := make(map[string]common.TPluginHost)
+				err := t.sock.Send([]byte{uint8(1)})
 				if err != nil {
 					continue
 				}
 				receiving := true
 				for receiving {
 					var msg []byte
+					var plugins []common.TPluginHost
 					msg, err = t.sock.Recv()
 					if err != nil {
 						// 投票过期，sock端关闭,接收会导致异常,本次投票结束
 						receiving = false
 						continue
 					}
-					buffer = append(buffer, string(msg))
+					if plugins, err = common.FromPluginHostBytes(msg); err != nil {
+						_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+					}
+					// msg 为 common.THostInfo
+					for _, v := range plugins {
+						//v.HostInfo.
+						buffer[v.PluginUUID] = v
+					}
 				}
 				t.SetRespondents(buffer)
-				fmt.Println(buffer)
+				//fmt.Println(buffer)
 			}
 		}
 
@@ -92,13 +104,26 @@ func (t *TSurvey) Stop() {
 	t.Wg.Wait()
 	_ = t.sock.Close()
 }
-func (t *TSurvey) SetRespondents(value []string) {
+func (t *TSurvey) SetRespondents(value map[string]common.TPluginHost) {
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
 	t.respondents = value
 }
-func (t *TSurvey) GetRespondents() []string {
+func (t *TSurvey) GetRespondents() map[string]common.TPluginHost {
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
 	return t.respondents
+}
+func (t *TSurvey) GetHostInfo(strUUID string) (*common.THostInfo, error) {
+	if strUUID == "" {
+		return nil, fmt.Errorf("hostUUID is empty")
+	}
+	t.Lock.Lock()
+	defer t.Lock.Unlock()
+	for _, v := range t.respondents {
+		if v.HostInfo.HostUUID == strUUID {
+			return v.HostInfo, nil
+		}
+	}
+	return nil, fmt.Errorf("hostUUID not found")
 }

@@ -1,14 +1,18 @@
 package control
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/module"
+	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/drkisler/utils"
 	"os"
-	"strings"
 )
+
+var Survey *messager.TSurvey
+var MsgClient *messager.TMessageClient
 
 type TPluginControl struct {
 	OperatorID   int32  `json:"operator_id,omitempty"`
@@ -16,14 +20,14 @@ type TPluginControl struct {
 	PageSize     int32  `json:"page_size,omitempty"`
 	PageIndex    int32  `json:"page_index,omitempty"`
 	module.TPlugin
-	Status string `json:"status"` //待上传、待加载、待运行、运行中
+	Status string `json:"status,omitempty"` //待上传、待加载、待运行、运行中
 }
 
 func signPluginControl(tmp module.TPlugin) *TPluginControl {
 	return &TPluginControl{0, "", 500, 1, tmp, "待上传"}
 }
 func (c *TPluginControl) InsertPlugin() *utils.TResponse {
-	var id int64
+	var id string
 	var err error
 	if c.UserID == 0 {
 		c.UserID = c.OperatorID
@@ -31,61 +35,132 @@ func (c *TPluginControl) InsertPlugin() *utils.TResponse {
 	if id, err = c.PutPlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
-	return utils.ReturnID(int32(id))
+
+	var result utils.TResponse
+	result.Code, result.Info = 0, id
+
+	return &result
 }
 
 func (c *TPluginControl) DeletePlugin() *utils.TResponse {
 	var err error
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-	if err = c.InitPluginByID(); err != nil {
+	var data []byte
+	// 检测UUID是否存在
+	if err = c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
+	}
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var result utils.TResponse
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送删除请求
+		if data, err = MsgClient.Send(url, messager.OperateDeletePlugin, []byte(c.PluginUUID)); err != nil {
+			return utils.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
+		if result.Code < 0 {
+			return utils.Failure(result.Info)
+		}
 	}
 
 	if err = c.RemovePlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
-
-	if err = os.RemoveAll(initializers.PortalCfg.FileDirs[common.PLUGIN_PATH] + c.UUID + initializers.PortalCfg.DirFlag); err != nil {
+	if err = os.RemoveAll(initializers.PortalCfg.FileDirs[common.PLUGIN_PATH] + c.PluginUUID + initializers.PortalCfg.DirFlag); err != nil {
 		return utils.Failure(err.Error())
 	}
+
 	return utils.Success(nil)
 }
 
+func (c *TPluginControl) CheckPluginIsPublished() bool {
+	_, result := Survey.GetRespondents()[c.PluginUUID]
+	return result
+}
+
 func (c *TPluginControl) AlterPlugin() *utils.TResponse {
+	// PluginFile不修改的情况下修改插件信息，需要取回PluginFile信息防止修改丢失
 	var tmpPlugin module.TPlugin
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-	tmpPlugin.PluginID = c.PluginID
-	tmpPlugin.UserID = c.UserID
-	if err := tmpPlugin.InitPluginByID(); err != nil {
+	tmpPlugin.PluginUUID = c.PluginUUID
+	err := tmpPlugin.InitByUUID()
+	if err != nil {
 		return utils.Failure(err.Error())
 	}
 	if c.PluginFile == "" {
 		c.PluginFile = tmpPlugin.PluginFile
 	}
-	if err := c.ModifyPlugin(); err != nil {
+
+	if err = c.ModifyPlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
 	return utils.Success(nil)
 }
 func (c *TPluginControl) AlterConfig() *utils.TResponse {
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
+	// 检测UUID是否存在
+	var tmpPlugin module.TPlugin
+
+	tmpPlugin.PluginUUID = c.PluginUUID
+	err := tmpPlugin.InitByUUID()
+	if err != nil {
+		return utils.Failure(err.Error())
 	}
-	if err := c.ModifyConfig(); err != nil {
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送更新配置信息请求
+		var reqData []byte
+		var result utils.TResponse
+		reqData = append(reqData, []byte(c.PluginUUID)...)
+		reqData = append(reqData, []byte(c.PluginConfig)...)
+		if data, err = MsgClient.Send(url, messager.OperateUpdateConfig, reqData); err != nil {
+			return utils.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
+		if result.Code < 0 {
+			return utils.Failure(result.Info)
+		}
+	}
+
+	if err = c.ModifyConfig(); err != nil {
 		return utils.Failure(err.Error())
 	}
 	return utils.Success(nil)
 }
 
 func (c *TPluginControl) SetRunType() *utils.TResponse {
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
+	// 检测UUID是否存在
+	var tmpPlugin module.TPlugin
+	var err error
+	tmpPlugin.PluginUUID = c.PluginUUID
+	if err = tmpPlugin.InitByUUID(); err != nil {
+		return utils.Failure(err.Error())
 	}
-	if err := c.ModifyRunType(); err != nil {
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送更新运行方式信息请求
+		var reqData []byte
+		var result utils.TResponse
+		reqData = append(reqData, []byte(c.PluginUUID)...)
+		reqData = append(reqData, []byte(c.RunType)...)
+		if data, err = MsgClient.Send(url, messager.OperateSetRunType, reqData); err != nil {
+			return utils.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
+		if result.Code < 0 {
+			return utils.Failure(result.Info)
+		}
+	}
+
+	if err = c.ModifyRunType(); err != nil {
 		return utils.Failure(err.Error())
 	}
 	return utils.Success(nil)
@@ -93,7 +168,6 @@ func (c *TPluginControl) SetRunType() *utils.TResponse {
 
 func (c *TPluginControl) GetPlugin() *utils.TResponse {
 	var result []TPluginControl
-	var data utils.TRespDataSet
 	if c.UserID == 0 {
 		c.UserID = c.OperatorID
 	}
@@ -107,20 +181,24 @@ func (c *TPluginControl) GetPlugin() *utils.TResponse {
 		item = signPluginControl(pluginItem)
 		item.Status = "待上传"
 		if item.PluginFile != "" {
-			item.Status = "待加载"
+			item.Status = "待部署"
 		}
-		if CheckPluginExists(pluginItem.UUID) {
-			item.Status = "待运行"
-			if pluginList[pluginItem.UUID].Running() {
+		pluginHost := Survey.GetRespondents()
+		_, ok := pluginHost[item.PluginUUID]
+		if ok {
+			if pluginHost[pluginItem.PluginUUID].PluginPort < 0 {
+				item.Status = "待加载"
+			}
+			if pluginHost[pluginItem.PluginUUID].PluginPort == 0 {
+				item.Status = "待运行"
+			}
+			if pluginHost[pluginItem.PluginUUID].PluginPort > 0 {
 				item.Status = "运行中"
 			}
 		}
 		result = append(result, *item)
 	}
-	data.ArrData = result
-	data.Total = Total
-	data.Fields = Fields
-	return utils.Success(&data)
+	return utils.RespData(int32(Total), Fields, result, nil)
 }
 
 // UpdatePlugFileName 更新插件名称
@@ -137,161 +215,135 @@ func (c *TPluginControl) UpdatePlugFileName() *utils.TResponse {
 // LoadPlugin 加载插件
 func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 	var err error
-	var sn string
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-	if c.PluginName == "" {
-		return utils.Failure("pluginName is empty")
-	}
-	if err = c.InitPluginByName(); err != nil {
+	if err = c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
-	if sn, err = c.DecodeSN(); err != nil {
-		return utils.Failure(err.Error())
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送加载请求
+		var result utils.TResponse
+		if data, err = MsgClient.Send(url, messager.OperateLoadPlugin, []byte(c.PluginUUID)); err != nil {
+			return utils.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
+		return &result
 	}
-
-	if c.PluginFile == "" {
-		return utils.Failure("插件文件为空，请上传文件")
-	}
-
-	if err = LoadPlugin(c.UUID, sn,
-		initializers.PortalCfg.FileDirs[common.PLUGIN_PATH]+c.UUID+initializers.PortalCfg.DirFlag+c.PluginFile,
-		c.PluginConfig); err != nil {
-		return utils.Failure(err.Error())
-	}
-
-	return utils.Success(nil)
+	return utils.Failure(fmt.Sprintf("%s待发布", c.PluginUUID))
 }
 
 // UnloadPlugin 卸载插件不再运行
 func (c *TPluginControl) UnloadPlugin() *utils.TResponse {
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-	if c.PluginName == "" {
-		return utils.Failure("需要指定PluginName")
-	}
-	if err := c.InitPluginByName(); err != nil {
+	var err error
+	if err = c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
-	if err := UnloadPlugin(c.UUID, c.PluginFile); err != nil {
-		return utils.Failure(err.Error())
-	}
-
-	return utils.Success(nil)
-}
-func (c *TPluginControl) RunPlugin() *utils.TResponse {
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-	if c.PluginName == "" {
-		return utils.Failure("需要指定PluginName")
-	}
-	if err := c.InitPluginByName(); err != nil {
-		return utils.Failure(err.Error())
-	}
-	plugin, err := IndexPlugin(c.UUID, c.PluginFile)
-	if err != nil {
-		return utils.Failure(err.Error())
-	}
-	if plugin.Running() {
-		return utils.Failure(fmt.Sprintf("%s is running", c.PluginName))
-	}
-	result := plugin.ImpPlugin.Run()
-	return &result
-}
-func (c *TPluginControl) StopPlugin() *utils.TResponse {
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-	if c.PluginName == "" {
-		return utils.Failure("需要指定PluginName")
-	}
-	if err := c.InitPluginByName(); err != nil {
-		return utils.Failure(err.Error())
-	}
-	plugin, err := IndexPlugin(c.UUID, c.PluginFile)
-	if err != nil {
-		return utils.Failure(err.Error())
-	}
-	var result utils.TResponse
-	if plugin.ImpPlugin.Running().Info == "true" {
-		result = plugin.ImpPlugin.Stop()
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送卸载请求
+		var result utils.TResponse
+		if data, err = MsgClient.Send(url, messager.OperateUnloadPlugin, []byte(c.PluginUUID)); err != nil {
+			return utils.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
 		return &result
 	}
-	return utils.Failure(fmt.Sprintf("%s is not running", c.PluginName))
-
+	return utils.Failure(fmt.Sprintf("%s待发布", c.PluginUUID))
+}
+func (c *TPluginControl) RunPlugin() *utils.TResponse {
+	var err error
+	if err = c.InitByUUID(); err != nil {
+		return utils.Failure(err.Error())
+	}
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送运行请求
+		var result utils.TResponse
+		if data, err = MsgClient.Send(url, messager.OperateRunPlugin, []byte(c.PluginUUID)); err != nil {
+			return utils.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
+		return &result
+	}
+	return utils.Failure(fmt.Sprintf("%s待发布", c.PluginUUID))
+}
+func (c *TPluginControl) StopPlugin() *utils.TResponse {
+	var err error
+	if err = c.InitByUUID(); err != nil {
+		return utils.Failure(err.Error())
+	}
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送停止请求
+		var result utils.TResponse
+		if data, err = MsgClient.Send(url, messager.OperateStopPlugin, []byte(c.PluginUUID)); err != nil {
+			return utils.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
+		return &result
+	}
+	return utils.Failure(fmt.Sprintf("%s待发布", c.PluginUUID))
 }
 
 func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 	var err error
-	if c.UserID == 0 {
-		c.UserID = c.OperatorID
-	}
-	newcfg := c.PluginConfig
-	if c.PluginName == "" {
-		return utils.Failure("pluginName is empty")
-	}
-	if err = c.InitPluginByName(); err != nil {
+	if err = c.InitByUUID(); err != nil {
 		return utils.Failure(err.Error())
 	}
-	if c.PluginFile == "" {
-		return utils.Failure("插件文件为空，请上传文件")
-	}
-	if CheckPluginExists(c.UUID) {
-		plug, err := IndexPlugin(c.UUID, c.PluginFile)
-		if err != nil {
+	//获取UUID所在的Host
+	hostInfo := Survey.GetRespondents()
+	pluginHost, ok := hostInfo[c.PluginUUID]
+	if ok {
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		//向Host发送请求配置模板
+		var result utils.TResponse
+		if data, err = MsgClient.Send(url, messager.OperateGetTempConfig, []byte(c.PluginUUID)); err != nil {
 			return utils.Failure(err.Error())
 		}
-		result := plug.ImpPlugin.GetConfigTemplate()
+		_ = json.Unmarshal(data, &result)
 		return &result
 	}
-	//客户端修改序列号配置后可以未经保存，直接提交测试
-	if newcfg != c.PluginConfig {
-		c.PluginConfig = newcfg
-	}
-	if c.SerialNumber, err = c.DecodeSN(); err != nil {
-		return utils.Failure(err.Error())
-	}
-	plug, err := NewPlugin(c.SerialNumber,
-		initializers.PortalCfg.FileDirs[common.PLUGIN_PATH]+c.UUID+initializers.PortalCfg.DirFlag+c.PluginFile,
-	)
-	if err != nil {
-		return utils.Failure(err.Error())
-	}
-	result := plug.ImpPlugin.GetConfigTemplate()
-	return &result
-
+	return utils.Failure(fmt.Sprintf("%s待发布", c.PluginUUID))
 }
+
+// GetPluginNameList 获取指定类型的插件名称列表，不包含未加载的插件,用于日志查看
 func (c *TPluginControl) GetPluginNameList() *utils.TResponse {
 	if c.PluginType == "" {
 		return utils.Failure("PluginType is empty")
 	}
-	if c.PageSize == 0 {
-		c.PageSize = 20
-	}
-	if c.PageIndex == 0 {
-		c.PageIndex = 1
-	}
 	if c.UserID == 0 {
 		c.UserID = c.OperatorID
 	}
-
-	arrNames, arrUUIDs, _, err := c.GetPluginNames(c.PageSize, c.PageIndex)
+	plugins, columns, _, err := c.GetPluginNames( /*c.PageSize, c.PageIndex*/ )
 	if err != nil {
 		return utils.Failure(err.Error())
 	}
-	//未加载的插件不能返回
-	var pluginNames []string
-	for index, item := range arrUUIDs {
-		if CheckPluginExists(item) {
-			pluginNames = append(pluginNames, arrNames[index])
+	pluginHost := Survey.GetRespondents()
+	// 以pluginHost中的插件为准，不包含未加载的插件
+	var result []module.TPluginInfo
+	for _, plugin := range plugins {
+		item, ok := pluginHost[plugin.PluginUUID]
+		if ok {
+			if item.PluginPort >= 0 {
+				result = append(result, plugin)
+			}
 		}
 	}
-
-	var result utils.TResponse
-	result.Code = 0
-	result.Info = strings.Join(pluginNames, ",")
-	return &result
+	return utils.RespData(int32(len(result)), columns, result, nil)
 }

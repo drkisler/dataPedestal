@@ -1,6 +1,7 @@
 package messager
 
 import (
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol/respondent"
@@ -14,13 +15,17 @@ import (
 */
 
 type TRespondent struct {
-	Self []byte // 自己的host路由地址，用于代理调用。
-	sock mangos.Socket
+	respFunc FRespondentData
+	sock     mangos.Socket
 	common.TStatus
-	Wg *sync.WaitGroup
+	Wg        *sync.WaitGroup
+	serverUrl string
 }
 
-func NewRespondent(servUrl, selfRoute string) (*TRespondent, error) {
+func NewRespondent(url string, funcResp FRespondentData) (*TRespondent, error) {
+	if url == "" {
+		return nil, fmt.Errorf("server url is empty")
+	}
 	sock, err := respondent.NewSocket()
 	if err != nil {
 		return nil, err
@@ -28,16 +33,15 @@ func NewRespondent(servUrl, selfRoute string) (*TRespondent, error) {
 	if err = sock.SetOption(mangos.OptionRecvDeadline, time.Second*1/2); err != nil {
 		return nil, err
 	}
-	if err = sock.Dial(servUrl); err != nil {
-		return nil, err
-	}
+
 	var lock sync.Mutex
 	var wg sync.WaitGroup
 
 	return &TRespondent{sock: sock,
-		TStatus: common.TStatus{Lock: &lock, Running: false},
-		Self:    []byte(selfRoute),
-		Wg:      &wg,
+		TStatus:   common.TStatus{Lock: &lock, Running: false},
+		respFunc:  funcResp,
+		Wg:        &wg,
+		serverUrl: url,
 	}, nil
 }
 
@@ -50,12 +54,33 @@ func (r *TRespondent) start() {
 	defer r.Wg.Done()
 	r.SetRunning(true)
 	var err error
+	connected := false
 	for r.IsRunning() {
+		if !connected {
+			if err = r.sock.Dial(r.serverUrl); err != nil {
+				fmt.Println(err.Error())
+				time.Sleep(time.Second * 2)
+				continue
+			}
+			connected = true
+		}
+
 		if _, err = r.sock.Recv(); err != nil {
 			time.Sleep(time.Millisecond * 20)
 			continue
 		}
-		_ = r.sock.Send(r.Self)
+		_ = r.sock.Send(r.respFunc())
+
+		if err = r.sock.Dial(r.serverUrl); err != nil {
+			time.Sleep(time.Second * 2)
+			continue
+		}
+
+		if _, err = r.sock.Recv(); err != nil {
+			time.Sleep(time.Millisecond * 20)
+			continue
+		}
+		_ = r.sock.Send(r.respFunc())
 	}
 }
 

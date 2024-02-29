@@ -9,10 +9,11 @@ import (
 
 const checkPluginExists = "Create Table " +
 	"if not exists plugin(" +
-	",plugin_uuid text not null" +
+	" plugin_uuid text not null" +
 	",plugin_file text not null" +
 	",plugin_config text not null" +
 	",run_type text not null" +
+	",serial_number text not null" +
 	",constraint pk_plugin primary key(plugin_uuid));"
 
 var DbFilePath string
@@ -186,10 +187,15 @@ func (dbs *TStorage) InitPluginByUUID(p *TPlugin) error {
 	defer func() {
 		_ = rows.Close()
 	}()
+	rowCnt := 0
 	for rows.Next() {
 		if err = rows.Scan(&p.PluginUUID, &p.PluginFile, &p.PluginConfig, &p.PluginType); err != nil {
 			return err
 		}
+		rowCnt = rowCnt + 1
+	}
+	if rowCnt == 0 {
+		return fmt.Errorf("plugin not found")
 	}
 	return nil
 }

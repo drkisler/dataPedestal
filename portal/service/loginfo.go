@@ -3,6 +3,7 @@ package service
 import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/portal/control"
+	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -32,7 +33,7 @@ func GetLogDate(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, log.GetLogDate())
+	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateGetLogDate))
 }
 func GetLogInfo(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
@@ -40,7 +41,7 @@ func GetLogInfo(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, log.GetLogInfo())
+	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateGetLogInfo))
 }
 func DelOldLog(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
@@ -48,7 +49,7 @@ func DelOldLog(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, log.DelOldLog())
+	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateDelOldLog))
 }
 func DelLog(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
@@ -56,5 +57,5 @@ func DelLog(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, log.DelLog())
+	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateDelLog))
 }

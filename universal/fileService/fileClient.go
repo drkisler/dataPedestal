@@ -9,11 +9,14 @@ import (
 	"syscall"
 )
 
-func SendFile(fileServUrl, uuid, config, runType string, file *os.File) error {
-	conn, err := net.Dial("tcp", fileServUrl) //"127.0.0.1:8888"
+func SendFile(fileServUrl, fileUUID, config, runType string, file *os.File) error {
+	conn, err := net.Dial("tcp", fileServUrl)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = conn.Close()
+	}()
 	fileInfo, err := file.Stat()
 	if err != nil {
 		return err
@@ -21,7 +24,7 @@ func SendFile(fileServUrl, uuid, config, runType string, file *os.File) error {
 	fileMeta := TFileMeta{
 		FileName:   fileInfo.Name(),
 		FileSize:   fileInfo.Size(),
-		FileUUID:   uuid,
+		FileUUID:   fileUUID,
 		FileConfig: config,
 		RunType:    runType,
 	}

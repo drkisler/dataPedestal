@@ -11,7 +11,7 @@ import (
 type TLogControl struct {
 	LogID      int64  `json:"log_id,omitempty"`
 	UserID     int32  `json:"user_id,omitempty"`
-	PluginName string `json:"plugin_name,omitempty"`
+	PluginUUID string `json:"plugin_uuid,omitempty"`
 	LogType    string `json:"log_type"`
 	common.TLogQuery
 }
@@ -21,10 +21,10 @@ func (log *TLogControl) CheckValid() error {
 		log.PageIndex = 1
 	}
 	if log.PageSize == 0 {
-		log.PageSize = 500
+		log.PageSize = 50
 	}
-	if log.PluginName == "" {
-		return errors.New("插件名称为空")
+	if log.PluginUUID == "" {
+		return errors.New("插件UUID为空")
 	}
 	if log.LogType == "" {
 		return errors.New("插件类型为空")

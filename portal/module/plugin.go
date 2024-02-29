@@ -1,74 +1,34 @@
 package module
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/initializers"
 )
 
 type TPluginInfo = common.TPluginInfo
 
 type TPlugin struct {
-	UserID       int32  `json:"user_id,omitempty"` //用于标识谁维护的插件
-	UUID         string `json:"uuid,omitempty"`    //用于创建插件的目录
-	SerialNumber string `json:"serial_number"`     //用于匹配插件的序列号
-	ServiceUrl   string `json:"service_url"`       //插件的服务地址
+	UserID int32 `json:"user_id,omitempty"` //用于标识谁维护的插件
 	TPluginInfo
 }
 
-func (p *TPlugin) PutPlugin() (int64, error) {
+func (p *TPlugin) PutPlugin() (string, error) {
 	dbs, err := GetDbServ()
-	if err != nil {
-		return -1, err
-	}
-	return dbs.PutPlugin(p)
-
-}
-func (p *TPlugin) DecodeSN() (string, error) {
-	if p.PluginConfig == "" {
-		return "", fmt.Errorf("配置信息为空，请配置插件的配置信息")
-	}
-	var cfg initializers.TConfigure
-	err := json.Unmarshal([]byte(p.PluginConfig), &cfg)
 	if err != nil {
 		return "", err
 	}
-	if cfg.SerialNumber == "" {
-		return "", fmt.Errorf("序列号信息为空,需要提供序列号才能使用")
-	}
-	if len(cfg.SerialNumber) != 36 {
-		return "", fmt.Errorf("序列号信息不正确")
-	}
-	return cfg.SerialNumber, nil
+	return dbs.PutPlugin(p)
 }
-func (p *TPlugin) InitPluginByName() error {
+
+func (p *TPlugin) InitByUUID() error {
+	if p.PluginUUID == "" {
+		return fmt.Errorf("require plugin_uuid")
+	}
 	dbs, err := GetDbServ()
 	if err != nil {
 		return err
 	}
-	var tmp *TPlugin
-	if tmp, err = dbs.GetPluginByName(p.UserID, p.PluginName); err != nil {
-		return err
-	}
-	*p = *tmp
-
-	return nil
-
-}
-func (p *TPlugin) InitPluginByID() error {
-	dbs, err := GetDbServ()
-	if err != nil {
-		return err
-	}
-	var tmp *TPlugin
-	if tmp, err = dbs.GetPluginByID(p.UserID, p.PluginID); err != nil {
-		return err
-	}
-	*p = *tmp
-
-	return nil
-
+	return dbs.GetPluginByUUID(p)
 }
 
 func (p *TPlugin) QueryPlugin(pageSize int32, pageIndex int32) ([]TPlugin, []string, int, error) {
@@ -77,7 +37,6 @@ func (p *TPlugin) QueryPlugin(pageSize int32, pageIndex int32) ([]TPlugin, []str
 		return nil, nil, -1, err
 	}
 	return dbs.QueryPlugin(p, pageSize, pageIndex)
-
 }
 
 // UpdateFile 修改插件文件名称
@@ -86,7 +45,7 @@ func (p *TPlugin) UpdateFile() error {
 	if err != nil {
 		return err
 	}
-	return dbs.UpdateFile(p)
+	return dbs.UpdateFileName(p)
 }
 func (p *TPlugin) RemovePlugin() error {
 	dbs, err := GetDbServ()
@@ -120,18 +79,20 @@ func (p *TPlugin) ModifyRunType() error {
 	}
 	return dbs.ModifyRunType(p)
 }
-func (p *TPlugin) GetPluginNames(pageSize int32, pageIndex int32) ([]string, []string, int, error) {
+func (p *TPlugin) GetPluginNames() ([]TPluginInfo, []string, int, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return nil, nil, -1, err
 	}
-	return dbs.GetPluginNames(p, pageSize, pageIndex)
+	return dbs.GetPluginNames(p)
 
 }
-func GetAutoRunPlugins() ([]TPlugin, error) {
+
+/*func GetAutoRunPlugins() ([]TPlugin, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return nil, err
 	}
 	return dbs.GetAutoRunPlugins()
 }
+*/

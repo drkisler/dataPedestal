@@ -1,0 +1,95 @@
+package messager
+
+import (
+	"fmt"
+	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/utils"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol"
+	"go.nanomsg.org/mangos/v3/protocol/rep"
+	_ "go.nanomsg.org/mangos/v3/transport/all"
+	"sync"
+	"time"
+)
+
+type TMessageServer struct {
+	MessageHead   byte
+	MessageBody   []byte
+	socket        mangos.Socket
+	status        common.TStatus
+	wg            *sync.WaitGroup
+	HandleRequest FHandleRequest
+}
+
+func NewMessageServer(url string, handler FHandleRequest) (*TMessageServer, error) {
+	if url == "" {
+		return nil, fmt.Errorf("listen url is empty")
+	}
+	var result TMessageServer
+	var status common.TStatus
+	var lock sync.Mutex
+	var sock mangos.Socket
+	var wg sync.WaitGroup
+	var err error
+	status = common.TStatus{
+		Lock:    &lock,
+		Running: false,
+	}
+
+	if sock, err = rep.NewSocket(); err != nil {
+		return nil, err
+	}
+
+	if err = sock.SetOption(mangos.OptionSendDeadline, time.Second*2); err != nil {
+		return nil, err
+	}
+	if err = sock.SetOption(mangos.OptionRecvDeadline, time.Second*2); err != nil {
+		return nil, err
+	}
+	if err = sock.Listen(url); err != nil {
+		return nil, err
+	}
+	result.socket = sock
+	result.status = status
+	result.wg = &wg
+	result.HandleRequest = handler
+
+	return &result, nil
+
+}
+
+// Receive 1、被动收到消息，及时回复确认，将数据写入通道
+func (ms *TMessageServer) Receive() {
+	defer ms.wg.Done()
+	ms.status.SetRunning(true)
+	for ms.status.IsRunning() {
+		var data []byte
+		var err error
+		if data, err = ms.socket.Recv(); err != nil {
+			if err != protocol.ErrRecvTimeout {
+				_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+			}
+			time.Sleep(time.Millisecond * 200)
+			continue
+		}
+		handleResult := ms.HandleRequest(data)
+		if err = ms.socket.Send(handleResult); err != nil {
+			if err != protocol.ErrSendTimeout {
+				_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+			}
+			continue
+		}
+
+	}
+}
+
+func (ms *TMessageServer) Start() {
+	ms.wg.Add(1)
+	go ms.Receive()
+}
+
+func (ms *TMessageServer) Stop() {
+	ms.status.SetRunning(false)
+	ms.wg.Wait()
+	_ = ms.socket.Close()
+}
