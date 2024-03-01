@@ -5,7 +5,6 @@ import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
-	"github.com/drkisler/utils"
 	"github.com/hashicorp/go-plugin"
 	"os/exec"
 	"sync"
@@ -36,19 +35,19 @@ func RunPlugins() {
 	var req *TPluginRequester
 	plugins, err := module.GetAutoRunPlugins()
 	if err != nil {
-		_ = utils.LogServ.WriteLog(common.ERROR_PATH, "module.GetAutoRunPlugins()", err.Error())
+		common.LogServ.Error("module.GetAutoRunPlugins()", err.Error())
 		return
 	}
 	for _, item := range plugins {
 		if req, err = NewPlugin(item.SerialNumber,
-			initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+item.PluginUUID+initializers.HostConfig.DirFlag+item.PluginFile); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
+			initializers.HostConfig.PluginDir+item.PluginUUID+initializers.HostConfig.DirFlag+item.PluginFile); err != nil {
+			common.LogServ.Error("RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
 			return
 		}
 		resp := req.ImpPlugin.Load(item.PluginConfig)
 		if resp.Code < 0 {
 			req.Close()
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, "加载插件%s失败:%s", item.PluginUUID, item.PluginFile, resp.Info)
+			common.LogServ.Error("加载插件%s失败:%s", item.PluginUUID, item.PluginFile, resp.Info)
 			return
 		}
 		//resp.Code 返回插件运行的端口，如果有的话

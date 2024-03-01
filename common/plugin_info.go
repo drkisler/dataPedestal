@@ -107,6 +107,9 @@ func FromPluginHostBytes(data []byte) ([]TPluginHost, error) {
 
 func (t *THostInfo) toByte() []byte {
 	var result []byte
+	//HostUUID
+	result = append(result, []byte(t.HostUUID)...)
+	//HostName
 	result = append(result, uint8(len(t.HostName)))
 	result = append(result, []byte(t.HostName)...)
 	//HostIP
@@ -126,10 +129,13 @@ func (t *THostInfo) toByte() []byte {
 func (t *THostInfo) fromByte(data []byte, index int) (int, error) {
 	var iLen, iPort int
 	var err error
-	//HostName
 	if len(data) < index+1 {
 		return index, fmt.Errorf("转换数据出错")
 	}
+	//HostUUID
+	t.HostUUID = string(data[index : index+36])
+	index += 36
+	//HostName
 	iLen = int(data[index])
 	index += 1
 	if len(data) < index+iLen {

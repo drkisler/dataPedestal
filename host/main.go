@@ -11,22 +11,11 @@ import (
 	"github.com/drkisler/dataPedestal/universal/fileService"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	usrServ "github.com/drkisler/dataPedestal/universal/userAdmin/service"
-	"github.com/drkisler/utils"
 	"github.com/takama/daemon"
 	"os"
 	"os/signal"
+	"strings"
 )
-
-/*
-+接收插件
-+删除插件
-+加载插件
-+启动插件
-+停止插件
-+插件清单
--发送心跳（心跳数据：路由,路由可配置）
--存储插件信息
-*/
 
 const (
 	managerName = "pluginHost"
@@ -59,32 +48,37 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	//log.Println("Shutdown worker ...")
-
-	_ = utils.LogServ.WriteLog(common.INFO_PATH, "worker Shutdown")
 	return managerName + " exited", nil
 }
 
 func main() {
 	gob.Register([]common.TLogInfo{})
-	// region 设置日志目录
-	files, err := utils.NewFilePath()
+	// get current path
+	currentPath, err := os.Executable()
 	if err != nil {
-		fmt.Printf("设置日志目录失败：%s", err.Error())
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+	pathSeparator := string(os.PathSeparator)
+	arrDir := strings.Split(currentPath, pathSeparator)
+	arrDir[len(arrDir)-1] = ""
+	currentPath = strings.Join(arrDir, pathSeparator)
+
+	// region 读取配置文件
+	if err = initializers.HostConfig.LoadConfig(fmt.Sprintf("%s%s%s", currentPath, "config", pathSeparator), "config.toml"); err != nil {
+		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
 	// endregion
 
-	// region 读取配置文件
-	if err = initializers.HostConfig.LoadConfig(files); err != nil {
-		fmt.Printf("读取配置文件失败：%s", err.Error())
-		os.Exit(1)
-	}
-	if err = initializers.HostConfig.InitConfig(); err != nil {
-		fmt.Printf("初始化配置文件失败：%s", err.Error())
-		os.Exit(1)
-	}
-	// endregion
+	common.NewLogService(currentPath, pathSeparator,
+		initializers.HostConfig.InfoDir,
+		initializers.HostConfig.WarnDir,
+		initializers.HostConfig.ErrorDir,
+		initializers.HostConfig.DebugDir,
+		initializers.HostConfig.IsDebug,
+	)
+	defer common.CloseLogService()
 
 	// region 创建并启动应答服务
 	// cfg.SelfName, cfg.SelfIP, cfg.WebServPort, cfg.MessagePort, cfg.FileServPort
@@ -125,7 +119,8 @@ func main() {
 	// endregion
 
 	// region 初始化数据库
-	module.DbFilePath = (*files.FileDirs)[common.DATABASE_TATH]
+	//module.DbFilePath = (*files.FileDirs)[common.DATABASE_TATH]
+	module.DbFilePath = fmt.Sprintf("%s%s%s", currentPath, initializers.HostConfig.DataDir, pathSeparator)
 	dbs, err := module.GetDbServ()
 	if err != nil {
 		fmt.Printf("初始化数据库失败：%s", err.Error())
@@ -135,7 +130,7 @@ func main() {
 		_ = dbs.CloseDB()
 	}()
 
-	if err = usrServ.ConnectToDB((*files.FileDirs)[common.DATABASE_TATH]); err != nil {
+	if err = usrServ.ConnectToDB(module.DbFilePath); err != nil {
 		fmt.Printf("初始化user数据库失败：%s", err.Error())
 		os.Exit(1)
 	}

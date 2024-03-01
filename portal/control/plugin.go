@@ -3,7 +3,6 @@ package control
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/module"
 	"github.com/drkisler/dataPedestal/universal/messager"
@@ -68,7 +67,7 @@ func (c *TPluginControl) DeletePlugin() *utils.TResponse {
 	if err = c.RemovePlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
-	if err = os.RemoveAll(initializers.PortalCfg.FileDirs[common.PLUGIN_PATH] + c.PluginUUID + initializers.PortalCfg.DirFlag); err != nil {
+	if err = os.RemoveAll(initializers.PortalCfg.PluginDir + c.PluginUUID + initializers.PortalCfg.DirFlag); err != nil {
 		return utils.Failure(err.Error())
 	}
 

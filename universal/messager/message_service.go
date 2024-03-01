@@ -3,7 +3,6 @@ package messager
 import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/utils"
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol"
 	"go.nanomsg.org/mangos/v3/protocol/rep"
@@ -67,7 +66,7 @@ func (ms *TMessageServer) Receive() {
 		var err error
 		if data, err = ms.socket.Recv(); err != nil {
 			if err != protocol.ErrRecvTimeout {
-				_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+				common.LogServ.Error(err)
 			}
 			time.Sleep(time.Millisecond * 200)
 			continue
@@ -75,7 +74,7 @@ func (ms *TMessageServer) Receive() {
 		handleResult := ms.HandleRequest(data)
 		if err = ms.socket.Send(handleResult); err != nil {
 			if err != protocol.ErrSendTimeout {
-				_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+				common.LogServ.Error(err)
 			}
 			continue
 		}

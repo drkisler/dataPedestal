@@ -52,7 +52,7 @@ func HandleOperate(msg []byte) []byte {
 
 func HandleReceiveFile(meta *fileService.TFileMeta, err error) {
 	if err != nil {
-		_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+		common.LogServ.Error(err)
 		return
 	}
 	var plugin control.TPluginControl
@@ -62,6 +62,6 @@ func HandleReceiveFile(meta *fileService.TFileMeta, err error) {
 	plugin.PluginConfig = meta.FileConfig
 	plugin.SerialNumber = meta.SerialNumber
 	if err = plugin.InsertPlugin(); err != nil {
-		_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+		common.LogServ.Error(err)
 	}
 }

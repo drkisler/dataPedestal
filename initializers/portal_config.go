@@ -1,33 +1,28 @@
 package initializers
 
-import "github.com/drkisler/utils"
-
 var PortalCfg TPortalConfig
 
 type TPortalConfig struct {
 	TAppBaseConfig
-	SurveyUrl string `mapstructure:"server.survey_url"`
-	//MessagePort int32  `mapstructure:"server.message_port"` // 应答消息包括的message端口
+	SurveyUrl string `toml:"survey_url"`
+	DataDir   string `toml:"data_dir"`
+	PluginDir string `toml:"plugin_dir"`
+	ErrorDir  string `toml:"error_dir"`
+	InfoDir   string `toml:"info_dir"`
+	DebugDir  string `toml:"debug_dir"`
+	WarnDir   string `toml:"warn_dir"`
 }
 
-func (cfg *TPortalConfig) LoadConfig(filer *utils.TFilepath) error {
-	err := cfg.TAppBaseConfig.LoadConfig(filer)
-	if err != nil {
-		return err
-	}
-	if err = cfg.TAppBaseConfig.InitConfig(); err != nil {
-		return err
-	}
-	return nil
+func (cfg *TPortalConfig) SetDefault() {
+	cfg.TAppBaseConfig.SetDefault()
+	cfg.SurveyUrl = "tcp://127.0.0.1:8901"
+	cfg.DataDir = "data"
+	cfg.PluginDir = "plugin"
+	cfg.ErrorDir = "error"
+	cfg.InfoDir = "info"
+	cfg.DebugDir = "debug"
+	cfg.WarnDir = "warn"
 }
-
-func (cfg *TPortalConfig) InitConfig() error {
-	err := cfg.TAppBaseConfig.InitConfig()
-	if err != nil {
-		return err
-	}
-	if err = cfg.cfgHelper.GetConfig(cfg); err != nil {
-		return err
-	}
-	return nil
+func (cfg *TPortalConfig) LoadConfig(cfgDir, cfgFile string) error {
+	return cfg.TAppBaseConfig.LoadConfig(cfgDir, cfgFile, cfg)
 }

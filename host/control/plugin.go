@@ -7,7 +7,6 @@ import (
 	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/utils"
-	"github.com/google/uuid"
 	"os"
 	"strings"
 )
@@ -25,7 +24,7 @@ type TPluginControl struct {
 }
 
 func SetHostInfo(hostIP, hostName string, msgPort, filePort int32) {
-	HostInfo.HostUUID = uuid.New().String()
+	HostInfo.HostUUID = initializers.HostConfig.HostUUID
 	HostInfo.HostIP = hostIP
 	HostInfo.HostName = hostName
 	HostInfo.MessagePort = msgPort
@@ -53,7 +52,7 @@ func (c *TPluginControl) DeletePlugin() *utils.TResponse {
 	if err = c.DelPlugin(); err != nil {
 		return utils.Failure(err.Error())
 	}
-	if err = os.RemoveAll(initializers.HostConfig.FileDirs[common.PLUGIN_PATH] + c.PluginUUID + initializers.HostConfig.DirFlag); err != nil {
+	if err = os.RemoveAll(initializers.HostConfig.PluginDir + c.PluginUUID + initializers.HostConfig.DirFlag); err != nil {
 		return utils.Failure(err.Error())
 	}
 	return utils.Success(nil)
@@ -150,7 +149,7 @@ func (c *TPluginControl) LoadPlugin() *utils.TResponse {
 	}
 
 	if err = LoadPlugin(c.PluginUUID, c.SerialNumber,
-		initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
+		initializers.HostConfig.PluginDir+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
 		c.PluginConfig); err != nil {
 		return utils.Failure(err.Error())
 	}
@@ -226,7 +225,7 @@ func (c *TPluginControl) GetPluginTmpCfg() *utils.TResponse {
 		c.PluginConfig = newCfg
 	}
 	plug, err := NewPlugin(c.SerialNumber,
-		initializers.HostConfig.FileDirs[common.PLUGIN_PATH]+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
+		initializers.HostConfig.PluginDir+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
 	)
 	if err != nil {
 		return utils.Failure(err.Error())

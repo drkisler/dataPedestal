@@ -187,7 +187,7 @@ func Upload(ctx *gin.Context) {
 		return
 	}
 
-	filePath := initializers.PortalCfg.FileDirs[common.PLUGIN_PATH] + plugin.PluginUUID + initializers.PortalCfg.DirFlag
+	filePath := initializers.PortalCfg.PluginDir + plugin.PluginUUID + initializers.PortalCfg.DirFlag
 	//如果已经存在则删除
 	if plugin.PluginFile != "" {
 		if _, err = os.Stat(filePath + plugin.PluginFile); err != nil {
@@ -222,7 +222,7 @@ func Download(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, utils.Failure(err.Error()))
 		return
 	}
-	filePath := initializers.PortalCfg.FileDirs[common.PLUGIN_PATH] + plugin.PluginUUID + initializers.PortalCfg.DirFlag
+	filePath := initializers.PortalCfg.PluginDir + plugin.PluginUUID + initializers.PortalCfg.DirFlag
 	ctx.FileAttachment(filePath+plugin.PluginFile, plugin.PluginFile)
 }
 func GetPluginNameList(ctx *gin.Context) {
@@ -258,7 +258,7 @@ func PubPlugin(ctx *gin.Context) {
 		return
 	}
 	// 将文件传输至host
-	pluginFinle := initializers.PortalCfg.FileDirs[common.PLUGIN_PATH] +
+	pluginFinle := initializers.PortalCfg.PluginDir +
 		plugin.PluginUUID +
 		initializers.PortalCfg.DirFlag +
 		plugin.PluginFile

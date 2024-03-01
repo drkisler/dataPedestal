@@ -3,7 +3,6 @@ package messager
 import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/utils"
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol/surveyor"
 	_ "go.nanomsg.org/mangos/v3/transport/all"
@@ -85,7 +84,7 @@ loopOuter:
 						continue
 					}
 					if plugins, err = common.FromPluginHostBytes(msg); err != nil {
-						_ = utils.LogServ.WriteLog(common.ERROR_PATH, err)
+						common.LogServ.Error(err)
 					}
 					// msg 为 common.THostInfo
 					for _, v := range plugins {
@@ -112,6 +111,7 @@ func (t *TSurvey) SetRespondents(value map[string]common.TPluginHost) {
 	for _, v := range value {
 		t.hosts[v.HostInfo.HostUUID] = v.HostInfo
 	}
+	fmt.Println(t.hosts)
 	t.respondents = value
 }
 func (t *TSurvey) GetRespondents() map[string]common.TPluginHost {

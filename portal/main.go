@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 )
 
@@ -84,8 +85,7 @@ func createAndStartGinService() {
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
-			_ = utils.LogServ.WriteLog(common.ERROR_PATH, fmt.Sprintf("listen: %s\n", err.Error()))
-
+			common.LogServ.Error("srv.ListenAndServe()", err)
 		}
 	}()
 
@@ -97,13 +97,9 @@ func createAndStartGinService() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		_ = utils.LogServ.WriteLog(common.ERROR_PATH, "Server Shutdown:", err)
+		common.LogServ.Error("srv.Shutdown(ctx)", err)
 	}
-	// 停止服务
-
-	//<-interrupt
-	//停止服务
-	_ = utils.LogServ.WriteLog(common.INFO_PATH, "Server Shutdown")
+	common.LogServ.Info("Server Shutdown")
 }
 func reverseProxy(target string) gin.HandlerFunc {
 	remoteUrl, _ := url.Parse(target)
@@ -140,30 +136,34 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	return managerName + " exited", nil
 }
 func main() {
-	var err error
-
-	// region 读取配置文件
-	files, err := utils.NewFilePath()
+	currentPath, err := os.Executable()
 	if err != nil {
-		fmt.Printf("设置日志目录失败：%s", err.Error())
+		fmt.Println(err.Error())
 		os.Exit(1)
 	}
-	if err = initializers.PortalCfg.LoadConfig(files); err != nil {
+	pathSeparator := string(os.PathSeparator)
+	arrDir := strings.Split(currentPath, pathSeparator)
+	arrDir[len(arrDir)-1] = ""
+	currentPath = strings.Join(arrDir, pathSeparator)
+
+	// region 读取配置文件
+	if err = initializers.PortalCfg.LoadConfig(fmt.Sprintf("%s%s%s", currentPath, "config", pathSeparator), "config.toml"); err != nil {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
-	if err = initializers.PortalCfg.InitConfig(); err != nil {
-		fmt.Printf("初始化配置文件失败：%s", err.Error())
-		os.Exit(1)
-	}
-	/*	if err = initializers.PortalCfg.InitLogfile(); err != nil {
-		fmt.Printf("初始化日志文件失败：%s", err.Error())
-		os.Exit(1)
-	}*/
+
+	common.NewLogService(currentPath, pathSeparator,
+		initializers.PortalCfg.InfoDir,
+		initializers.PortalCfg.WarnDir,
+		initializers.PortalCfg.ErrorDir,
+		initializers.PortalCfg.DebugDir,
+		initializers.PortalCfg.IsDebug,
+	)
+	defer common.CloseLogService()
 	// endregion
 
 	// region 初始化数据库
-	module.DbFilePath = (*files.FileDirs)[common.DATABASE_TATH]
+	module.DbFilePath = fmt.Sprintf("%s%s%s", currentPath, initializers.PortalCfg.DataDir, pathSeparator)
 	dbs, err := module.GetDbServ()
 	if err != nil {
 		fmt.Printf("初始化数据库失败：%s", err.Error())
@@ -173,7 +173,7 @@ func main() {
 		_ = dbs.CloseDB()
 	}()
 
-	if err = usrServ.ConnectToDB((*files.FileDirs)[common.DATABASE_TATH]); err != nil {
+	if err = usrServ.ConnectToDB(module.DbFilePath); err != nil {
 		fmt.Printf("初始化user数据库失败：%s", err.Error())
 		os.Exit(1)
 	}

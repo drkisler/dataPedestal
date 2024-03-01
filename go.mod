@@ -3,6 +3,7 @@ module github.com/drkisler/dataPedestal
 go 1.21.4
 
 require (
+	github.com/BurntSushi/toml v1.3.2
 	github.com/ClickHouse/ch-go v0.61.1
 	github.com/drkisler/utils v0.1.7
 	github.com/gin-gonic/gin v1.9.1
@@ -14,7 +15,6 @@ require (
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mattn/go-sqlite3 v1.14.19
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/viper v1.18.2
 	github.com/takama/daemon v1.0.0
 	go.nanomsg.org/mangos/v3 v3.4.2
 )
@@ -67,6 +67,7 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/viper v1.18.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
