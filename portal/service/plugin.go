@@ -1,17 +1,13 @@
 package service
 
 import (
-	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/control"
-	"github.com/drkisler/dataPedestal/universal/fileService"
 	"github.com/gin-gonic/gin"
 	"mime/multipart"
 	"net/http"
 	"os"
-	"os/exec"
-	"strings"
 )
 
 func DeletePlugin(ctx *gin.Context) {
@@ -243,7 +239,6 @@ func GetPluginNameList(ctx *gin.Context) {
 // PubPlugin PubPlugin 将插件发布到指定host中
 func PubPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	var hostInfo *common.THostInfo
 	err := common.CheckRequest(ctx, &plugin)
 	if err != nil {
 		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
@@ -253,54 +248,21 @@ func PubPlugin(ctx *gin.Context) {
 		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
 		return
 	}
-
-	if hostInfo, err = control.Survey.GetHostInfoByHostUUID(ctx.Param("hostUUID")); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
-		return
-	}
-	pluginFile := common.CurrentPath + initializers.PortalCfg.PluginDir +
-		plugin.PluginUUID +
-		initializers.PortalCfg.DirFlag +
-		plugin.PluginFile
-	// 获取插件序列号
-	cmd := exec.Command(pluginFile, common.GetDefaultKey()) //系统参数
-	var out strings.Builder
-	cmd.Stdout = &out
-	if err = cmd.Run(); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
-		return
-	}
-	serialNumber := out.String()
-	if serialNumber == "" {
-		ctx.JSON(http.StatusOK, common.Failure("获取插件序列号失败"))
-		return
-	}
-
-	// 将文件传输至host
-	file, err := os.Open(pluginFile)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
-		return
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	if err = fileService.SendFile(fmt.Sprintf("%s:%d", hostInfo.HostIP, hostInfo.FileServPort),
-		plugin.PluginUUID, plugin.PluginConfig, plugin.RunType, serialNumber, file); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
-		return
-	}
-	plugin.HostUUID = hostInfo.HostUUID
-	plugin.HostName = hostInfo.HostName
-	plugin.HostIP = hostInfo.HostIP
 	// 修改插件发布信息
-	ctx.JSON(http.StatusOK, plugin.SetHostInfo())
-
+	ctx.JSON(http.StatusOK, plugin.PublishPlugin(ctx.Param("hostUUID")))
 }
 
 // TakeDown 将指定插件下架
 func TakeDown(ctx *gin.Context) {
+	var plugin control.TPluginControl
+	err := common.CheckRequest(ctx, &plugin)
+	if err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		return
+	}
+	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		return
+	}
 
 }
 

@@ -6,8 +6,11 @@ import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/module"
+	"github.com/drkisler/dataPedestal/universal/fileService"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"os"
+	"os/exec"
+	"strings"
 )
 
 var Survey *messager.TSurvey
@@ -67,6 +70,51 @@ func (c *TPluginControl) DeletePlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 
+	return common.Success(nil)
+}
+
+func (c *TPluginControl) PublishPlugin(strUUID string) *common.TResponse {
+	var err error
+	var hostInfo *common.THostInfo
+	if err = c.InitByUUID(); err != nil {
+		return common.Failure(err.Error())
+	}
+	if hostInfo, err = Survey.GetHostInfoByHostUUID(strUUID); err != nil {
+		return common.Failure(err.Error())
+	}
+
+	pluginFile := common.CurrentPath + initializers.PortalCfg.PluginDir +
+		c.PluginUUID +
+		initializers.PortalCfg.DirFlag +
+		c.PluginFile
+
+	// 获取插件序列号
+	cmd := exec.Command(pluginFile, common.GetDefaultKey()) //系统参数
+	var out strings.Builder
+	cmd.Stdout = &out
+	if err = cmd.Run(); err != nil {
+		return common.Failure(err.Error())
+	}
+	serialNumber := out.String()
+	if serialNumber == "" {
+		return common.Failure("获取插件序列号失败")
+	}
+	c.SerialNumber = serialNumber
+	// 将文件传输至host
+	file, err := os.Open(pluginFile)
+	if err != nil {
+		return common.Failure(err.Error())
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	if err = fileService.SendFile(fmt.Sprintf("%s:%d", hostInfo.HostIP, hostInfo.FileServPort),
+		c.PluginUUID, c.PluginConfig, c.RunType, c.SerialNumber, file); err != nil {
+		return common.Failure(err.Error())
+	}
+	c.HostUUID, c.HostName, c.HostIP = hostInfo.HostUUID, hostInfo.HostName, hostInfo.HostIP
+	c.SetHostInfo()
 	return common.Success(nil)
 }
 
