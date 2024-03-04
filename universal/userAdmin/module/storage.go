@@ -219,7 +219,7 @@ func (dbs *TStorage) DeleteUser(user *TUser) error {
 	return nil
 
 }
-func (dbs *TStorage) QueryUser(user *TUser, pageSize int32, pageIndex int32) ([]TUser, []string, int, error) {
+func (dbs *TStorage) QueryUser(user *TUser, pageSize int32, pageIndex int32) ([]TUser, int32, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var strSQL = "select * from(" +
@@ -239,24 +239,20 @@ func (dbs *TStorage) QueryUser(user *TUser, pageSize int32, pageIndex int32) ([]
 	}
 	rows, err := dbs.Queryx(strSQL, pageSize, pageIndex, pageSize)
 	if err != nil {
-		return nil, nil, -1, err
+		return nil, -1, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
-	var cnt = 0
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, nil, -1, err
-	}
+	var cnt int32 = 0
 	var result []TUser
 	for rows.Next() {
 		var usr TUser
 		if err = rows.Scan(&usr.UserID, &usr.UserName, &usr.Account, &usr.Role, &usr.Status); err != nil {
-			return nil, nil, -1, err
+			return nil, -1, err
 		}
 		cnt++
 		result = append(result, usr)
 	}
-	return result, columns, cnt, nil
+	return result, cnt, nil
 }

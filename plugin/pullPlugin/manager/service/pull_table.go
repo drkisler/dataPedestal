@@ -3,7 +3,6 @@ package service
 import (
 	"github.com/drkisler/dataPedestal/common"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
-	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
@@ -12,7 +11,7 @@ func Add(ctx *gin.Context) {
 	var ptc ctl.TPullTableControl
 	err := common.CheckRequest(ctx, &ptc)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
@@ -24,7 +23,7 @@ func Alter(ctx *gin.Context) {
 	var ptc ctl.TPullTableControl
 	err := common.CheckRequest(ctx, &ptc)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
@@ -36,7 +35,7 @@ func Delete(ctx *gin.Context) {
 	var ptc ctl.TPullTableControl
 	err := common.CheckRequest(ctx, &ptc)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
@@ -48,7 +47,7 @@ func Get(ctx *gin.Context) {
 	var ptc ctl.TPullTableControl
 	err := common.CheckRequest(ctx, &ptc)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
@@ -60,7 +59,7 @@ func SetStatus(ctx *gin.Context) {
 	var ptc ctl.TPullTableControl
 	err := common.CheckRequest(ctx, &ptc)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {

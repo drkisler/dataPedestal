@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
-	"github.com/drkisler/utils"
 )
 
 type TLogControl struct {
@@ -43,16 +42,16 @@ func (log *TLogControl) parsePluginRequester() (*TPluginRequester, error) {
 	}
 	return pluginReq, nil
 }
-func (log *TLogControl) GetLogInfo() *utils.TResponse {
+func (log *TLogControl) GetLogInfo() *common.TResponse {
 	var err error
 	var logParam []byte
 	var pluginReq *TPluginRequester
-	var result utils.TResponse
+	var result common.TResponse
 	if pluginReq, err = log.parsePluginRequester(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
 	if logParam, err = json.Marshal(log.TLogQuery); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
 
 	switch log.LogType {
@@ -63,17 +62,17 @@ func (log *TLogControl) GetLogInfo() *utils.TResponse {
 	case logAdmin.DebugLog:
 		result = pluginReq.ImpPlugin.GetDebugLog(string(logParam))
 	default:
-		result = *utils.Failure("log_type error")
+		result = *common.Failure("log_type error")
 	}
 
 	return &result
 }
-func (log *TLogControl) GetLogDate() *utils.TResponse {
+func (log *TLogControl) GetLogDate() *common.TResponse {
 	var err error
 	var pluginReq *TPluginRequester
-	var result utils.TResponse
+	var result common.TResponse
 	if pluginReq, err = log.parsePluginRequester(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
 	switch log.LogType {
 	case logAdmin.InfoLog:
@@ -83,16 +82,16 @@ func (log *TLogControl) GetLogDate() *utils.TResponse {
 	case logAdmin.DebugLog:
 		result = pluginReq.ImpPlugin.GetDebugLogDate()
 	default:
-		result = *utils.Failure("log_type error")
+		result = *common.Failure("log_type error")
 	}
 	return &result
 }
-func (log *TLogControl) DelOldLog() *utils.TResponse {
+func (log *TLogControl) DelOldLog() *common.TResponse {
 	var err error
 	var pluginReq *TPluginRequester
-	var result utils.TResponse
+	var result common.TResponse
 	if pluginReq, err = log.parsePluginRequester(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
 	switch log.LogType {
 	case logAdmin.InfoLog:
@@ -102,23 +101,23 @@ func (log *TLogControl) DelOldLog() *utils.TResponse {
 	case logAdmin.DebugLog:
 		result = pluginReq.ImpPlugin.DelDebugOldLog(log.LogDate)
 	default:
-		result = *utils.Failure("log_type error")
+		result = *common.Failure("log_type error")
 	}
 	return &result
 }
-func (log *TLogControl) DelLog() *utils.TResponse {
+func (log *TLogControl) DelLog() *common.TResponse {
 	var err error
 	var logParam []byte
 	var pluginReq *TPluginRequester
-	var result utils.TResponse
+	var result common.TResponse
 	var logData common.TLogInfo
 	if pluginReq, err = log.parsePluginRequester(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
 	logData.LogID = log.LogID
 	logData.LogDate = log.LogDate
 	if logParam, err = json.Marshal(logData); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
 	switch log.LogType {
 	case logAdmin.InfoLog:
@@ -128,7 +127,7 @@ func (log *TLogControl) DelLog() *utils.TResponse {
 	case logAdmin.DebugLog:
 		result = pluginReq.ImpPlugin.DelDebugLog(string(logParam))
 	default:
-		result = *utils.Failure("log_type error")
+		result = *common.Failure("log_type error")
 	}
 
 	return &result

@@ -15,7 +15,7 @@ import (
 
 func main() {
 	if len(os.Args) > 1 {
-		if os.Args[1] == "Enjoy0r" {
+		if os.Args[1] == common.GetDefaultKey() {
 			/*
 				LicenseCode, err := common.GenerateCaptcha(service.SerialNumber)
 				if err != nil {
@@ -24,7 +24,7 @@ func main() {
 				}
 				fmt.Println(fmt.Sprintf("license code : %s", LicenseCode))
 			*/
-			fmt.Println(service.SerialNumber)
+			fmt.Print(service.SerialNumber)
 			return
 		}
 		if os.Args[1] == "test" {

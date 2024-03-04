@@ -10,7 +10,6 @@ import (
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/universal/fileService"
 	"github.com/drkisler/dataPedestal/universal/messager"
-	usrServ "github.com/drkisler/dataPedestal/universal/userAdmin/service"
 	"github.com/takama/daemon"
 	"os"
 	"os/signal"
@@ -52,26 +51,27 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 }
 
 func main() {
+	var err error
 	gob.Register([]common.TLogInfo{})
 	// get current path
-	currentPath, err := os.Executable()
+	common.CurrentPath, err = os.Executable()
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 	pathSeparator := string(os.PathSeparator)
-	arrDir := strings.Split(currentPath, pathSeparator)
+	arrDir := strings.Split(common.CurrentPath, pathSeparator)
 	arrDir[len(arrDir)-1] = ""
-	currentPath = strings.Join(arrDir, pathSeparator)
+	common.CurrentPath = strings.Join(arrDir, pathSeparator)
 
 	// region 读取配置文件
-	if err = initializers.HostConfig.LoadConfig(fmt.Sprintf("%s%s%s", currentPath, "config", pathSeparator), "config.toml"); err != nil {
+	if err = initializers.HostConfig.LoadConfig(fmt.Sprintf("%s%s%s", common.CurrentPath, "config", pathSeparator), "config.toml"); err != nil {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
 	// endregion
 
-	common.NewLogService(currentPath, pathSeparator,
+	common.NewLogService(common.CurrentPath, pathSeparator,
 		initializers.HostConfig.InfoDir,
 		initializers.HostConfig.WarnDir,
 		initializers.HostConfig.ErrorDir,
@@ -120,7 +120,7 @@ func main() {
 
 	// region 初始化数据库
 	//module.DbFilePath = (*files.FileDirs)[common.DATABASE_TATH]
-	module.DbFilePath = fmt.Sprintf("%s%s%s", currentPath, initializers.HostConfig.DataDir, pathSeparator)
+	module.DbFilePath = fmt.Sprintf("%s%s%s", common.CurrentPath, initializers.HostConfig.DataDir, pathSeparator)
 	dbs, err := module.GetDbServ()
 	if err != nil {
 		fmt.Printf("初始化数据库失败：%s", err.Error())
@@ -128,14 +128,6 @@ func main() {
 	}
 	defer func() {
 		_ = dbs.CloseDB()
-	}()
-
-	if err = usrServ.ConnectToDB(module.DbFilePath); err != nil {
-		fmt.Printf("初始化user数据库失败：%s", err.Error())
-		os.Exit(1)
-	}
-	defer func() {
-		_ = usrServ.CloseConnect()
 	}()
 	// endregion
 

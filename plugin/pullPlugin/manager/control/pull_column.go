@@ -1,8 +1,8 @@
 package control
 
 import (
+	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
-	"github.com/drkisler/utils"
 )
 
 type TPullColumn = module.TTableColumn
@@ -19,73 +19,73 @@ type TTableColumn struct {
 	Columns []TPullColumn `json:"columns"`
 }
 
-func (col *TPullColumnControl) AddColumn() *utils.TResponse {
+func (col *TPullColumnControl) AddColumn() *common.TResponse {
 	tableColumn := col.TPullColumn
 	id, err := tableColumn.AddColumn()
 	if err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.ReturnID(int32(id))
+	return common.ReturnInt(int(id))
 }
-func (col *TPullColumnControl) AlterColumn() *utils.TResponse {
+func (col *TPullColumnControl) AlterColumn() *common.TResponse {
 	tblCol := col.TPullColumn
 	if err := tblCol.AlterColumn(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
-func (col *TPullColumnControl) DeleteColumn() *utils.TResponse {
+func (col *TPullColumnControl) DeleteColumn() *common.TResponse {
 	tblCol := col.TPullColumn
 	if err := tblCol.DeleteColumn(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
-func (col *TPullColumnControl) DeleteTableColumn() *utils.TResponse {
+func (col *TPullColumnControl) DeleteTableColumn() *common.TResponse {
 	tblCol := col.TPullColumn
 	if err := tblCol.DeleteTableColumn(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
 
-func (tblCol *TTableColumn) LoadColumn() *utils.TResponse {
+func (tblCol *TTableColumn) LoadColumn() *common.TResponse {
 	var column TPullColumn
 	column.UserID = tblCol.UserID
 	column.TableID = tblCol.TableID
 	if err := column.LoadColumn(tblCol.Columns); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
 
-func (tblCol *TTableColumn) GetTableColumn() *utils.TResponse {
+func (tblCol *TTableColumn) GetTableColumn() *common.TResponse {
 	var column TPullColumn
 	var err error
 	column.UserID = tblCol.UserID
 	column.TableID = tblCol.TableID
-	var data utils.TRespDataSet
-	data.ArrData, data.Fields, err = column.GetTableColumn()
+	var data common.TRespDataSet
+	data.ArrData, err = column.GetTableColumn()
 	if err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(&data)
+	return common.Success(&data)
 }
-func (tblCol *TTableColumn) AlterColumns() *utils.TResponse {
+func (tblCol *TTableColumn) AlterColumns() *common.TResponse {
 	var column TPullColumn
 	column.UserID = tblCol.UserID
 	column.TableID = tblCol.TableID
 	if err := column.AlterColumns(tblCol.Columns); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
-func (tblCol *TTableColumn) SetFilterValues() *utils.TResponse {
+func (tblCol *TTableColumn) SetFilterValues() *common.TResponse {
 	var column TPullColumn
 	column.UserID = tblCol.UserID
 	column.TableID = tblCol.TableID
 	if err := column.SetFilerVal(tblCol.Columns); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }

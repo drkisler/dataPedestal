@@ -9,7 +9,6 @@ import (
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
-	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron/v2"
 	_ "github.com/go-sql-driver/mysql"
@@ -37,10 +36,10 @@ func CreatePullMySQLPlugin() (common.IPlugin, error) {
 }
 
 // Load 根据配置信息设置属性，创建必要的变量
-func (mp *TMyPlugin) Load(config string) utils.TResponse {
+func (mp *TMyPlugin) Load(config string) common.TResponse {
 	logger, err := logAdmin.GetLogger()
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	mp.Logger = logger
 
@@ -53,21 +52,21 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 	err = json.Unmarshal([]byte(config), &cfg)
 	if err != nil {
 		_ = mp.Logger.WriteError(err.Error())
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	if err = cfg.CheckValid(); err != nil {
 		_ = mp.Logger.WriteError(err.Error())
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	mp.ServerPort = cfg.ServerPort
 	ok, err := common.VerifyCaptcha(SerialNumber, cfg.LicenseCode)
 	if err != nil {
 		_ = mp.Logger.WriteError(err.Error())
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	if !ok {
 		_ = mp.Logger.WriteError(cfg.LicenseCode + "验证未通过")
-		return *utils.Failure(cfg.LicenseCode + "验证未通过")
+		return *common.Failure(cfg.LicenseCode + "验证未通过")
 	}
 	if err = func(cronExp string) error {
 		var checkError error
@@ -87,22 +86,22 @@ func (mp *TMyPlugin) Load(config string) utils.TResponse {
 		return nil
 	}(cfg.CronExpression); err != nil {
 		_ = mp.Logger.WriteError(cfg.CronExpression + "校验未通过:" + err.Error())
-		return *utils.Failure(cfg.CronExpression + "校验未通过:" + err.Error())
+		return *common.Failure(cfg.CronExpression + "校验未通过:" + err.Error())
 	}
 	mp.cronExpression = cfg.CronExpression
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(&cfg, logger); err != nil {
 		_ = mp.Logger.WriteError(err.Error())
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 
 	_ = mp.Logger.WriteInfo("插件加载成功")
 	//需要返回端口号，如果没有则返回0
-	return *utils.ReturnID(cfg.ServerPort)
+	return *common.ReturnInt(int(cfg.ServerPort))
 }
 
 // GetConfigTemplate 向客户端返回配置信息的样例，必须提供serialNumber 和 licenseKey
-func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
+func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 	var cfg initializers.TMySQLConfig
 	cfg.IsDebug = false
 	cfg.SerialNumber = SerialNumber
@@ -116,21 +115,21 @@ func (mp *TMyPlugin) GetConfigTemplate() utils.TResponse {
 	cfg.ServerPort = 8902
 	data, err := json.Marshal(&cfg)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	return utils.TResponse{Code: 0, Info: string(data)}
+	return common.TResponse{Code: 0, Info: string(data)}
 }
 
 // Run 启动程序，启动前必须先Load
-func (mp *TMyPlugin) Run() utils.TResponse {
+func (mp *TMyPlugin) Run() common.TResponse {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
 		_ = mp.Logger.WriteError(err.Error())
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	if _, err = scheduler.NewJob(gocron.CronJob(mp.cronExpression, len(strings.Split(mp.cronExpression, " ")) > 5), gocron.NewTask(mp.workerProxy.Run)); err != nil {
 		_ = mp.Logger.WriteError(err.Error())
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 
 	gin.SetMode(gin.ReleaseMode)
@@ -156,7 +155,7 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 	}
 	logger, err := logAdmin.GetLogger()
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	go func() {
 		_ = mp.serv.ListenAndServe()
@@ -179,13 +178,13 @@ func (mp *TMyPlugin) Run() utils.TResponse {
 		_ = logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
 	_ = logger.WriteInfo("插件已停止")
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }
 
 // Stop 停止程序，释放资源
-func (mp *TMyPlugin) Stop() utils.TResponse {
+func (mp *TMyPlugin) Stop() common.TResponse {
 	mp.workerProxy.StopRun()
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }
 
 // GetSourceTables 从数据源中获取表清单
@@ -193,32 +192,30 @@ func (mp *TMyPlugin) GetSourceTables(ctx *gin.Context) {
 	strSchema := ctx.DefaultQuery("schema", "")
 	tables, err := mp.workerProxy.GetSourceTables(strSchema)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
-	var data utils.TRespDataSet
+	var data common.TRespDataSet
 	data.ArrData = tables
-	data.Total = len(tables)
-	data.Fields = []string{"table_code", "table_name"}
-	ctx.JSON(http.StatusOK, utils.Success(&data))
+	data.Total = int32(len(tables))
+	ctx.JSON(http.StatusOK, common.Success(&data))
 	return
 }
 func (mp *TMyPlugin) GetTableColumns(ctx *gin.Context) {
 	strSchemaName := ctx.DefaultQuery("schema", "")
 	strTableName := ctx.Query("table")
 	if strTableName == "" {
-		ctx.JSON(http.StatusOK, utils.Failure("table is empty"))
+		ctx.JSON(http.StatusOK, common.Failure("table is empty"))
 		return
 	}
 	cols, err := mp.workerProxy.GetTableColumns(strSchemaName, strTableName)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
-	var data utils.TRespDataSet
+	var data common.TRespDataSet
 	data.ArrData = cols
-	data.Total = len(cols)
-	data.Fields = []string{"column_code", "column_name", "is_key"}
-	ctx.JSON(http.StatusOK, utils.Success(&data))
+	data.Total = int32(len(cols))
+	ctx.JSON(http.StatusOK, common.Success(&data))
 	return
 }

@@ -6,18 +6,15 @@ import (
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/dataPedestal/universal/fileService"
 	"github.com/drkisler/dataPedestal/universal/messager"
-	"github.com/drkisler/utils"
 )
 
 // HandleOperate 处理门户发来的操作请求
 func HandleOperate(msg []byte) []byte {
-	result, _ := json.Marshal(utils.Failure("指令格式错误"))
+	result, _ := json.Marshal(common.Failure("指令格式错误"))
 	operateType := msg[0]
 	switch operateType {
 	case messager.OperateDeletePlugin:
 		return DeletePlugin(msg[1:])
-	/*case messager.OperateGetPluginList:
-	return GetPluginList()*/
 	case messager.OperateGetTempConfig:
 		return GetTempConfig(msg[1:])
 	case messager.OperateSetRunType:

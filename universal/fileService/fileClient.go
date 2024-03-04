@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func SendFile(fileServUrl, fileUUID, config, runType string, file *os.File) error {
+func SendFile(fileServUrl, fileUUID, config, runType, serialNumber string, file *os.File) error {
 	conn, err := net.Dial("tcp", fileServUrl)
 	if err != nil {
 		return err
@@ -22,11 +22,12 @@ func SendFile(fileServUrl, fileUUID, config, runType string, file *os.File) erro
 		return err
 	}
 	fileMeta := TFileMeta{
-		FileName:   fileInfo.Name(),
-		FileSize:   fileInfo.Size(),
-		FileUUID:   fileUUID,
-		FileConfig: config,
-		RunType:    runType,
+		FileName:     fileInfo.Name(),
+		FileSize:     fileInfo.Size(),
+		FileUUID:     fileUUID,
+		FileConfig:   config,
+		RunType:      runType,
+		SerialNumber: serialNumber,
 	}
 	metaData, err := json.Marshal(&fileMeta)
 	if err != nil {

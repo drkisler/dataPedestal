@@ -4,7 +4,6 @@ import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/portal/control"
 	"github.com/drkisler/dataPedestal/universal/messager"
-	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
@@ -30,7 +29,7 @@ func preHandleLogRequest(ctx *gin.Context) (*control.TLogControl, error) {
 func GetLogDate(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateGetLogDate))
@@ -38,7 +37,7 @@ func GetLogDate(ctx *gin.Context) {
 func GetLogInfo(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateGetLogInfo))
@@ -46,7 +45,7 @@ func GetLogInfo(ctx *gin.Context) {
 func DelOldLog(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateDelOldLog))
@@ -54,7 +53,7 @@ func DelOldLog(ctx *gin.Context) {
 func DelLog(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, utils.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.OperateLog(messager.OperateDelLog))

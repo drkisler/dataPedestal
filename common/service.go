@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var CurrentPath string
+
 func SetHeader(ctx *gin.Context) {
 	ctx.Header("Access-Control-Allow-Origin", "*")
 	ctx.Header("Access-Control-Allow-Methods", "POST")

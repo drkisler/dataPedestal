@@ -26,6 +26,9 @@ type TStorage struct {
 }
 
 func newDbServ() (*TStorage, error) {
+	if DbFilePath == "" {
+		return nil, fmt.Errorf("文件路径不可以为空")
+	}
 	connStr := fmt.Sprintf("%s%s.db?cache=shared", DbFilePath, "plugin") //file:test.db?cache=shared&mode=memory
 	db, err := sqlx.Open("sqlite3", connStr)
 	if err != nil {
@@ -102,14 +105,14 @@ func (dbs *TStorage) DeletePlugin(pluginUUID string) error {
 }
 
 // GetPluginList 获取插件列表
-func (dbs *TStorage) GetPluginList() ([]TPlugin, []string, error) {
+func (dbs *TStorage) GetPluginList() ([]TPlugin, error) {
 	var plugins []TPlugin
 	dbs.Lock()
 	defer dbs.Unlock()
 	rows, err := dbs.Query("select " +
 		"plugin_uuid, plugin_file, plugin_config, run_type from plugin")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer func() {
 		_ = rows.Close()
@@ -117,11 +120,11 @@ func (dbs *TStorage) GetPluginList() ([]TPlugin, []string, error) {
 	for rows.Next() {
 		var p TPlugin
 		if err = rows.Scan(&p.PluginUUID, &p.PluginFile, &p.PluginConfig, &p.PluginType); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		plugins = append(plugins, p)
 	}
-	return plugins, []string{"plugin_uuid", "plugin_file", "plugin_config", "run_type"}, nil
+	return plugins, nil
 }
 
 // AlterPluginRunType 修改插件运行类型

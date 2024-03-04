@@ -48,12 +48,25 @@ func NewLogService(currentPath, pathSeparator, infoPath, warnPath, errorPath, de
 			arrDir = append(arrDir, subDir)
 		}
 		arrDir = append(arrDir, "")
+		result := strings.Join(arrDir, pathSeparator)
+		_, err := os.Stat(result)
+		if err != nil {
+			if os.IsNotExist(err) {
+				err = os.Mkdir(result, 0755)
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				log.Fatal(err)
+			}
+		}
+
 		return strings.Join(arrDir, pathSeparator)
 	}
 	LogServ.infoLogger = newLogger(encodeFilePath(currentPath, pathSeparator, infoPath))
 	LogServ.warnLogger = newLogger(encodeFilePath(currentPath, pathSeparator, warnPath))
 	LogServ.errorLogger = newLogger(encodeFilePath(currentPath, pathSeparator, errorPath))
-	LogServ.errorLogger = newLogger(encodeFilePath(currentPath, pathSeparator, debugPath))
+	LogServ.debugLogger = newLogger(encodeFilePath(currentPath, pathSeparator, debugPath))
 	LogServ.isDebug = isDebug
 }
 
@@ -81,8 +94,7 @@ func (ls *TLogService) Debug(v ...any) {
 
 func newLogger(filePath string) *TLogger {
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
-	lock := new(sync.Mutex)
-	return &TLogger{logger, nil, "", filePath, "", lock}
+	return &TLogger{logger: logger, filePath: filePath, lock: &sync.Mutex{}}
 }
 func (enLog *TLogger) CloseLog() {
 	enLog.lock.Lock()
@@ -90,11 +102,12 @@ func (enLog *TLogger) CloseLog() {
 	_ = enLog.logFile.Close()
 }
 func (enLog *TLogger) newFile() {
-	enLog.lock.Lock()
-	defer enLog.lock.Unlock()
 	_ = enLog.logFile.Close()
+	var err error
 	enLog.fileName = enLog.filePath + "log_" + time.Now().Format("20060102") + ".log"
-	enLog.logFile, _ = os.OpenFile(enLog.fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0766)
+	if enLog.logFile, err = os.OpenFile(enLog.fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0766); err != nil {
+		log.Fatal(err)
+	}
 	enLog.logger.SetOutput(enLog.logFile)
 	enLog.logDate = time.Now().Format("20060102")
 }

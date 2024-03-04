@@ -26,10 +26,10 @@ func (col *TTableColumn) LoadColumn(cols []TTableColumn) error {
 	}
 	return dbs.LoadTableColumn(col.UserID, col.TableID, cols)
 }
-func (col *TTableColumn) GetTableColumn() ([]TTableColumn, []string, error) {
+func (col *TTableColumn) GetTableColumn() ([]TTableColumn, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	return dbs.GetColumnsByTableID(col)
 }

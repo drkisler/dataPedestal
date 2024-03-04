@@ -49,7 +49,7 @@ func (dbs *TLocalLogger) Connect() error {
 	}
 	dbs.DateQueue = make([]string, 30)
 	// load date
-	dates, _, cnt, err := dbs.GetLogDate()
+	dates, cnt, err := dbs.GetLogDate()
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func (dbs *TLocalLogger) DeleteOldLog(date string) error {
 	_ = ctx.Commit()
 	return nil
 }
-func (dbs *TLocalLogger) GetLog(logDate string, pageSize int32, pageIndex int32) ([]common.TLogInfo, []string, int, error) {
+func (dbs *TLocalLogger) GetLog(logDate string, pageSize int32, pageIndex int32) ([]common.TLogInfo, int32, error) {
 	var strSQL string
 	var err error
 	strSQL = "select * from(select log_id,log_time,log_info " +
@@ -146,29 +146,24 @@ func (dbs *TLocalLogger) GetLog(logDate string, pageSize int32, pageIndex int32)
 	defer dbs.Unlock()
 	rows, err := dbs.Queryx(strSQL, logDate, pageSize, pageIndex, pageSize)
 	if err != nil {
-		return nil, nil, -1, err
+		return nil, -1, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
-
-	cols, err := rows.Columns()
-	if err != nil {
-		return nil, nil, -1, err
-	}
 	var data []common.TLogInfo
 
 	for rows.Next() {
 		var item common.TLogInfo
 		if err = rows.Scan(&item.LogID, &item.LogTime, &item.LogInfo); err != nil {
-			return nil, nil, -1, err
+			return nil, -1, err
 		}
 		data = append(data, item)
 	}
 	cnt := int32(len(data))
-	return data, cols, int(cnt), nil
+	return data, cnt, nil
 }
-func (dbs *TLocalLogger) GetLogDate() ([]string, []string, int, error) {
+func (dbs *TLocalLogger) GetLogDate() ([]string, int32, error) {
 	var strSQL string
 	var err error
 	strSQL = "select log_date " +
@@ -178,27 +173,19 @@ func (dbs *TLocalLogger) GetLogDate() ([]string, []string, int, error) {
 	defer dbs.Unlock()
 	rows, err := dbs.Queryx(strSQL)
 	if err != nil {
-		return nil, nil, -1, err
+		return nil, -1, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
-
-	cols, err := rows.Columns()
-	if err != nil {
-		return nil, nil, -1, err
-	}
 	var data []string
 
 	for rows.Next() {
 		var item string
 		if err = rows.Scan(&item); err != nil {
-			return nil, nil, -1, err
+			return nil, -1, err
 		}
 		data = append(data, item)
 	}
-
-	cnt := int32(len(data))
-
-	return data, cols, int(cnt), nil
+	return data, int32(len(data)), nil
 }

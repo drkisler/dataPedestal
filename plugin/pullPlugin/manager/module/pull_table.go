@@ -35,10 +35,10 @@ func (pt *TPullTable) InitByID() error {
 	return nil
 }
 
-func (pt *TPullTable) Get(pageSize int32, pageIndex int32) (data []TPullTable, columns []string, total int, err error) {
+func (pt *TPullTable) Get(pageSize int32, pageIndex int32) (data []TPullTable, total int32, err error) {
 	var dbs *TStorage
 	if dbs, err = GetDbServ(); err != nil {
-		return nil, nil, 0, err
+		return nil, 0, err
 	}
 	return dbs.QueryPullTable(pt, pageSize, pageIndex)
 

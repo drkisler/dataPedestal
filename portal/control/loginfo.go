@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/universal/messager"
-	"github.com/drkisler/utils"
 )
 
 type TLogControl struct {
@@ -33,11 +32,11 @@ func (log *TLogControl) CheckValid() error {
 	return nil
 }
 
-func (log *TLogControl) OperateLog(opType messager.OperateType) *utils.TResponse {
+func (log *TLogControl) OperateLog(opType messager.OperateType) *common.TResponse {
 	var err error
 	var logData []byte
 	if logData, err = json.Marshal(log); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
 
 	//获取UUID所在的Host
@@ -45,17 +44,17 @@ func (log *TLogControl) OperateLog(opType messager.OperateType) *utils.TResponse
 	pluginHost, ok := hostInfo[log.PluginUUID]
 	if ok {
 		if pluginHost.PluginPort < 0 {
-			return utils.Failure("当前插件需要加载")
+			return common.Failure("当前插件需要加载")
 		}
 		var data []byte
 		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
 		//向Host发送请求
-		var result utils.TResponse
+		var result common.TResponse
 		if data, err = MsgClient.Send(url, opType, logData); err != nil {
-			return utils.Failure(err.Error())
+			return common.Failure(err.Error())
 		}
 		_ = json.Unmarshal(data, &result)
 		return &result
 	}
-	return utils.Failure("当前插件需要发布")
+	return common.Failure("当前插件需要发布")
 }

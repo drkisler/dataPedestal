@@ -61,133 +61,133 @@ func GetLogger() (*TLoggerAdmin, error) {
 func (la *TLoggerAdmin) WriteError(info string) error {
 	return la.logger[ErrorLog].PutLog(info)
 }
-func (la *TLoggerAdmin) GetErrLog(params string) utils.TResponse {
-	var data utils.TRespDataSet
+func (la *TLoggerAdmin) GetErrLog(params string) common.TResponse {
+	var data common.TRespDataSet
 	var err error
 	var logQuery common.TLogQuery
 
 	if err = json.Unmarshal([]byte(params), &logQuery); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	if data.ArrData, data.Fields, data.Total, err = la.logger[ErrorLog].GetLog(logQuery.LogDate, logQuery.PageSize, logQuery.PageIndex); err != nil {
-		return *utils.Failure(err.Error())
+	if data.ArrData, data.Total, err = la.logger[ErrorLog].GetLog(logQuery.LogDate, logQuery.PageSize, logQuery.PageIndex); err != nil {
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(&data)
+	return *common.Success(&data)
 }
-func (la *TLoggerAdmin) GetErrLogDate() utils.TResponse {
-	var data utils.TRespDataSet
+func (la *TLoggerAdmin) GetErrLogDate() common.TResponse {
+	var data common.TRespDataSet
 	var err error
-	if data.ArrData, data.Fields, data.Total, err = la.logger[ErrorLog].GetLogDate(); err != nil {
-		return *utils.Failure(err.Error())
+	if data.ArrData, data.Total, err = la.logger[ErrorLog].GetLogDate(); err != nil {
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(&data)
+	return *common.Success(&data)
 }
-func (la *TLoggerAdmin) DelErrOldLog(date string) utils.TResponse {
+func (la *TLoggerAdmin) DelErrOldLog(date string) common.TResponse {
 	if err := la.logger[ErrorLog].DeleteOldLog(date); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }
-func (la *TLoggerAdmin) DelErrLog(params string) utils.TResponse {
+func (la *TLoggerAdmin) DelErrLog(params string) common.TResponse {
 	var logInfo common.TLogInfo
 	var err error
 	if err = json.Unmarshal([]byte(params), &logInfo); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	if logInfo.LogID == 0 || logInfo.LogDate == "" {
-		return *utils.Failure(fmt.Sprintf("%s invalid format ", params))
+		return *common.Failure(fmt.Sprintf("%s invalid format ", params))
 	}
 	if err = la.logger[ErrorLog].DeleteLog(logInfo.LogDate, logInfo.LogID); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }
 
 func (la *TLoggerAdmin) WriteInfo(info string) error {
 	return la.logger[InfoLog].PutLog(info)
 }
-func (la *TLoggerAdmin) GetInfoLog(params string) utils.TResponse {
-	var data utils.TRespDataSet
+func (la *TLoggerAdmin) GetInfoLog(params string) common.TResponse {
+	var data common.TRespDataSet
 	var err error
 	var logQuery common.TLogQuery
 
 	if err = json.Unmarshal([]byte(params), &logQuery); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	if data.ArrData, data.Fields, data.Total, err = la.logger[InfoLog].GetLog(logQuery.LogDate, logQuery.PageSize, logQuery.PageIndex); err != nil {
-		return *utils.Failure(err.Error())
+	if data.ArrData, data.Total, err = la.logger[InfoLog].GetLog(logQuery.LogDate, logQuery.PageSize, logQuery.PageIndex); err != nil {
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(&data)
+	return *common.Success(&data)
 }
-func (la *TLoggerAdmin) GetInfoLogDate() utils.TResponse {
-	var data utils.TRespDataSet
+func (la *TLoggerAdmin) GetInfoLogDate() common.TResponse {
+	var data common.TRespDataSet
 	var err error
-	if data.ArrData, data.Fields, data.Total, err = la.logger[InfoLog].GetLogDate(); err != nil {
-		return *utils.Failure(err.Error())
+	if data.ArrData, data.Total, err = la.logger[InfoLog].GetLogDate(); err != nil {
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(&data)
+	return *common.Success(&data)
 }
-func (la *TLoggerAdmin) DelInfoOldLog(date string) utils.TResponse {
+func (la *TLoggerAdmin) DelInfoOldLog(date string) common.TResponse {
 	if err := la.logger[InfoLog].DeleteOldLog(date); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }
-func (la *TLoggerAdmin) DelInfoLog(params string) utils.TResponse {
+func (la *TLoggerAdmin) DelInfoLog(params string) common.TResponse {
 	var logInfo common.TLogInfo
 	var err error
 	if err = json.Unmarshal([]byte(params), &logInfo); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	if logInfo.LogID == 0 || logInfo.LogDate == "" {
-		return *utils.Failure(fmt.Sprintf("%s invalid format ", params))
+		return *common.Failure(fmt.Sprintf("%s invalid format ", params))
 	}
 	if err := la.logger[InfoLog].DeleteLog(logInfo.LogDate, logInfo.LogID); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }
 
 func (la *TLoggerAdmin) WriteDebug(info string) error {
 	return la.logger[DebugLog].PutLog(info)
 }
-func (la *TLoggerAdmin) GetDebugLog(params string) utils.TResponse {
-	var data utils.TRespDataSet
+func (la *TLoggerAdmin) GetDebugLog(params string) common.TResponse {
+	var data common.TRespDataSet
 	var err error
 	var logQuery common.TLogQuery
 	if err = json.Unmarshal([]byte(params), &logQuery); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	if data.ArrData, data.Fields, data.Total, err = la.logger[DebugLog].GetLog(logQuery.LogDate, logQuery.PageSize, logQuery.PageIndex); err != nil {
-		return *utils.Failure(err.Error())
+	if data.ArrData, data.Total, err = la.logger[DebugLog].GetLog(logQuery.LogDate, logQuery.PageSize, logQuery.PageIndex); err != nil {
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(&data)
+	return *common.Success(&data)
 }
-func (la *TLoggerAdmin) GetDebugLogDate() utils.TResponse {
-	var data utils.TRespDataSet
+func (la *TLoggerAdmin) GetDebugLogDate() common.TResponse {
+	var data common.TRespDataSet
 	var err error
-	if data.ArrData, data.Fields, data.Total, err = la.logger[DebugLog].GetLogDate(); err != nil {
-		return *utils.Failure(err.Error())
+	if data.ArrData, data.Total, err = la.logger[DebugLog].GetLogDate(); err != nil {
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(&data)
+	return *common.Success(&data)
 }
-func (la *TLoggerAdmin) DelDebugOldLog(date string) utils.TResponse {
+func (la *TLoggerAdmin) DelDebugOldLog(date string) common.TResponse {
 	if err := la.logger[DebugLog].DeleteOldLog(date); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }
-func (la *TLoggerAdmin) DelDebugLog(params string) utils.TResponse {
+func (la *TLoggerAdmin) DelDebugLog(params string) common.TResponse {
 	var logInfo common.TLogInfo
 	var err error
 	if err = json.Unmarshal([]byte(params), &logInfo); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
 	if logInfo.LogID == 0 || logInfo.LogDate == "" {
-		return *utils.Failure(fmt.Sprintf("%s invalid format ", params))
+		return *common.Failure(fmt.Sprintf("%s invalid format ", params))
 	}
 	if err := la.logger[DebugLog].DeleteLog(logInfo.LogDate, logInfo.LogID); err != nil {
-		return *utils.Failure(err.Error())
+		return *common.Failure(err.Error())
 	}
-	return *utils.Success(nil)
+	return *common.Success(nil)
 }

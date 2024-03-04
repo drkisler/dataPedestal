@@ -10,7 +10,7 @@ const emptyPluginUUID = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
 type TPluginInfo struct {
 	PluginUUID    string `json:"plugin_uuid,omitempty"`    //用于创建插件的目录
 	PluginName    string `json:"plugin_name,omitempty"`    //插件名称
-	PluginType    string `json:"plugin_type,omitempty"`    //插件类型（包括：接口插件，服务插件，数据推送，数据抽取）
+	PluginType    string `json:"plugin_type,omitempty"`    //插件类型（包括：接口插件，服务插件，数据推送，数据抽取,全部插件）
 	PluginDesc    string `json:"plugin_desc,omitempty"`    //插件描述
 	PluginFile    string `json:"plugin_file,omitempty"`    //插件文件
 	PluginConfig  string `json:"plugin_config,omitempty"`  //插件配置信息

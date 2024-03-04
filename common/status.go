@@ -2,9 +2,6 @@ package common
 
 import "sync"
 
-// PluginWaitGroup 插件专用
-var PluginWaitGroup *sync.WaitGroup
-
 type TStatus struct {
 	Lock    *sync.Mutex
 	Running bool

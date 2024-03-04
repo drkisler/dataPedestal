@@ -111,7 +111,7 @@ func (t *TSurvey) SetRespondents(value map[string]common.TPluginHost) {
 	for _, v := range value {
 		t.hosts[v.HostInfo.HostUUID] = v.HostInfo
 	}
-	fmt.Println(t.hosts)
+	//fmt.Println(t.hosts)
 	t.respondents = value
 }
 func (t *TSurvey) GetRespondents() map[string]common.TPluginHost {

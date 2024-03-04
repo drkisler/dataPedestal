@@ -132,7 +132,7 @@ func (dbs *TStorage) GetPullTableByID(userID, tableID int32) (*TPullTable, error
 }
 
 // QueryPullTable 获取表情单用于系统维护
-func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex int32) ([]TPullTable, []string, int, error) {
+func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex int32) ([]TPullTable, int32, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
@@ -155,28 +155,24 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pt.TableID, pageSize, pageIndex, pageSize)
 	}
 	if err != nil {
-		return nil, nil, -1, err
+		return nil, -1, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
-	var cnt = 0
-	var columns []string
-	if columns, err = rows.Columns(); err != nil {
-		return nil, nil, -1, err
-	}
+	var cnt int32 = 0
 	var result []TPullTable
 	for rows.Next() {
 		var p TPullTable
 		if err = rows.Scan(&p.UserID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol,
 			&p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status); err != nil {
-			return nil, nil, -1, err
+			return nil, -1, err
 		}
 		cnt++
 		result = append(result, p)
 	}
 
-	return result, columns, cnt, nil
+	return result, cnt, nil
 }
 
 func (dbs *TStorage) AlterPullTable(pt *TPullTable) error {
@@ -351,36 +347,32 @@ func (dbs *TStorage) LoadTableColumn(userid int32, tableid int32, cols []TTableC
 	return nil
 }
 
-func (dbs *TStorage) GetColumnsByTableID(col *TTableColumn) ([]TTableColumn, []string, error) {
+func (dbs *TStorage) GetColumnsByTableID(col *TTableColumn) ([]TTableColumn, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
 	strSQL := "select user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value " +
 		"from tableColumn where user_id = ? and table_id = ?"
 	rows, err := dbs.Queryx(strSQL, col.UserID, col.TableID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, nil, err
-	}
 	var cnt = 0
 	var result []TTableColumn
 	for rows.Next() {
 		var col TTableColumn
 		if err = rows.Scan(&col.UserID, &col.TableID, &col.ColumnCode, &col.ColumnName, &col.IsKey, &col.IsFilter, &col.FilterValue); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		result = append(result, col)
 		cnt++
 	}
 	if cnt == 0 {
-		return nil, nil, fmt.Errorf("userID,tableID %d,%d不存在", col.UserID, col.TableID)
+		return nil, fmt.Errorf("userID,tableID %d,%d不存在", col.UserID, col.TableID)
 	}
-	return result, columns, nil
+	return result, nil
 }
 
 func (dbs *TStorage) AlterTableColumn(col *TTableColumn) error {

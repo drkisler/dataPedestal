@@ -70,16 +70,16 @@ func (p *TPlugin) DelPlugin() error {
 	return dbs.DeletePlugin(p.PluginUUID)
 }
 
-func (p *TPlugin) GetPluginList() ([]TPlugin, []string, int, error) {
+func (p *TPlugin) GetPluginList() ([]TPlugin, int, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
-		return nil, nil, -1, err
+		return nil, -1, err
 	}
-	data, cols, err := dbs.GetPluginList()
+	data, err := dbs.GetPluginList()
 	if err != nil {
-		return nil, nil, -1, err
+		return nil, -1, err
 	}
-	return data, cols, len(data), nil
+	return data, len(data), nil
 }
 
 func (p *TPlugin) AlterRunType() error {

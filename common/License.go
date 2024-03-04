@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -35,4 +36,12 @@ func VerifyCaptcha(key, captcha string) (bool, error) {
 		return false, err
 	}
 	return sn == captcha, nil
+}
+
+func GetDefaultKey() string {
+	result := os.Getenv("DEFAULT_KEY")
+	if result == "" {
+		result = "BBx0T9WGTzrsAbiTb3HO5HLi031SyyVX"
+	}
+	return result
 }

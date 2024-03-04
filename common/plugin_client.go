@@ -1,7 +1,6 @@
 package common
 
 import (
-	"github.com/drkisler/utils"
 	"net/rpc"
 )
 
@@ -13,153 +12,153 @@ type PluginRPC struct {
 func NewPluginRPC() IPlugin {
 	return &PluginRPC{}
 }
-func (pRPC *PluginRPC) Load(config string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) Load(config string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.Load",
 		config,
 		&result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
 
-func (pRPC *PluginRPC) Run() utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) Run() TResponse {
+	var result TResponse
 	pRPC.done = pRPC.client.Go("Plugin.Run", new(interface{}), &result, make(chan *rpc.Call, 10))
 	if pRPC.done.Error != nil {
-		return *utils.Failure(pRPC.done.Error.Error())
+		return *Failure(pRPC.done.Error.Error())
 	}
 	return result
 }
 
-func (pRPC *PluginRPC) Stop() utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) Stop() TResponse {
+	var result TResponse
 	var err error
 	err = pRPC.client.Call("Plugin.Stop", new(interface{}), &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	runResult := <-(pRPC.done).Done
 	if runResult.Error != nil {
-		return *utils.Failure(runResult.Error.Error())
+		return *Failure(runResult.Error.Error())
 	}
 	return result
 
 }
-func (pRPC *PluginRPC) GetConfigTemplate() utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) GetConfigTemplate() TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.GetConfigTemplate", new(interface{}), &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
 
-func (pRPC *PluginRPC) Running() utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) Running() TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.Running", new(interface{}), &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
 
-func (pRPC *PluginRPC) GetErrLog(params string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) GetErrLog(params string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.GetErrLog", params, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) GetErrLogDate() utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) GetErrLogDate() TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.GetErrLogDate", new(interface{}), &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) DelErrOldLog(strDate string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) DelErrOldLog(strDate string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.DelErrOldLog", strDate, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) DelErrLog(params string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) DelErrLog(params string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.DelErrLog", params, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
 
-func (pRPC *PluginRPC) GetInfoLog(params string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) GetInfoLog(params string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.GetInfoLog", params, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) GetInfoLogDate() utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) GetInfoLogDate() TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.GetInfoLogDate", new(interface{}), &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) DelInfoOldLog(strDate string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) DelInfoOldLog(strDate string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.DelInfoOldLog", strDate, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) DelInfoLog(params string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) DelInfoLog(params string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.DelInfoLog", params, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
 
-func (pRPC *PluginRPC) GetDebugLog(params string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) GetDebugLog(params string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.GetDebugLog", params, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) GetDebugLogDate() utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) GetDebugLogDate() TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.GetDebugLogDate", new(interface{}), &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) DelDebugOldLog(strDate string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) DelDebugOldLog(strDate string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.DelDebugOldLog", strDate, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }
-func (pRPC *PluginRPC) DelDebugLog(params string) utils.TResponse {
-	var result utils.TResponse
+func (pRPC *PluginRPC) DelDebugLog(params string) TResponse {
+	var result TResponse
 	err := pRPC.client.Call("Plugin.DelDebugLog", params, &result)
 	if err != nil {
-		return *utils.Failure(err.Error())
+		return *Failure(err.Error())
 	}
 	return result
 }

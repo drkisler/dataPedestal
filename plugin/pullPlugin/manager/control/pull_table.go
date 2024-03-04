@@ -1,8 +1,8 @@
 package control
 
 import (
+	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
-	"github.com/drkisler/utils"
 )
 
 type TPullTable = module.TPullTable
@@ -15,44 +15,44 @@ type TPullTableControl struct {
 	TPullTable
 }
 
-func (pc *TPullTableControl) Add() *utils.TResponse {
+func (pc *TPullTableControl) Add() *common.TResponse {
 	pullTable := pc.TPullTable
 	id, err := pullTable.Add()
 	if err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.ReturnID(int32(id))
+	return common.ReturnInt(int(id))
 }
-func (pc *TPullTableControl) Alter() *utils.TResponse {
+func (pc *TPullTableControl) Alter() *common.TResponse {
 	pullTable := pc.TPullTable
 	if err := pullTable.Alter(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
-func (pc *TPullTableControl) Delete() *utils.TResponse {
+func (pc *TPullTableControl) Delete() *common.TResponse {
 	pullTable := pc.TPullTable
 	if err := pullTable.Delete(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
-func (pc *TPullTableControl) Get() *utils.TResponse {
-	var result utils.TRespDataSet
+func (pc *TPullTableControl) Get() *common.TResponse {
+	var result common.TRespDataSet
 	var err error
 	pullTable := pc.TPullTable
-	if result.ArrData, result.Fields, result.Total, err = pullTable.Get(pc.PageSize, pc.PageIndex); err != nil {
-		return utils.Failure(err.Error())
+	if result.ArrData, result.Total, err = pullTable.Get(pc.PageSize, pc.PageIndex); err != nil {
+		return common.Failure(err.Error())
 	}
-	return utils.Success(&result)
+	return common.Success(&result)
 }
-func (pc *TPullTableControl) SetFilterValue() *utils.TResponse {
+func (pc *TPullTableControl) SetFilterValue() *common.TResponse {
 	var err error
 	pullTable := pc.TPullTable
 	if err = pullTable.SetFilterVal(); err != nil {
-		return utils.Failure(err.Error())
+		return common.Failure(err.Error())
 	}
-	return utils.Success(nil)
+	return common.Success(nil)
 }
 
 func GetAllTables() ([]TPullTable, int, error) {

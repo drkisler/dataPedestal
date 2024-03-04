@@ -55,10 +55,10 @@ func (usr *TUser) DeleteUser() error {
 	}
 	return dbs.DeleteUser(usr)
 }
-func (usr *TUser) QueryUser(pageSize int32, pageIndex int32) ([]TUser, []string, int, error) {
+func (usr *TUser) QueryUser(pageSize int32, pageIndex int32) ([]TUser, int32, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
-		return nil, nil, -1, err
+		return nil, -1, err
 	}
 	return dbs.QueryUser(usr, pageSize, pageIndex)
 }
