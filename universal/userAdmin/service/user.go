@@ -7,27 +7,29 @@ import (
 	usrModl "github.com/drkisler/dataPedestal/universal/userAdmin/module"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
+
+var IsDebug bool
 
 func Login(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
 	var strToken string
-	err := common.CheckRequest(ctx, &usr)
+	ginContext := common.NewGinContext(ctx)
+	err := ginContext.CheckRequest(&usr)
 	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	if err = usr.Login(); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	if strToken, err = utils.GetToken(usr.Account, usr.UserID); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	usr.Password = ""
-	ctx.JSON(http.StatusOK, utils.Authentication(strToken, usr))
+	ginContext.Reply(IsDebug, utils.Authentication(strToken, usr))
 }
 func ConnectToUserDB(filePath string) error {
 	usrModl.DbFilePath = filePath
@@ -46,76 +48,127 @@ func CloseConnect() error {
 }
 func DeleteUser(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
-	err := common.CheckRequest(ctx, &usr)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&usr); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, usr.DeleteUser())
+	ginContext.Reply(IsDebug, usr.DeleteUser())
 }
 func AddUser(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
-	err := common.CheckRequest(ctx, &usr)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&usr); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, usr.AddUser())
+	ginContext.Reply(IsDebug, usr.AddUser())
+	/*
+
+		err := common.CheckRequest(ctx, &usr)
+		if err != nil {
+			ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+			return
+		}
+		if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
+			//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+			return
+		}
+		ctx.JSON(http.StatusOK, usr.AddUser())*/
 }
 func AlterUser(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
-	err := common.CheckRequest(ctx, &usr)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&usr); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, usr.AlterUser())
+	ginContext.Reply(IsDebug, usr.AlterUser())
+
+	/*	err := common.CheckRequest(ctx, &usr)
+		if err != nil {
+			ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+			return
+		}
+		if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
+			//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+			return
+		}
+		ctx.JSON(http.StatusOK, usr.AlterUser())*/
 }
 func QueryUser(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
-	err := common.CheckRequest(ctx, &usr)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&usr); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, usr.QueryUser())
+	ginContext.Reply(IsDebug, usr.QueryUser())
+
+	/*	err := common.CheckRequest(ctx, &usr)
+		if err != nil {
+			ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+			return
+		}
+		if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
+			//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+			return
+		}
+		ctx.JSON(http.StatusOK, usr.QueryUser())*/
 }
 func ResetPassword(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
-	err := common.CheckRequest(ctx, &usr)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&usr); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, usr.ResetPassword())
+
+	ginContext.Reply(IsDebug, usr.ResetPassword())
+
+	/*	err := common.CheckRequest(ctx, &usr)
+		if err != nil {
+			ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+			return
+		}
+		if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
+			//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+			return
+		}
+		ctx.JSON(http.StatusOK, usr.ResetPassword())*/
 }
 
 func CheckUser(ctx *gin.Context) {
 	var err error
 	var usr usrCtl.TUserControl
-	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	ginContext := common.NewGinContext(ctx)
+	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, common.ReturnInt(int(usr.UserID)))
+	ginContext.Reply(IsDebug, common.ReturnInt(int(usr.UserID)))
+	/*	if usr.OperatorID, usr.OperatorCode, err = common.GetOperater(ctx); err != nil {
+			ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+			return
+		}
+		ctx.JSON(http.StatusOK, common.ReturnInt(int(usr.UserID)))*/
 }

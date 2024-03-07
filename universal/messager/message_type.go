@@ -18,6 +18,7 @@ const (
 	OperateGetLogInfo
 	OperateDelOldLog
 	OperateDelLog
+	OperateGetPubError
 )
 
 type FHandleRequest func(data []byte) []byte

@@ -42,7 +42,7 @@ func ToPluginHostBytes(pluginPorts *map[string]int32, hostInfo *THostInfo) []byt
 		result = append(result, hostInfo.toByte()...)
 		return result
 	}
-	//写入长度
+	//写入pluginPorts长度
 	result = append(result, byte(len(*pluginPorts)))
 	//写入hostInfo
 	result = append(result, hostInfo.toByte()...)
@@ -61,10 +61,11 @@ func FromPluginHostBytes(data []byte) ([]TPluginHost, error) {
 	var hostInfo THostInfo
 	var result []TPluginHost
 	index := 0
-	//读取长度
+
 	if len(data) < 1 {
-		return nil, fmt.Errorf("读取数据出错")
+		return nil, fmt.Errorf("读取数据出错,数据长度为0")
 	}
+	////读取pluginPorts长度
 	iLen := int(data[index])
 	index++
 	//读取hostInfo
@@ -81,26 +82,26 @@ func FromPluginHostBytes(data []byte) ([]TPluginHost, error) {
 		var iPort int
 		//读取UUID
 		if len(data) < index+36 {
-			return nil, fmt.Errorf("读取数据出错")
+			return nil, fmt.Errorf("读取pluginUUID数据出错")
 		}
 		pluginHost.PluginUUID = string(data[index : index+36])
 		index += 36
 		//读取Port
 		if len(data) < index+1 {
-			return nil, fmt.Errorf("读取数据出错")
+			return nil, fmt.Errorf("读取portLen出错")
 		}
-		iLen = int(data[index])
+		portLen := int(data[index])
 		index++
-		if len(data) < index+iLen {
+		if len(data) < index+portLen {
 			return nil, fmt.Errorf("读取数据出错")
 		}
-		if iPort, err = strconv.Atoi(string(data[index : index+iLen])); err != nil {
+		if iPort, err = strconv.Atoi(string(data[index : index+portLen])); err != nil {
 			return nil, err
 		}
 		pluginHost.PluginPort = int32(iPort)
 		pluginHost.HostInfo = &hostInfo
 		result = append(result, pluginHost)
-		index += iLen
+		index += portLen
 	}
 	return result, nil
 }

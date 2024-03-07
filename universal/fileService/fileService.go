@@ -4,10 +4,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/utils"
 	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -26,27 +26,29 @@ func (fm *TFileMeta) CheckValid() bool {
 }
 
 type TFileService struct {
-	port      int32
-	metaFunc  FHandleFileMeta
-	wg        sync.WaitGroup
-	stopChan  chan int32
-	listener  net.Listener
-	isRunning bool
+	port       int32
+	metaFunc   FHandleFileMeta
+	wg         sync.WaitGroup
+	stopChan   chan int32
+	listener   net.Listener
+	fileFolder string
+	isRunning  bool
 }
 
 // NewFileService 创建文件服务
-func NewFileService(port int32, metaFunc FHandleFileMeta) (*TFileService, error) {
+func NewFileService(port int32, folder string, metaFunc FHandleFileMeta) (*TFileService, error) {
 	li, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
 
 	return &TFileService{
-		port:     port,
-		stopChan: make(chan int32, 1),
-		metaFunc: metaFunc,
-		wg:       sync.WaitGroup{},
-		listener: li,
+		port:       port,
+		stopChan:   make(chan int32, 1),
+		metaFunc:   metaFunc,
+		wg:         sync.WaitGroup{},
+		fileFolder: folder,
+		listener:   li,
 	}, nil
 }
 
@@ -78,57 +80,94 @@ func (fs *TFileService) run() {
 				_ = conn.Close()
 				wg.Done()
 			}()
-			fs.metaFunc(ReceiveFile(conn))
+			fs.metaFunc(ReceiveFile(conn, fs.fileFolder))
 		}(conn, &connWg)
 	}
 
 }
 
-func ReceiveFile(conn net.Conn) (*TFileMeta, error) {
+func ReceiveFile(conn net.Conn, folder string) (*TFileMeta, error) {
 	var err error
+	var fileMeta TFileMeta
 	sizeBuff := make([]byte, 4)
 	if _, err = conn.Read(sizeBuff); err != nil {
-		return nil, err
+		fileMeta.FileSize = -1
+		fileMeta.FileName = "conn.Read [4]byte"
+		return &fileMeta, err
 	}
 	metaSize := binary.LittleEndian.Uint32(sizeBuff)
 	metaBuff := make([]byte, metaSize)
 	if _, err = conn.Read(metaBuff); err != nil {
-		return nil, err
+		fileMeta.FileSize = -1
+		fileMeta.FileName = fmt.Sprintf("conn.Read [%d]byte", metaSize)
+		return &fileMeta, err
 	}
-	var fileMeta TFileMeta
 	if err = json.Unmarshal(metaBuff, &fileMeta); err != nil {
-		return nil, err
+		fileMeta.FileSize = -1
+		fileMeta.FileName = fmt.Sprintf("fileMeta %s", string(metaBuff))
+		return &fileMeta, err
 	}
 	if !fileMeta.CheckValid() {
-		return nil, fmt.Errorf("%v format error", fileMeta)
+		fileMeta.FileSize = -1
+		fileMeta.FileName = fmt.Sprintf("fileMeta.CheckValid() %s", string(metaBuff))
+		return &fileMeta, fmt.Errorf("%v format error", fileMeta)
 	}
 	//创建FileUUID目录
-	fp, err := utils.NewFilePath()
+	currentPath, err := os.Executable()
 	if err != nil {
-		return nil, err
+		fileMeta.FileSize = -1
+		fileMeta.FileName = "os.Executable()"
+		return &fileMeta, err
 	}
-	fileMap := make(map[string]string)
-	fileMap["filePath"] = fileMeta.FileUUID
-	if err = fp.SetFileDir(&fileMap); err != nil {
-		return nil, err
+	dirFlag := "/"
+	if strings.Contains(currentPath, "\\") {
+		dirFlag = "\\"
 	}
-	fileFullName := fileMap["filePath"] + fileMeta.FileName
+	arrPath := strings.Split(currentPath, dirFlag)
+	arrPath = arrPath[:len(arrPath)-1]
+	arrPath = append(arrPath, folder)
+	parentFolder := strings.Join(arrPath, dirFlag)
+	if _, err = os.Stat(parentFolder); err != nil {
+		if os.IsNotExist(err) {
+			err = os.Mkdir(parentFolder, 0755)
+			if err != nil {
+				fileMeta.FileSize = -1
+				return &fileMeta, fmt.Errorf("创建目录%s出错:%s", parentFolder, err.Error())
+			}
+		}
+	}
+	arrPath = append(arrPath, fileMeta.FileUUID)
+	pluginFolder := strings.Join(arrPath, dirFlag)
+	if _, err = os.Stat(pluginFolder); err != nil {
+		if os.IsNotExist(err) {
+			err = os.Mkdir(pluginFolder, 0755)
+			if err != nil {
+				fileMeta.FileSize = -1
+				return &fileMeta, fmt.Errorf("创建目录%s出错:%s", pluginFolder, err.Error())
+			}
+		}
+	}
+	arrPath = append(arrPath, fileMeta.FileName)
+	fileFullName := strings.Join(arrPath, dirFlag)
 	// 如果fileFullName文件已经存在则删除，
 	if _, err = os.Stat(fileFullName); err == nil {
 		if err = os.Remove(fileFullName); err != nil {
-			return nil, err
+			fileMeta.FileSize = -1
+			return &fileMeta, err
 		}
 	}
 	// 创建文件fileFullName
 	file, err := os.Create(fileFullName)
 	if err != nil {
-		return nil, err
+		fileMeta.FileSize = -1
+		return &fileMeta, err
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 	if _, err = io.CopyN(file, conn, fileMeta.FileSize); err != nil {
-		return nil, err
+		fileMeta.FileSize = -1
+		return &fileMeta, err
 	}
 
 	return &fileMeta, nil

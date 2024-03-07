@@ -40,14 +40,14 @@ func (log *TLogControl) OperateLog(opType messager.OperateType) *common.TRespons
 	}
 
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[log.PluginUUID]
-	if ok {
-		if pluginHost.PluginPort < 0 {
+
+	pluginInfo := Survey.GetPluginInfoByPluginUUID(log.PluginUUID)
+	if pluginInfo != nil {
+		if pluginInfo.PluginPort < 0 {
 			return common.Failure("当前插件需要加载")
 		}
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", pluginInfo.HostInfo.HostIP, pluginInfo.HostInfo.MessagePort)
 		//向Host发送请求
 		var result common.TResponse
 		if data, err = MsgClient.Send(url, opType, logData); err != nil {

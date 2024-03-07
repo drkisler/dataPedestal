@@ -30,9 +30,9 @@ func NewRespondent(url string, funcResp FRespondentData) (*TRespondent, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = sock.SetOption(mangos.OptionRecvDeadline, time.Second*1/2); err != nil {
-		return nil, err
-	}
+	//if err = sock.SetOption(mangos.OptionRecvDeadline, time.Second*2); err != nil {
+	//	return nil, err
+	//}
 
 	var lock sync.Mutex
 	var wg sync.WaitGroup
@@ -58,29 +58,19 @@ func (r *TRespondent) start() {
 	for r.IsRunning() {
 		if !connected {
 			if err = r.sock.Dial(r.serverUrl); err != nil {
-				//fmt.Println(err.Error())
 				time.Sleep(time.Second * 2)
 				continue
 			}
 			connected = true
 		}
-
 		if _, err = r.sock.Recv(); err != nil {
+			connected = false
 			time.Sleep(time.Millisecond * 20)
 			continue
 		}
-		_ = r.sock.Send(r.respFunc())
-
-		if err = r.sock.Dial(r.serverUrl); err != nil {
-			time.Sleep(time.Second * 2)
+		if err = r.sock.Send(r.respFunc()); err != nil {
 			continue
 		}
-
-		if _, err = r.sock.Recv(); err != nil {
-			time.Sleep(time.Millisecond * 20)
-			continue
-		}
-		_ = r.sock.Send(r.respFunc())
 	}
 }
 

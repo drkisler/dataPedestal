@@ -62,19 +62,19 @@ func (pw *TWorkerProxy) Run() {
 	defer pw.SetRunning(false)
 	if !pw.KeepConnect {
 		if err := pw.clickHouseClient.ReConnect(); err != nil {
-			_ = pw.Logger.WriteError(err.Error())
+			pw.Logger.WriteError(err.Error())
 			//fmt.Println(err.Error())
 			return
 		}
 	}
 	if err := pw.PullTable(); err != nil {
-		_ = pw.Logger.WriteError(err.Error())
+		pw.Logger.WriteError(err.Error())
 		//fmt.Println(err.Error())
 	}
 	//minutes = 0
 	if !pw.KeepConnect {
 		if err := pw.clickHouseClient.Client.Close(); err != nil {
-			_ = pw.Logger.WriteError(err.Error())
+			pw.Logger.WriteError(err.Error())
 			//fmt.Println(err.Error())
 			return
 		}

@@ -1,16 +1,12 @@
 package control
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/module"
-	"github.com/drkisler/dataPedestal/initializers"
 	"os"
 	"strings"
 )
-
-var HostInfo common.THostInfo
 
 type TPluginControl struct {
 	OperatorID   int32  `json:"operator_id,omitempty"`
@@ -19,14 +15,6 @@ type TPluginControl struct {
 	PageIndex    int32  `json:"page_index,omitempty"`
 	module.TPlugin
 	Status string `json:"status"` //待上传、待加载、待运行、运行中
-}
-
-func SetHostInfo(hostIP, hostName string, msgPort, filePort int32) {
-	HostInfo.HostUUID = initializers.HostConfig.HostUUID
-	HostInfo.HostIP = hostIP
-	HostInfo.HostName = hostName
-	HostInfo.MessagePort = msgPort
-	HostInfo.FileServPort = filePort
 }
 
 func signPluginControl(tmp module.TPlugin) *TPluginControl {
@@ -50,7 +38,7 @@ func (c *TPluginControl) DeletePlugin() *common.TResponse {
 	if err = c.DelPlugin(); err != nil {
 		return common.Failure(err.Error())
 	}
-	if err = os.RemoveAll(common.CurrentPath + initializers.HostConfig.PluginDir + c.PluginUUID + initializers.HostConfig.DirFlag); err != nil {
+	if err = os.RemoveAll(c.GetPluginFolder()); err != nil {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
@@ -72,29 +60,7 @@ func (c *TPluginControl) SetRunType() *common.TResponse {
 	}
 	return common.Success(nil)
 }
-func GetHostInfo() []byte {
-	var pluginCtl TPluginControl
-	ArrData, Total, err := pluginCtl.GetPluginList()
-	if err != nil {
-		result, _ := json.Marshal(common.Failure(err.Error()))
-		return result
-	}
-	if Total == 0 {
-		return common.ToPluginHostBytes(nil, &HostInfo)
-	}
-	pluginPort := make(map[string]int32)
-	for _, pluginItem := range ArrData {
-		var port int32 = -1 //默认端口为-1，表示未加载
-		if CheckPluginExists(pluginItem.PluginUUID) {
-			port = 0 //端口为-1，表示已加载未运行
-			if pluginList[pluginItem.PluginUUID].Running() {
-				port = pluginList[pluginItem.PluginUUID].PluginPort // 端口>0，表示已运行
-			}
-		}
-		pluginPort[pluginItem.PluginUUID] = port
-	}
-	return common.ToPluginHostBytes(&pluginPort, &HostInfo)
-}
+
 func (c *TPluginControl) GetPlugins() *common.TResponse {
 	var result []TPluginControl
 	var data common.TRespDataSet
@@ -112,7 +78,6 @@ func (c *TPluginControl) GetPlugins() *common.TResponse {
 			if pluginList[pluginItem.PluginUUID].Running() {
 				item.Status = "运行中"
 			}
-
 		}
 		result = append(result, *item)
 	}
@@ -146,7 +111,7 @@ func (c *TPluginControl) LoadPlugin() *common.TResponse {
 	}
 
 	if err = LoadPlugin(c.PluginUUID, c.SerialNumber,
-		initializers.HostConfig.PluginDir+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
+		c.GetPluginFilePath(),
 		c.PluginConfig); err != nil {
 		return common.Failure(err.Error())
 	}
@@ -220,7 +185,8 @@ func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
 		c.PluginConfig = newCfg
 	}
 	plug, err := NewPlugin(c.SerialNumber,
-		initializers.HostConfig.PluginDir+c.PluginUUID+initializers.HostConfig.DirFlag+c.PluginFile,
+		c.GetPluginFilePath(),
+		//"/home/godev/go/output/host/plugin/test/pullmysql",
 	)
 	if err != nil {
 		return common.Failure(err.Error())

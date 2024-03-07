@@ -44,28 +44,28 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 	mp.Logger = logger
 
 	if resp := mp.TBasePlugin.Load(config); resp.Code < 0 {
-		_ = mp.Logger.WriteError(resp.Info)
+		mp.Logger.WriteError(resp.Info)
 		return resp
 	}
 
 	var cfg initializers.TMySQLConfig
 	err = json.Unmarshal([]byte(config), &cfg)
 	if err != nil {
-		_ = mp.Logger.WriteError(err.Error())
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 	if err = cfg.CheckValid(); err != nil {
-		_ = mp.Logger.WriteError(err.Error())
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 	mp.ServerPort = cfg.ServerPort
 	ok, err := common.VerifyCaptcha(SerialNumber, cfg.LicenseCode)
 	if err != nil {
-		_ = mp.Logger.WriteError(err.Error())
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 	if !ok {
-		_ = mp.Logger.WriteError(cfg.LicenseCode + "验证未通过")
+		mp.Logger.WriteError(cfg.LicenseCode + "验证未通过")
 		return *common.Failure(cfg.LicenseCode + "验证未通过")
 	}
 	if err = func(cronExp string) error {
@@ -85,17 +85,17 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 		}
 		return nil
 	}(cfg.CronExpression); err != nil {
-		_ = mp.Logger.WriteError(cfg.CronExpression + "校验未通过:" + err.Error())
+		mp.Logger.WriteError(cfg.CronExpression + "校验未通过:" + err.Error())
 		return *common.Failure(cfg.CronExpression + "校验未通过:" + err.Error())
 	}
 	mp.cronExpression = cfg.CronExpression
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(&cfg, logger); err != nil {
-		_ = mp.Logger.WriteError(err.Error())
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 
-	_ = mp.Logger.WriteInfo("插件加载成功")
+	mp.Logger.WriteInfo("插件加载成功")
 	//需要返回端口号，如果没有则返回0
 	return *common.ReturnInt(int(cfg.ServerPort))
 }
@@ -124,11 +124,11 @@ func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 func (mp *TMyPlugin) Run() common.TResponse {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
-		_ = mp.Logger.WriteError(err.Error())
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 	if _, err = scheduler.NewJob(gocron.CronJob(mp.cronExpression, len(strings.Split(mp.cronExpression, " ")) > 5), gocron.NewTask(mp.workerProxy.Run)); err != nil {
-		_ = mp.Logger.WriteError(err.Error())
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 
@@ -175,9 +175,9 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	defer cancel()
 
 	if err = mp.serv.Shutdown(ctx); err != nil {
-		_ = logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
+		logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
-	_ = logger.WriteInfo("插件已停止")
+	logger.WriteInfo("插件已停止")
 	return *common.Success(nil)
 }
 

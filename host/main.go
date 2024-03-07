@@ -51,8 +51,9 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 }
 
 func main() {
-	var err error
+
 	gob.Register([]common.TLogInfo{})
+	var err error
 	// get current path
 	common.CurrentPath, err = os.Executable()
 	if err != nil {
@@ -70,7 +71,6 @@ func main() {
 		os.Exit(1)
 	}
 	// endregion
-
 	common.NewLogService(common.CurrentPath, pathSeparator,
 		initializers.HostConfig.InfoDir,
 		initializers.HostConfig.WarnDir,
@@ -80,21 +80,15 @@ func main() {
 	)
 	defer common.CloseLogService()
 
-	// region 创建并启动应答服务
-	// cfg.SelfName, cfg.SelfIP, cfg.WebServPort, cfg.MessagePort, cfg.FileServPort
-	control.SetHostInfo(
-		initializers.HostConfig.SelfIP,
-		initializers.HostConfig.SelfName,
-		initializers.HostConfig.MessagePort,
-		initializers.HostConfig.FileServPort,
-	)
-	respondent, err := messager.NewRespondent(initializers.HostConfig.SurveyUrl, control.GetHostInfo)
+	// region 创建并启动心跳监测服务
+	hb, err := control.NewHeartBeat()
 	if err != nil {
-		fmt.Printf("创建心跳应答服务失败：%s", err.Error())
+		fmt.Printf("创建心跳监测服务失败：%s", err.Error())
 		os.Exit(1)
 	}
-	respondent.Run()
-	defer respondent.Stop()
+	hb.Start()
+	defer hb.Stop()
+
 	// endregion
 
 	// region 创建并启动对话服务
@@ -109,7 +103,7 @@ func main() {
 	// endregion
 
 	// region 创建并启动文件服务
-	fs, err := fileService.NewFileService(initializers.HostConfig.FileServPort, service.HandleReceiveFile)
+	fs, err := fileService.NewFileService(initializers.HostConfig.FileServPort, initializers.HostConfig.PluginDir, service.HandleReceiveFile)
 	if err != nil {
 		fmt.Printf("创建文件服务失败：%s", err.Error())
 		os.Exit(1)
@@ -134,6 +128,21 @@ func main() {
 	// region 自动启动相关插件
 	control.RunPlugins()
 	// endregion
+	/*	if len(os.Args) > 1 {
+		if os.Args[1] == "test" {
+			//if err = control.LoadPlugin("02377678-70fd-46b9-b216-c9aa47f6aefd",
+			//	"224D02E8-7F8E-4332-82DF-5E403A9BA781", "/home/godev/go/output/host/plugin/02377678-70fd-46b9-b216-c9aa47f6aefd/pullmysql",
+			//	"{\"serial_number\": \"224D02E8-7F8E-4332-82DF-5E403A9BA781\"}"); err != nil {
+			//	fmt.Println(err.Error())
+			//}
+			var ctl control.TPluginControl
+			ctl.PluginUUID = "02377678-70fd-46b9-b216-c9aa47f6aefd"
+			result := ctl.GetPluginTmpCfg()
+			fmt.Println(*result)
+
+		}
+		return
+	}*/
 
 	// region 启动系统服务
 	srv, err := daemon.New(managerName, serverDesc, daemon.SystemDaemon)

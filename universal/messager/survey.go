@@ -60,43 +60,38 @@ func (t *TSurvey) start() {
 loopOuter:
 	for t.IsRunning() {
 		//每10秒检测一次
-		select {
-		case <-time.After(time.Second * 1 / 2):
+		time.Sleep(time.Second * 1 / 10)
+		timeNumber = timeNumber + 1
+		if timeNumber < 100 {
 			if !t.IsRunning() {
 				break loopOuter
 			}
-			timeNumber = timeNumber + 1
-			if timeNumber >= 20 {
-				timeNumber = 0
-				buffer := make(map[string]common.TPluginHost)
-				err := t.sock.Send([]byte{uint8(1)})
-				if err != nil {
-					continue
-				}
-				receiving := true
-				for receiving {
-					var msg []byte
-					var plugins []common.TPluginHost
-					msg, err = t.sock.Recv()
-					if err != nil {
-						// 投票过期，sock端关闭,接收会导致异常,本次投票结束
-						receiving = false
-						continue
-					}
-					if plugins, err = common.FromPluginHostBytes(msg); err != nil {
-						common.LogServ.Error(err)
-					}
-					// msg 为 common.THostInfo
-					for _, v := range plugins {
-						//v.HostInfo.
-						buffer[v.PluginUUID] = v
-					}
-				}
-				t.SetRespondents(buffer)
-				//fmt.Println(buffer)
+			continue
+		}
+		timeNumber = 0
+		buffer := make(map[string]common.TPluginHost)
+		err := t.sock.Send([]byte{uint8(1)})
+		if err != nil {
+			continue
+		}
+		receiving := true
+		for receiving {
+			var msg []byte
+			var plugins []common.TPluginHost
+			msg, err = t.sock.Recv()
+			if err != nil {
+				// 投票过期，sock端关闭,接收会导致异常,本次投票结束
+				receiving = false
+				continue
+			}
+			if plugins, err = common.FromPluginHostBytes(msg); err != nil {
+				common.LogServ.Error(err)
+			}
+			for _, v := range plugins {
+				buffer[v.PluginUUID] = v
 			}
 		}
-
+		t.SetRespondents(buffer)
 	}
 }
 func (t *TSurvey) Stop() {
@@ -111,7 +106,6 @@ func (t *TSurvey) SetRespondents(value map[string]common.TPluginHost) {
 	for _, v := range value {
 		t.hosts[v.HostInfo.HostUUID] = v.HostInfo
 	}
-	//fmt.Println(t.hosts)
 	t.respondents = value
 }
 func (t *TSurvey) GetRespondents() map[string]common.TPluginHost {

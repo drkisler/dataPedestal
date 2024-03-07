@@ -53,5 +53,6 @@ func SendFile(fileServUrl, fileUUID, config, runType, serialNumber string, file 
 	if _, err = syscall.Sendfile(int(tcpFile.Fd()), int(file.Fd()), nil, int(fileInfo.Size())); err != nil {
 		return err
 	}
+
 	return nil
 }

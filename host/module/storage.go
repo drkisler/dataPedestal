@@ -78,8 +78,8 @@ func (dbs *TStorage) AddPlugin(p *TPlugin) error {
 		return err
 	}
 	if _, err = ctx.Exec("insert "+
-		"into plugin(plugin_uuid, plugin_file, plugin_config, run_type) values(?,?,?,?)",
-		p.PluginUUID, p.PluginName, p.PluginFile, p.PluginConfig, p.PluginType); err != nil {
+		"into plugin(plugin_uuid, plugin_file, plugin_config, serial_number,run_type) values(?,?,?,?,?)",
+		p.PluginUUID, p.PluginFile, p.PluginConfig, p.SerialNumber, p.RunType); err != nil {
 		_ = ctx.Rollback()
 		return err
 	}

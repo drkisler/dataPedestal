@@ -2,6 +2,8 @@ package module
 
 import (
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/initializers"
+	"strings"
 )
 
 type TPluginInfo = common.TPluginInfo
@@ -28,6 +30,24 @@ func (p *TPlugin) ToByte() []byte {
 	appendData(p.RunType, true)
 	appendData(p.PluginConfig, false)
 	return result
+}
+
+func (p *TPlugin) GetPluginFilePath() string {
+	arrPath := strings.Split(common.CurrentPath, initializers.HostConfig.DirFlag)
+	if arrPath[len(arrPath)-1] == "" {
+		arrPath = arrPath[:len(arrPath)-1]
+	}
+	arrPath = append(arrPath, initializers.HostConfig.PluginDir, p.PluginUUID, p.PluginFile)
+	return strings.Join(arrPath, initializers.HostConfig.DirFlag)
+}
+
+func (p *TPlugin) GetPluginFolder() string {
+	arrPath := strings.Split(common.CurrentPath, initializers.HostConfig.DirFlag)
+	if arrPath[len(arrPath)-1] == "" {
+		arrPath = arrPath[:len(arrPath)-1]
+	}
+	arrPath = append(arrPath, initializers.HostConfig.PluginDir, p.PluginUUID)
+	return strings.Join(arrPath, initializers.HostConfig.DirFlag)
 }
 
 // FromByte 从二进制串中提取 PluginUUID、PluginFile、RunType、PluginConfig

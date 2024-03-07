@@ -27,6 +27,11 @@ func ReturnStr(value string) *TResponse {
 func Success(data *TRespDataSet) *TResponse {
 	return &TResponse{0, data, "success"}
 }
+
+func Ongoing() *TResponse {
+	return &TResponse{1, nil, "ongoing"}
+}
+
 func RespData(total int32, data interface{}, err error) *TResponse {
 	if err != nil {
 		return Failure(err.Error())

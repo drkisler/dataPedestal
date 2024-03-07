@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/utils"
+	"log"
 	"os"
 	"sync"
+	"time"
 )
 
 type TLoggerAdmin struct {
 	logger map[string]*TLocalLogger
+	logDir string
 }
 
 const (
@@ -46,7 +49,7 @@ func InitLogger() (*TLoggerAdmin, error) {
 		}
 
 	}
-	return &TLoggerAdmin{logger}, nil
+	return &TLoggerAdmin{logger, filePath}, nil
 }
 
 func GetLogger() (*TLoggerAdmin, error) {
@@ -58,8 +61,23 @@ func GetLogger() (*TLoggerAdmin, error) {
 	return logAdmin, err
 }
 
-func (la *TLoggerAdmin) WriteError(info string) error {
-	return la.logger[ErrorLog].PutLog(info)
+// writeError 用于系统写入日志异常时补充手段，系统正常运行后不会调用改方法，故不用考虑性能
+func (la *TLoggerAdmin) writeError(info ...any) {
+	t := time.Now()
+	fileName := t.Format("2006-01-02")
+
+	logFile, err := os.OpenFile(la.logDir+fileName+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalln("Failed to open log file", err)
+	}
+	log.SetOutput(logFile)
+	log.Println(info...)
+	_ = logFile.Close()
+}
+func (la *TLoggerAdmin) WriteError(info string) {
+	if err := la.logger[ErrorLog].PutLog(info); err != nil {
+		la.writeError(err)
+	}
 }
 func (la *TLoggerAdmin) GetErrLog(params string) common.TResponse {
 	var data common.TRespDataSet
@@ -103,8 +121,10 @@ func (la *TLoggerAdmin) DelErrLog(params string) common.TResponse {
 	return *common.Success(nil)
 }
 
-func (la *TLoggerAdmin) WriteInfo(info string) error {
-	return la.logger[InfoLog].PutLog(info)
+func (la *TLoggerAdmin) WriteInfo(info string) {
+	if err := la.logger[InfoLog].PutLog(info); err != nil {
+		la.writeError(err)
+	}
 }
 func (la *TLoggerAdmin) GetInfoLog(params string) common.TResponse {
 	var data common.TRespDataSet
@@ -148,8 +168,10 @@ func (la *TLoggerAdmin) DelInfoLog(params string) common.TResponse {
 	return *common.Success(nil)
 }
 
-func (la *TLoggerAdmin) WriteDebug(info string) error {
-	return la.logger[DebugLog].PutLog(info)
+func (la *TLoggerAdmin) WriteDebug(info string) {
+	if err := la.logger[DebugLog].PutLog(info); err != nil {
+		la.writeError(err)
+	}
 }
 func (la *TLoggerAdmin) GetDebugLog(params string) common.TResponse {
 	var data common.TRespDataSet

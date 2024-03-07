@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -88,6 +89,7 @@ func (ls *TLogService) Error(v ...any) {
 }
 func (ls *TLogService) Debug(v ...any) {
 	if ls.isDebug {
+		fmt.Println(v...)
 		ls.debugLogger.writeLog(v...)
 	}
 }

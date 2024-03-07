@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/module"
-	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/hashicorp/go-plugin"
 	"os/exec"
 	"sync"
@@ -39,8 +38,7 @@ func RunPlugins() {
 		return
 	}
 	for _, item := range plugins {
-		if req, err = NewPlugin(item.SerialNumber,
-			initializers.HostConfig.PluginDir+item.PluginUUID+initializers.HostConfig.DirFlag+item.PluginFile); err != nil {
+		if req, err = NewPlugin(item.SerialNumber, item.GetPluginFilePath()); err != nil {
 			common.LogServ.Error("RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
 			return
 		}
@@ -55,8 +53,8 @@ func RunPlugins() {
 		pluginList[item.PluginUUID] = req
 		req.ImpPlugin.Run()
 	}
-
 }
+
 func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
 	var handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,

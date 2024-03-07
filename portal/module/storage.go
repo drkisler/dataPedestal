@@ -9,8 +9,8 @@ import (
 )
 
 const checkPluginExists = "Create Table " +
-	"if not exists plugin(" +
-	"plugin_uuid INTEGER not null" +
+	"if not exists plugins(" +
+	"plugin_uuid text not null" +
 	",plugin_name text not null" +
 	",plugin_type text not null" +
 	",plugin_desc text not null" +
@@ -23,8 +23,8 @@ const checkPluginExists = "Create Table " +
 	",run_type text not null" +
 	",user_id INTEGER not null" +
 	",constraint pk_plugin primary key(plugin_uuid));" +
-	"create index IF NOT EXISTS idx_plugin_user on plugin(user_id);" +
-	"create unique index IF NOT EXISTS idx_name_user on plugin(user_id,plugin_name);"
+	"create index IF NOT EXISTS idx_plugin_user on plugins(user_id);" +
+	"create unique index IF NOT EXISTS idx_name_user on plugins(user_id,plugin_name);"
 
 var DbFilePath string
 var dbService *TStorage
@@ -72,35 +72,36 @@ func (dbs *TStorage) CloseDB() error {
 func (dbs *TStorage) PutPlugin(p *TPlugin) (string, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
-	strUUID := uuid.New().String()
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return "", err
 	}
 	if p.PluginUUID != "" {
 		if _, err = ctx.Exec("delete "+
-			"from plugin where plugin_uuid=?", p.PluginUUID); err != nil {
+			"from plugins where plugin_uuid=?", p.PluginUUID); err != nil {
 			_ = ctx.Rollback()
 			return "", err
 		}
+	} else {
+		p.PluginUUID = uuid.New().String()
 	}
-
 	_, err = ctx.Exec("insert "+
-		"into plugin(plugin_uuid，plugin_name，plugin_type，plugin_desc，plugin_file，plugin_config，plugin_version，host_uuid,host_name,host_ip,run_type，user_id)"+
-		"values(?,?,?,?,?,?,?,?,?)", strUUID, p.PluginName, p.PluginType, p.PluginDesc, p.PluginFile, p.PluginConfig, p.PluginVersion, p.HostUUID, p.HostName, p.HostIP, p.RunType, p.UserID)
+		"into plugins(plugin_uuid,plugin_name,plugin_type,plugin_desc,plugin_file,plugin_config,plugin_version,host_uuid,host_name,host_ip,run_type,user_id)"+
+		"values(?,?,?,?,?,?,?,?,?,?,?,?)", p.PluginUUID, p.PluginName, p.PluginType, p.PluginDesc, p.PluginFile, p.PluginConfig, p.PluginVersion, p.HostUUID, p.HostName, p.HostIP, p.RunType, p.UserID)
+
 	if err != nil {
 		_ = ctx.Rollback()
 		return "", err
 	}
 	_ = ctx.Commit()
-	return strUUID, nil
+	return p.PluginUUID, nil
 
 }
 
 // GetPluginByUUID 根据uuid获取插件信息
 func (dbs *TStorage) GetPluginByUUID(p *TPlugin) error {
-	strSQL := "select plugin_uuid，plugin_name，plugin_type，plugin_desc，plugin_file，plugin_config，plugin_version，host_uuid,host_name,host_ip,run_type，user_id " +
-		"from plugin where plugin_uuid=?"
+	strSQL := "select plugin_uuid,plugin_name,plugin_type,plugin_desc,plugin_file,plugin_config,plugin_version,host_uuid,host_name,host_ip,run_type,user_id " +
+		"from plugins where plugin_uuid=?"
 	rows, err := dbs.Queryx(strSQL, p.PluginUUID)
 	if err != nil {
 		return err
@@ -131,15 +132,15 @@ func (dbs *TStorage) QueryPlugin(p *TPlugin, pageSize int32, pageIndex int32) ([
 	strSQL := "select " +
 		"user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file, plugin_config, plugin_version, host_uuid,host_name,host_ip,run_type "
 	if p.PluginName != "" {
-		strSQL += "from (select * from plugin where user_id= ? and plugin_name like '%" + p.PluginName + "%' order by plugin_name)t limit ? offset (?-1)*?"
+		strSQL += "from (select * from plugins where user_id= ? and plugin_name like '%" + p.PluginName + "%' order by plugin_name)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, p.UserID, pageSize, pageIndex, pageSize)
-	} else if p.PluginType != "" {
+	} else if (p.PluginType != "") && (p.PluginType != "全部插件") {
 		strSQL += "from " +
-			"(select * from plugin where user_id= ? and plugin_type = ? order by plugin_name)t limit ? offset (?-1)*?"
+			"(select * from plugins where user_id= ? and plugin_type = ? order by plugin_name)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, p.UserID, p.PluginType, pageSize, pageIndex, pageSize)
 	} else {
 		strSQL += "from " +
-			"(select * from plugin where user_id= ? order by plugin_name)t limit ? offset (?-1)*?"
+			"(select * from plugins where user_id= ? order by plugin_name)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, p.UserID, pageSize, pageIndex, pageSize)
 	}
 
@@ -168,7 +169,7 @@ func (dbs *TStorage) QueryPlugin(p *TPlugin, pageSize int32, pageIndex int32) ([
 // UpdateFile 修改插件文件名称
 func (dbs *TStorage) UpdateFileName(p *TPlugin) error {
 	strSQL := "update " +
-		"plugin set plugin_file = ? where plugin_uuid=?"
+		"plugins set plugin_file = ? where plugin_uuid=?"
 	dbs.Lock()
 	defer dbs.Unlock()
 	ctx, err := dbs.Begin()
@@ -185,7 +186,7 @@ func (dbs *TStorage) UpdateFileName(p *TPlugin) error {
 }
 func (dbs *TStorage) RemovePlugin(p *TPlugin) error {
 	strSQL := "delete " +
-		"from plugin where plugin_uuid=?"
+		"from plugins where plugin_uuid=?"
 	dbs.Lock()
 	defer dbs.Unlock()
 	ctx, err := dbs.Begin()
@@ -203,7 +204,7 @@ func (dbs *TStorage) RemovePlugin(p *TPlugin) error {
 
 func (dbs *TStorage) ModifyPlugin(p *TPlugin) error {
 	strSQL := "update " +
-		"plugin set plugin_name=?, plugin_type=?, plugin_desc=?, plugin_file=?, plugin_config=?, plugin_version=?, host_uuid=?,host_name=?,host_ip=? ,run_type=? " +
+		"plugins set plugin_name=?, plugin_type=?, plugin_desc=?, plugin_file=?, plugin_config=?, plugin_version=?, host_uuid=?,host_name=?,host_ip=? ,run_type=? " +
 		"where plugin_uuid = ?"
 	dbs.Lock()
 	defer dbs.Unlock()
@@ -223,7 +224,7 @@ func (dbs *TStorage) ModifyPlugin(p *TPlugin) error {
 
 func (dbs *TStorage) ModifyConfig(p *TPlugin) error {
 	strSQL := "update " +
-		"plugin set plugin_config=? " +
+		"plugins set plugin_config=? " +
 		"where plugin_uuid=?"
 	dbs.Lock()
 	defer dbs.Unlock()
@@ -242,7 +243,7 @@ func (dbs *TStorage) ModifyConfig(p *TPlugin) error {
 
 func (dbs *TStorage) ModifyRunType(p *TPlugin) error {
 	strSQL := "update " +
-		"plugin set run_type=? " +
+		"plugins set run_type=? " +
 		"where plugin_uuid=?"
 	dbs.Lock()
 	defer dbs.Unlock()
@@ -261,7 +262,7 @@ func (dbs *TStorage) ModifyRunType(p *TPlugin) error {
 
 func (dbs *TStorage) ModifyHostInfo(p *TPlugin) error {
 	strSQL := "update " +
-		"plugin set host_uuid=?,host_name=?,host_ip=? where plugin_uuid=?"
+		"plugins set host_uuid=?,host_name=?,host_ip=? where plugin_uuid=?"
 	dbs.Lock()
 	defer dbs.Unlock()
 	ctx, err := dbs.Begin()
@@ -286,7 +287,7 @@ func (dbs *TStorage) GetPluginNames(p *TPlugin /*, pageSize int32, pageIndex int
 	"from (select plugin_uuid,plugin_name from plugin where user_id= ? and plugin_type = ? order by plugin_name) t  limit ? offset (?-1)*?"*/
 	//取消分页
 	strSQL := "select plugin_name,plugin_uuid " +
-		"from (select plugin_uuid, plugin_name from plugin where user_id= ? and plugin_type = ? order by plugin_name) t "
+		"from (select plugin_uuid, plugin_name from plugins where user_id= ? and plugin_type = ? order by plugin_name) t "
 	if rows, err = dbs.Queryx(strSQL, p.UserID, p.PluginType); err != nil {
 		return nil, -1, err
 	}
@@ -309,7 +310,7 @@ func (dbs *TStorage) GetAutoRunPlugins() ([]TPlugin, error) {
 	var err error
 	var rows *sqlx.Rows
 	strSQL := "select user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file, plugin_config, plugin_version, host_uuid,host_name,host_ip,run_type  " +
-		"from plugin where coalesce(plugin_file,'') <>'' and coalesce(plugin_config,'')<>'' and run_type ='自动启动' "
+		"from plugins where coalesce(plugin_file,'') <>'' and coalesce(plugin_config,'')<>'' and run_type ='自动启动' "
 
 	rows, err = dbs.Queryx(strSQL)
 	if err != nil {

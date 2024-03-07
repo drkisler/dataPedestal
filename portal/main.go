@@ -72,7 +72,7 @@ func createAndStartGinService() {
 	plugin.POST("/getPluginNameList", service.GetPluginNameList) //获取加载后的插件列表
 	plugin.POST("/pubPlugin/:hostUUID", service.PubPlugin)
 	plugin.GET("/getHosts", service.GetHosts)
-	plugin.POST("/takeDown")
+	plugin.POST("/takeDown", service.TakeDown)
 	logs := r.Group("/logger")
 	logs.Use(common.SetHeader, utils.AuthMiddleware)
 	logs.POST("/getLogDate", service.GetLogDate)
@@ -164,6 +164,8 @@ func main() {
 	)
 	defer common.CloseLogService()
 	// endregion
+	usrServ.IsDebug = initializers.PortalCfg.IsDebug
+	service.IsDebug = initializers.PortalCfg.IsDebug
 
 	// region 初始化数据库
 	module.DbFilePath = fmt.Sprintf("%s%s%s", common.CurrentPath, initializers.PortalCfg.DataDir, pathSeparator)
@@ -186,13 +188,24 @@ func main() {
 	// endregion
 
 	// region 创建并启动心跳检测服务
-	control.Survey, err = messager.NewVote(initializers.PortalCfg.SurveyUrl)
+	/*control.Survey, err = messager.NewVote(initializers.PortalCfg.SurveyUrl)
 	if err != nil {
 		fmt.Printf("创建心跳检测服务失败：%s", err.Error())
 		os.Exit(1)
 	}
 	control.Survey.Run()
-	defer control.Survey.Stop()
+	defer control.Survey.Stop()*/
+	// region 创建并启动对话服务
+
+	msg, err := messager.NewMessageServer(initializers.PortalCfg.SurveyUrl,
+		control.Survey.HandleOperate)
+	if err != nil {
+		fmt.Printf("创建消息服务失败：%s", err.Error())
+		os.Exit(1)
+	}
+	msg.Start()
+	defer msg.Stop()
+
 	// endregion
 
 	// region 创建并对话client

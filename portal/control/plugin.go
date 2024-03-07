@@ -11,9 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
-var Survey *messager.TSurvey
+// var Survey *messager.TSurvey
 var MsgClient *messager.TMessageClient
 
 type TPluginControl struct {
@@ -48,11 +49,10 @@ func (c *TPluginControl) DeletePlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var result common.TResponse
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送删除请求
 		if data, err = MsgClient.Send(url, messager.OperateDeletePlugin, []byte(c.PluginUUID)); err != nil {
 			return common.Failure(err.Error())
@@ -73,14 +73,14 @@ func (c *TPluginControl) DeletePlugin() *common.TResponse {
 	return common.Success(nil)
 }
 
-func (c *TPluginControl) PublishPlugin(strUUID string) *common.TResponse {
+func (c *TPluginControl) PublishPlugin(hostUUID string) *common.TResponse {
 	var err error
 	var hostInfo *common.THostInfo
 	if err = c.InitByUUID(); err != nil {
 		return common.Failure(err.Error())
 	}
-	if hostInfo, err = Survey.GetHostInfoByHostUUID(strUUID); err != nil {
-		return common.Failure(err.Error())
+	if hostInfo = Survey.GetHostInfoByHostUUID(hostUUID); hostInfo == nil {
+		return common.Failure("host 不存在或已经离线")
 	}
 
 	pluginFile := common.CurrentPath + initializers.PortalCfg.PluginDir +
@@ -113,14 +113,49 @@ func (c *TPluginControl) PublishPlugin(strUUID string) *common.TResponse {
 		c.PluginUUID, c.PluginConfig, c.RunType, c.SerialNumber, file); err != nil {
 		return common.Failure(err.Error())
 	}
+	// 轮询处理结果
+	checkPubResult := func() *common.TResponse {
+		var data []byte
+		var result common.TResponse
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
+		//向Host发送删除请求
+		if data, err = MsgClient.Send(url, messager.OperateGetPubError, []byte(c.PluginUUID)); err != nil {
+			return common.Failure(err.Error())
+		}
+		_ = json.Unmarshal(data, &result)
+		return &result
+	}
+	result := checkPubResult()
+	for result.Code == 1 {
+		time.Sleep(time.Millisecond * 10)
+		result = checkPubResult()
+	}
+	if result.Code < 1 {
+		return result
+	}
 	c.HostUUID, c.HostName, c.HostIP = hostInfo.HostUUID, hostInfo.HostName, hostInfo.HostIP
 	c.SetHostInfo()
 	return common.Success(nil)
 }
-
+func (c *TPluginControl) TakeDownPlugin() *common.TResponse {
+	var err error
+	pluginHost := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if pluginHost == nil {
+		return common.Failure(fmt.Sprintf("pluginUUID %s not exists", c.PluginUUID))
+	}
+	var data []byte
+	var result common.TResponse
+	url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostIP, pluginHost.MessagePort)
+	//向Host发送删除请求
+	if data, err = MsgClient.Send(url, messager.OperateDeletePlugin, []byte(c.PluginUUID)); err != nil {
+		return common.Failure(err.Error())
+	}
+	_ = json.Unmarshal(data, &result)
+	return &result
+}
 func (c *TPluginControl) CheckPluginIsPublished() bool {
-	_, result := Survey.GetRespondents()[c.PluginUUID]
-	return result
+	result := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	return result != nil
 }
 
 func (c *TPluginControl) AlterPlugin() *common.TResponse {
@@ -150,11 +185,10 @@ func (c *TPluginControl) AlterConfig() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送更新配置信息请求
 		var reqData []byte
 		var result common.TResponse
@@ -184,11 +218,10 @@ func (c *TPluginControl) SetRunType() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送更新运行方式信息请求
 		var reqData []byte
 		var result common.TResponse
@@ -232,7 +265,6 @@ func (c *TPluginControl) GetPlugin() *common.TResponse {
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	pluginHost := Survey.GetRespondents()
 	//设置运行状态
 	for _, pluginItem := range ArrData {
 		var item *TPluginControl
@@ -241,15 +273,15 @@ func (c *TPluginControl) GetPlugin() *common.TResponse {
 		if item.PluginFile != "" {
 			item.Status = "待部署"
 		}
-		_, ok := pluginHost[item.PluginUUID]
-		if ok {
-			if pluginHost[pluginItem.PluginUUID].PluginPort < 0 {
+		pluginInfo := Survey.GetPluginInfoByPluginUUID(item.PluginUUID)
+		if pluginInfo != nil {
+			if pluginInfo.PluginPort < 0 {
 				item.Status = "待加载"
 			}
-			if pluginHost[pluginItem.PluginUUID].PluginPort == 0 {
+			if pluginInfo.PluginPort == 0 {
 				item.Status = "待运行"
 			}
-			if pluginHost[pluginItem.PluginUUID].PluginPort > 0 {
+			if pluginInfo.PluginPort > 0 {
 				item.Status = "运行中"
 			}
 		} else {
@@ -281,11 +313,10 @@ func (c *TPluginControl) LoadPlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送加载请求
 		var result common.TResponse
 		if data, err = MsgClient.Send(url, messager.OperateLoadPlugin, []byte(c.PluginUUID)); err != nil {
@@ -304,11 +335,10 @@ func (c *TPluginControl) UnloadPlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送卸载请求
 		var result common.TResponse
 		if data, err = MsgClient.Send(url, messager.OperateUnloadPlugin, []byte(c.PluginUUID)); err != nil {
@@ -325,11 +355,10 @@ func (c *TPluginControl) RunPlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送运行请求
 		var result common.TResponse
 		if data, err = MsgClient.Send(url, messager.OperateRunPlugin, []byte(c.PluginUUID)); err != nil {
@@ -346,11 +375,10 @@ func (c *TPluginControl) StopPlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送停止请求
 		var result common.TResponse
 		if data, err = MsgClient.Send(url, messager.OperateStopPlugin, []byte(c.PluginUUID)); err != nil {
@@ -368,11 +396,10 @@ func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	//获取UUID所在的Host
-	hostInfo := Survey.GetRespondents()
-	pluginHost, ok := hostInfo[c.PluginUUID]
-	if ok {
+	hostInfo := Survey.GetHostInfoByPluginUUID(c.PluginUUID)
+	if hostInfo != nil {
 		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginHost.HostInfo.HostIP, pluginHost.HostInfo.MessagePort)
+		url := fmt.Sprintf("tcp://%s:%d", hostInfo.HostIP, hostInfo.MessagePort)
 		//向Host发送请求配置模板
 		var result common.TResponse
 		if data, err = MsgClient.Send(url, messager.OperateGetTempConfig, []byte(c.PluginUUID)); err != nil {
@@ -380,6 +407,9 @@ func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
 		}
 		_ = json.Unmarshal(data, &result)
 		return &result
+	}
+	if c.PluginFile == "" {
+		return common.Failure(fmt.Sprintf("%s待上传", c.PluginUUID))
 	}
 	return common.Failure(fmt.Sprintf("%s待发布", c.PluginUUID))
 }
@@ -396,12 +426,11 @@ func (c *TPluginControl) GetPluginNameList() *common.TResponse {
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	pluginHost := Survey.GetRespondents()
 	// 以pluginHost中的插件为准，不包含未加载的插件
 	var result []module.TPluginInfo
 	for _, plugin := range plugins {
-		item, ok := pluginHost[plugin.PluginUUID]
-		if ok {
+		item := Survey.GetPluginInfoByPluginUUID(plugin.PluginUUID)
+		if item != nil {
 			if item.PluginPort >= 0 {
 				result = append(result, plugin)
 			}
@@ -411,6 +440,6 @@ func (c *TPluginControl) GetPluginNameList() *common.TResponse {
 }
 
 func (c *TPluginControl) GetHostList() *common.TResponse {
-	hosts := Survey.GetHostList()
+	hosts := Survey.GetHostInfo()
 	return common.RespData(int32(len(hosts)), hosts, nil)
 }

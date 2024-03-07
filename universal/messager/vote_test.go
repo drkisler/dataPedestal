@@ -60,7 +60,7 @@ func TestVote(t *testing.T) {
 }
 func GetHostInfo() []byte {
 	var pluginCtl control.TPluginControl
-	ArrData, _, Total, err := pluginCtl.GetPluginList()
+	ArrData, Total, err := pluginCtl.GetPluginList()
 	if err != nil {
 		result, _ := json.Marshal(utils.Failure(err.Error()))
 		return result

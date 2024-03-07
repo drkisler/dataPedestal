@@ -1,186 +1,205 @@
 package service
 
 import (
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/control"
 	"github.com/gin-gonic/gin"
 	"mime/multipart"
-	"net/http"
 	"os"
 )
 
+var IsDebug bool
+
 func DeletePlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
+		return
+	}
+	ginContext.Reply(IsDebug, plugin.DeletePlugin())
 
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, plugin.DeletePlugin())
 }
 func AddPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.InsertPlugin())
+	ginContext.Reply(IsDebug, plugin.InsertPlugin())
+
 }
 func AlterPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.AlterPlugin())
+	ginContext.Reply(IsDebug, plugin.AlterPlugin())
+
 }
 func QueryPlugin(ctx *gin.Context) {
+	ginContext := common.NewGinContext(ctx)
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
-		return
+	var err error
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
-		return
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 	}
-	ctx.JSON(http.StatusOK, plugin.GetPlugin())
+	ginContext.Reply(IsDebug, plugin.GetPlugin())
+
 }
 func SetRunType(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.SetRunType())
+	ginContext.Reply(IsDebug, plugin.SetRunType())
+
 }
 func RunPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.RunPlugin())
+	ginContext.Reply(IsDebug, plugin.RunPlugin())
+
 }
 func StopPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.StopPlugin())
+	ginContext.Reply(IsDebug, plugin.StopPlugin())
 }
 func LoadPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-
-	ctx.JSON(http.StatusOK, plugin.LoadPlugin())
+	ginContext.Reply(IsDebug, plugin.LoadPlugin())
 }
 func UnloadPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-
-	ctx.JSON(http.StatusOK, plugin.UnloadPlugin())
+	ginContext.Reply(IsDebug, plugin.UnloadPlugin())
 }
 func UpdateConfig(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.AlterConfig())
+	ginContext.Reply(IsDebug, plugin.AlterConfig())
 }
 func GetTempConfig(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.GetPluginTmpCfg())
+	ginContext.Reply(IsDebug, plugin.GetPluginTmpCfg())
 }
 func Upload(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	var err error
 	var multiForm *multipart.Form
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	ginContext := common.NewGinContext(ctx)
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
 	plugin.UserID = plugin.OperatorID
 
 	if multiForm, err = ctx.MultipartForm(); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
+	if len(multiForm.Value["uuid"]) == 0 || len(multiForm.Value["fileName"]) == 0 || len(multiForm.File["stream"]) == 0 {
+		ginContext.Reply(IsDebug, common.Failure("请求参数不全,需要提供uuid,fileName和stream实体"))
+		return
+	}
+
 	pluginUUID := multiForm.Value["uuid"][0]
-	fileName := multiForm.Value["file"][0]
+	fileName := multiForm.Value["fileName"][0]
 	file := multiForm.File["stream"][0]
 	plugin.PluginUUID = pluginUUID
 	if err = plugin.InitByUUID(); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	if plugin.CheckPluginIsPublished() {
-		ctx.JSON(http.StatusOK, common.Failure("当前插件已经发布，需要取消发布才能更新"))
+		ginContext.Reply(IsDebug, common.Failure("当前插件已经发布，需要取消发布才能更新"))
 		return
 	}
 
@@ -193,22 +212,25 @@ func Upload(ctx *gin.Context) {
 	}
 	plugin.PluginFile = fileName
 	if err = ctx.SaveUploadedFile(file, filePath+plugin.PluginFile); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	if err = os.Chmod(filePath+plugin.PluginFile, 0775); err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-
-	ctx.JSON(http.StatusOK, plugin.UpdatePlugFileName())
+	ginContext.Reply(IsDebug, plugin.UpdatePlugFileName())
 }
 func Download(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	var err error
-	plugin.PluginUUID = ctx.Query("uuid")
+	ginContext := common.NewGinContext(ctx)
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		return
+	}
+	plugin.PluginUUID = ginContext.GetQuery("uuid")
 	if plugin.PluginUUID == "" {
-		ctx.JSON(http.StatusBadRequest, common.Failure("需要提供插件名称"))
+		ginContext.ReplyBadRequest(IsDebug, common.Failure("需要提供插件名称"))
 		return
 	}
 	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
@@ -216,53 +238,58 @@ func Download(ctx *gin.Context) {
 		return
 	}
 	if err = plugin.InitByUUID(); err != nil {
-		ctx.JSON(http.StatusBadRequest, common.Failure(err.Error()))
+		ginContext.ReplyBadRequest(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	filePath := common.CurrentPath + initializers.PortalCfg.PluginDir + plugin.PluginUUID + initializers.PortalCfg.DirFlag
+	if IsDebug {
+		fmt.Println(filePath)
+		common.LogServ.Debug(filePath)
+	}
 	ctx.FileAttachment(filePath+plugin.PluginFile, plugin.PluginFile)
 }
 func GetPluginNameList(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.GetPluginNameList())
+	ginContext.Reply(IsDebug, plugin.GetPluginNameList())
 }
 
 // PubPlugin PubPlugin 将插件发布到指定host中
 func PubPlugin(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
-		//ctx.JSON(http.StatusUnauthorized, utils.Failure(err.Error()))
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	// 修改插件发布信息
-	ctx.JSON(http.StatusOK, plugin.PublishPlugin(ctx.Param("hostUUID")))
+	ginContext.Reply(IsDebug, plugin.PublishPlugin(ginContext.GetParam("hostUUID")))
 }
 
 // TakeDown 将指定插件下架
 func TakeDown(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	err := common.CheckRequest(ctx, &plugin)
-	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+	var err error
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&plugin); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
+	ginContext.Reply(IsDebug, plugin.TakeDownPlugin())
 
 }
 
@@ -270,8 +297,9 @@ func TakeDown(ctx *gin.Context) {
 func GetHosts(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	var err error
-	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
+	ginContext := common.NewGinContext(ctx)
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return
 	}
-	ctx.JSON(http.StatusOK, plugin.GetHostList())
+	ginContext.Reply(IsDebug, plugin.GetHostList())
 }

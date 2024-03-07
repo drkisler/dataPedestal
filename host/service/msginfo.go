@@ -8,6 +8,39 @@ import (
 	"github.com/drkisler/dataPedestal/universal/messager"
 )
 
+var errBuffer map[string]*common.TResponse
+
+func init() {
+	errBuffer = make(map[string]*common.TResponse)
+}
+
+type THeartBeat struct {
+	HostUUID    string `json:"hostUUID"`
+	HostName    string `json:"hostName"`
+	HostIp      string `json:"hostIp"`
+	MessagePort string `json:"message_port"`
+	FilePort    string `json:"file_port"`
+}
+
+func GetHandleFileResult(binUUid []byte) []byte {
+	pluginUUID := string(binUUid)
+	result, ok := errBuffer[pluginUUID]
+	if ok {
+		delete(errBuffer, pluginUUID)
+		data, _ := json.Marshal(result)
+		return data
+	}
+	result, ok = errBuffer["NULL"]
+	if ok {
+		delete(errBuffer, "NULL")
+		data, _ := json.Marshal(result)
+		return data
+	}
+
+	data, _ := json.Marshal(common.Ongoing())
+	return data
+}
+
 // HandleOperate 处理门户发来的操作请求
 func HandleOperate(msg []byte) []byte {
 	result, _ := json.Marshal(common.Failure("指令格式错误"))
@@ -37,19 +70,21 @@ func HandleOperate(msg []byte) []byte {
 		return DelOldLog(msg[1:])
 	case messager.OperateDelLog:
 		return DelLog(msg[1:])
+	case messager.OperateGetPubError:
+		return GetHandleFileResult(msg[1:])
 	default:
 		return result
 	}
 
 }
 
-/*func HandleResult(data []byte) []byte {
-	return data
-}*/
-
 func HandleReceiveFile(meta *fileService.TFileMeta, err error) {
 	if err != nil {
-		common.LogServ.Error(err)
+		if meta.FileUUID == "" {
+			errBuffer["NULL"] = common.Failure(err.Error())
+			return
+		}
+		errBuffer[meta.FileUUID] = common.Failure(err.Error())
 		return
 	}
 	var plugin control.TPluginControl
@@ -59,6 +94,8 @@ func HandleReceiveFile(meta *fileService.TFileMeta, err error) {
 	plugin.PluginConfig = meta.FileConfig
 	plugin.SerialNumber = meta.SerialNumber
 	if err = plugin.InsertPlugin(); err != nil {
-		common.LogServ.Error(err)
+		errBuffer[meta.FileUUID] = common.Failure(err.Error())
+		return
 	}
+	errBuffer[meta.FileUUID] = common.Success(nil)
 }
