@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/module"
+	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/hashicorp/go-plugin"
 	"os/exec"
 	"sync"
@@ -38,7 +39,9 @@ func RunPlugins() {
 		return
 	}
 	for _, item := range plugins {
-		if req, err = NewPlugin(item.SerialNumber, item.GetPluginFilePath()); err != nil {
+
+		if req, err = NewPlugin(item.SerialNumber,
+			common.GenFilePath(initializers.HostConfig.PluginDir, item.PluginUUID, item.PluginFile)); err != nil {
 			common.LogServ.Error("RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
 			return
 		}
@@ -86,25 +89,27 @@ func CheckPluginExists(UUID string) bool {
 	_, ok := pluginList[UUID]
 	return ok
 }
-func LoadPlugin(UUID, serialNumber, pluginFile, config string) error {
+func LoadPlugin(UUID, serialNumber, pluginFile, config string) (int32, error) {
 	if CheckPluginExists(UUID) {
-		return fmt.Errorf("%s is loaded", pluginFile)
+		return -1, fmt.Errorf("该插件已经加载")
 	}
 	req, err := NewPlugin(serialNumber, pluginFile)
 	if err != nil {
-		return err
+		return -1, err
 	}
+	//插件加载的时候需要返回插件运行的端口，如果有的话
 	resp := req.ImpPlugin.Load(config)
 	if resp.Code < 0 {
 		req.Close()
-		return fmt.Errorf("加载插件失败:%s", resp.Info)
+		return -1, fmt.Errorf("加载插件失败:%s", resp.Info)
 	}
+	req.PluginPort = resp.Code
 	pluginList[UUID] = req
-	return nil
+	return resp.Code, nil
 }
-func UnloadPlugin(UUID, pluginFile string) error {
+func UnloadPlugin(UUID string) error {
 	if !CheckPluginExists(UUID) {
-		return fmt.Errorf("%s is not loaded", pluginFile)
+		return fmt.Errorf("该插件未加载")
 	}
 	req := pluginList[UUID]
 	runStatus := req.ImpPlugin.Running().Info

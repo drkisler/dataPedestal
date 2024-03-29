@@ -117,11 +117,11 @@ func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterColumn []stri
 	if err := chc.Client.Do(chc.Ctx, ch.Query{Body: strBody, Result: result}); err != nil {
 		return nil, err
 	}
-	var filtervalue []string
+	var filterValue []string
 	for _, colStr := range filterData {
 		if colStr.Rows() > 0 {
-			filtervalue = append(filtervalue, colStr.Row(0))
+			filterValue = append(filterValue, colStr.Row(0))
 		}
 	}
-	return filtervalue, nil
+	return filterValue, nil
 }

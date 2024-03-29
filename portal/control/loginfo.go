@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/portal/module"
 	"github.com/drkisler/dataPedestal/universal/messager"
 )
 
@@ -35,26 +36,34 @@ func (log *TLogControl) CheckValid() error {
 func (log *TLogControl) OperateLog(opType messager.OperateType) *common.TResponse {
 	var err error
 	var logData []byte
+	var recvData []byte
 	if logData, err = json.Marshal(log); err != nil {
 		return common.Failure(err.Error())
 	}
 
 	//获取UUID所在的Host
-
-	pluginInfo := Survey.GetPluginInfoByPluginUUID(log.PluginUUID)
-	if pluginInfo != nil {
-		if pluginInfo.PluginPort < 0 {
-			return common.Failure("当前插件需要加载")
-		}
-		var data []byte
-		url := fmt.Sprintf("tcp://%s:%d", pluginInfo.HostInfo.HostIP, pluginInfo.HostInfo.MessagePort)
-		//向Host发送请求
-		var result common.TResponse
-		if data, err = MsgClient.Send(url, opType, logData); err != nil {
-			return common.Failure(err.Error())
-		}
-		_ = json.Unmarshal(data, &result)
-		return &result
+	var plugin module.TPlugin
+	if err = plugin.InitByUUID(); err != nil {
+		return common.Failure(err.Error())
 	}
-	return common.Failure("当前插件需要发布")
+	if plugin.HostUUID == "" {
+		return common.Failure("当前插件未部署")
+	}
+
+	host, err := Survey.GetHostInfoByID(plugin.HostUUID)
+	if err != nil {
+		return common.Failure(err.Error())
+	}
+	if host.IsExpired() {
+		return common.Failure(fmt.Sprintf("%s已经离线", host.ActiveHost.HostUUID))
+	}
+	url := fmt.Sprintf("tcp://%s:%d", host.ActiveHost.HostIP, host.ActiveHost.MessagePort)
+	//向Host发送请求
+	var result common.TResponse
+	if recvData, err = MsgClient.Send(url, opType, logData); err != nil {
+		return common.Failure(err.Error())
+	}
+	_ = json.Unmarshal(recvData, &result)
+	return &result
+
 }

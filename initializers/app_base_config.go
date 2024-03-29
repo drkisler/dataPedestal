@@ -10,15 +10,16 @@ type IConfigLoader interface {
 	SetDefault()
 }
 type TAppBaseConfig struct {
-	IsDebug     bool   `toml:"is_debug"`
-	ServicePort int32  `toml:"service_port"`
-	DirFlag     string `toml:"dir_flag"`
+	IsDebug     bool  `toml:"is_debug"`
+	ServicePort int32 `toml:"service_port"`
+	//DirFlag     string `toml:"dir_flag"`
+	filePath string
 }
 
 func (cfg *TAppBaseConfig) SetDefault() {
 	cfg.IsDebug = false
 	cfg.ServicePort = 8080
-	cfg.DirFlag = "/"
+	//cfg.DirFlag = "/"
 }
 
 func (cfg *TAppBaseConfig) LoadConfig(cfgDir, cfgFile string, config IConfigLoader) error {
@@ -34,10 +35,10 @@ func (cfg *TAppBaseConfig) LoadConfig(cfgDir, cfgFile string, config IConfigLoad
 		}
 	}
 	// check the config file exists if not create
-	cfgFullFile := cfgDir + cfgFile
-	if _, err := os.Stat(cfgFullFile); err != nil {
+	cfg.filePath = cfgDir + os.Getenv("MY_DIR") + cfgFile
+	if _, err := os.Stat(cfg.filePath); err != nil {
 		if os.IsNotExist(err) {
-			file, fileErr := os.Create(cfgFullFile)
+			file, fileErr := os.Create(cfg.filePath)
 			if fileErr != nil {
 				return fileErr
 			}
@@ -54,8 +55,18 @@ func (cfg *TAppBaseConfig) LoadConfig(cfgDir, cfgFile string, config IConfigLoad
 			return err
 		}
 	}
-	if _, err := toml.DecodeFile(cfgFullFile, config); err != nil {
+	if _, err := toml.DecodeFile(cfg.filePath, config); err != nil {
 		return err
 	}
 	return nil
+}
+func (cfg *TAppBaseConfig) Update(config IConfigLoader) error {
+	file, err := os.OpenFile(cfg.filePath, os.O_RDWR, 0666)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	return toml.NewEncoder(file).Encode(config)
 }

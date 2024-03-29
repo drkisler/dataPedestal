@@ -1,7 +1,10 @@
 package control
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"sync"
@@ -13,6 +16,12 @@ type THeartBeat struct {
 	msgClient *messager.TMessageClient
 	status    common.TStatus
 	wg        *sync.WaitGroup
+}
+
+type TCheckPlugin struct {
+	PluginUUID   string `json:"plugin_uuid,omitempty"`
+	PluginConfig string `json:"plugin_config,omitempty"`
+	RunType      string `json:"run_type,omitempty"`
 }
 
 func NewHeartBeat() (*THeartBeat, error) {
@@ -52,39 +61,91 @@ func (hb *THeartBeat) run(wg *sync.WaitGroup) {
 			continue
 		}
 		iCnt = 0
-
-		var pluginCtl TPluginControl
-		ArrData, Total, _ := pluginCtl.GetPluginList()
-		if Total == 0 {
-			if _, err := hb.msgClient.Send(
-				initializers.HostConfig.SurveyUrl,
-				1,
-				common.ToPluginHostBytes(nil, hb.hostInfo),
-			); err != nil {
-				common.LogServ.Error(err)
-			}
-			continue
-		}
-
-		pluginPort := make(map[string]int32)
-		for _, pluginItem := range ArrData {
-			var port int32 = -1 //默认端口为-1，表示未加载
-			if CheckPluginExists(pluginItem.PluginUUID) {
-				port = 0 //端口为-1，表示已加载未运行
-				if pluginList[pluginItem.PluginUUID].Running() {
-					port = pluginList[pluginItem.PluginUUID].PluginPort // 端口>0，表示已运行
-				}
-			}
-			pluginPort[pluginItem.PluginUUID] = port
-		}
 		if _, err := hb.msgClient.Send(
 			initializers.HostConfig.SurveyUrl,
-			1,
-			common.ToPluginHostBytes(&pluginPort, hb.hostInfo),
+			messager.OperateHeartBeat,
+			hb.hostInfo.ToByte(),
 		); err != nil {
 			common.LogServ.Error(err)
 		}
 
 	}
 
+}
+
+func (hb *THeartBeat) CheckPlugin() error {
+	var data []byte
+	var err error
+	if data, err = hb.msgClient.Send(
+		initializers.HostConfig.SurveyUrl,
+		messager.OperateCheckPlugin,
+		[]byte(initializers.HostConfig.HostUUID),
+	); err != nil {
+		return err
+	}
+	var plugins []TCheckPlugin
+	var resp common.TResponse
+	if err = json.Unmarshal(data, &resp); err != nil {
+		return err
+	}
+	if resp.Code < 0 {
+		return fmt.Errorf(resp.Info)
+	}
+
+	if resp.Data.Total == 0 {
+		if err = module.ClearPlugin(); err != nil {
+			return err
+		}
+	} else {
+		for _, v := range resp.Data.ArrData.([]interface{}) {
+			var item = v.(map[string]interface{})
+			plugin := TCheckPlugin{
+				PluginUUID:   item["plugin_uuid"].(string),
+				PluginConfig: item["plugin_config"].(string),
+				RunType:      item["run_type"].(string),
+			}
+			plugins = append(plugins, plugin)
+		}
+		// 先删除不存在的PluginUUID
+		var dbs *module.TStorage
+		var mdb *module.TStorage
+		if mdb, err = module.GetMemServ(); err != nil {
+			return err
+		}
+		if dbs, err = module.GetMemServ(); err != nil {
+			return err
+		}
+
+		var ids []string
+		if ids, err = mdb.GetPluginUUIDs(); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			var exist = false
+			for _, plugin := range plugins {
+				if id == plugin.PluginUUID {
+					if err = mdb.ModifyPlugins(plugin.PluginUUID, plugin.PluginConfig, plugin.RunType); err != nil {
+						return err
+					}
+					if err = dbs.ModifyPlugins(plugin.PluginUUID, plugin.PluginConfig, plugin.RunType); err != nil {
+						return err
+					}
+					exist = true
+					break
+				}
+			}
+			if !exist {
+				var ctl TPluginControl
+				ctl.PluginUUID = id
+				if err = ctl.InitByUUID(); err != nil {
+					return err
+				}
+				if err = ctl.DelPlugin(); err != nil {
+					return err
+				}
+			}
+		}
+
+	}
+	return nil
 }

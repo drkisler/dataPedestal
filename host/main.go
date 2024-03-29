@@ -51,27 +51,40 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 }
 
 func main() {
-
 	gob.Register([]common.TLogInfo{})
 	var err error
-	// get current path
-	common.CurrentPath, err = os.Executable()
+	currentPath, err := os.Executable()
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 	pathSeparator := string(os.PathSeparator)
-	arrDir := strings.Split(common.CurrentPath, pathSeparator)
-	arrDir[len(arrDir)-1] = ""
-	common.CurrentPath = strings.Join(arrDir, pathSeparator)
+	arrDir := strings.Split(currentPath, pathSeparator)
+	arrDir = arrDir[:len(arrDir)-1]
+	currentPath = strings.Join(arrDir, pathSeparator)
+	if err = os.Setenv("MY_PATH", currentPath); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+	if err = os.Setenv("MY_DIR", pathSeparator); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 
 	// region 读取配置文件
-	if err = initializers.HostConfig.LoadConfig(fmt.Sprintf("%s%s%s", common.CurrentPath, "config", pathSeparator), "config.toml"); err != nil {
+
+	if err = initializers.HostConfig.LoadConfig(common.GenFilePath("config"), "config.toml"); err != nil {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
+	default_key, err := initializers.HostConfig.GetDefaultKey()
+	if err != nil {
+		fmt.Printf("读取配置文件失败：%s", err.Error())
+		os.Exit(1)
+	}
+	_ = os.Setenv("default_key", default_key)
 	// endregion
-	common.NewLogService(common.CurrentPath, pathSeparator,
+	common.NewLogService(currentPath, pathSeparator,
 		initializers.HostConfig.InfoDir,
 		initializers.HostConfig.WarnDir,
 		initializers.HostConfig.ErrorDir,
@@ -86,8 +99,6 @@ func main() {
 		fmt.Printf("创建心跳监测服务失败：%s", err.Error())
 		os.Exit(1)
 	}
-	hb.Start()
-	defer hb.Stop()
 
 	// endregion
 
@@ -113,36 +124,58 @@ func main() {
 	// endregion
 
 	// region 初始化数据库
-	//module.DbFilePath = (*files.FileDirs)[common.DATABASE_TATH]
-	module.DbFilePath = fmt.Sprintf("%s%s%s", common.CurrentPath, initializers.HostConfig.DataDir, pathSeparator)
+	module.DbFilePath = common.GenFilePath(initializers.HostConfig.DataDir) + os.Getenv("MY_DIR")
 	dbs, err := module.GetDbServ()
 	if err != nil {
 		fmt.Printf("初始化数据库失败：%s", err.Error())
 		os.Exit(1)
 	}
+	plugins, err := dbs.GetPluginList()
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 	defer func() {
 		_ = dbs.CloseDB()
 	}()
-	// endregion
 
+	mdb, err := module.GetMemServ()
+	if err != nil {
+		fmt.Printf("初始化数据库失败：%s", err.Error())
+		os.Exit(1)
+	}
+	for _, item := range plugins {
+		if err = mdb.AddPlugin(&item); err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+	}
+	defer func() {
+		_ = mdb.Close()
+	}()
+
+	// endregion
+	// 启动插件前先对账
+	if err = hb.CheckPlugin(); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+	hb.Start()
+	defer hb.Stop()
 	// region 自动启动相关插件
 	control.RunPlugins()
 	// endregion
-	/*	if len(os.Args) > 1 {
-		if os.Args[1] == "test" {
-			//if err = control.LoadPlugin("02377678-70fd-46b9-b216-c9aa47f6aefd",
-			//	"224D02E8-7F8E-4332-82DF-5E403A9BA781", "/home/godev/go/output/host/plugin/02377678-70fd-46b9-b216-c9aa47f6aefd/pullmysql",
-			//	"{\"serial_number\": \"224D02E8-7F8E-4332-82DF-5E403A9BA781\"}"); err != nil {
-			//	fmt.Println(err.Error())
-			//}
-			var ctl control.TPluginControl
-			ctl.PluginUUID = "02377678-70fd-46b9-b216-c9aa47f6aefd"
-			result := ctl.GetPluginTmpCfg()
-			fmt.Println(*result)
+	/*
+		os.Setenv("key", "123")
 
-		}
-		return
-	}*/
+		//os.Chmod("/home/godev/go/output/host/plugin/02377678-70fd-46b9-b216-c9aa47f6aefd/pullmysql", 0777)
+
+			if err = control.LoadPlugin("02377678-70fd-46b9-b216-c9aa47f6aefd", "224D02E8-7F8E-4332-82DF-5E403A9BA781",
+			"/home/godev/go/output/host/plugin/02377678-70fd-46b9-b216-c9aa47f6aefd/pullmysql",
+			"{\"serial_number\": \"插件序列号\"}"); err != nil {
+			fmt.Println(err.Error())
+			return
+		}*/
 
 	// region 启动系统服务
 	srv, err := daemon.New(managerName, serverDesc, daemon.SystemDaemon)

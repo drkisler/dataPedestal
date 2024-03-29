@@ -1,10 +1,6 @@
 package control
 
-import (
-	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
-)
-
+/*
 type TPullColumn = module.TTableColumn
 type TPullColumnControl struct {
 	OperatorID   int32
@@ -89,3 +85,4 @@ func (tblCol *TTableColumn) SetFilterValues() *common.TResponse {
 	}
 	return common.Success(nil)
 }
+*/

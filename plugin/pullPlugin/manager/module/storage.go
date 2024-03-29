@@ -20,7 +20,9 @@ const checkPullTable = "Create " +
 	",key_col text not null" +
 	",buffer integer not null" + // 读取时的缓存
 	",status text not null default 'disabled' " + //停用 disabled 启用 enabled
-	",constraint pk_PullTable primary key(user_id,table_id));create " +
+	",constraint pk_PullTable primary key(user_id,table_id));" //+
+/*
+	"create " +
 	"table if not exists tableColumn(" +
 	"user_id integer not null" +
 	",table_id integer not null" +
@@ -32,6 +34,7 @@ const checkPullTable = "Create " +
 	",filter_value text not null" +
 	",constraint pk_table_column primary key(user_id,table_id,column_id)" +
 	");"
+*/
 
 var DbFilePath string
 var dbService *TStorage
@@ -81,14 +84,14 @@ func (dbs *TStorage) AddPullTable(pt *TPullTable) (int64, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
 	strSQL := "with cet_pull as(select table_id from PullTable where user_id=?)insert " +
-		"into PullTable(user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,Buffer) " +
+		"into PullTable(user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status) " +
 		"select ?,min(a.table_id)+1," +
-		"?,?,?,?,?,?,?,? from (select table_id from cet_pull union all select 0) a " +
+		"?,?,?,?,?,?,?,?,? from (select table_id from cet_pull union all select 0) a " +
 		"left join cet_pull b on a.table_id+1=b.table_id " +
 		"where b.table_id is null RETURNING table_id"
 
 	rows, err := dbs.Queryx(strSQL, pt.UserID, pt.UserID, pt.TableCode, pt.TableName, pt.DestTable,
-		pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer)
+		pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
 	if err != nil {
 		return -1, err
 	}
@@ -171,7 +174,6 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 		cnt++
 		result = append(result, p)
 	}
-
 	return result, cnt, nil
 }
 
@@ -284,6 +286,7 @@ func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 	return result, cnt, nil
 }
 
+/*
 func (dbs *TStorage) AddTableColumn(col *TTableColumn) (int64, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
@@ -475,3 +478,5 @@ func (dbs *TStorage) SetFilterValues(cols []TTableColumn) error {
 	_ = ctx.Commit()
 	return nil
 }
+
+*/

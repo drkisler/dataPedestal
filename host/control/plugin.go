@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/module"
+	"github.com/drkisler/dataPedestal/initializers"
 	"os"
 	"strings"
 )
@@ -38,7 +39,7 @@ func (c *TPluginControl) DeletePlugin() *common.TResponse {
 	if err = c.DelPlugin(); err != nil {
 		return common.Failure(err.Error())
 	}
-	if err = os.RemoveAll(c.GetPluginFolder()); err != nil {
+	if err = os.RemoveAll(common.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID)); err != nil {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
@@ -52,6 +53,75 @@ func (c *TPluginControl) UpdateConfig() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
+}
+
+func (c *TPluginControl) GenProductKey() *common.TResponse {
+	err := c.InitByUUID()
+	if err != nil {
+		return common.Failure(err.Error())
+	}
+	return common.ReturnStr(common.GenerateProductCode(c.PluginUUID))
+}
+
+func (c *TPluginControl) checkLicense() (string, bool) {
+	filePath := common.GenFilePath(initializers.HostConfig.PluginDir,
+		c.PluginUUID, c.PluginFile)
+	var err error
+	var serialNumber string
+	// 验证插件
+	if serialNumber, err = common.FileMD5(filePath); err != nil {
+		return err.Error(), false
+	}
+	if serialNumber != c.SerialNumber {
+		return "插件被篡改，禁止运行", false
+	}
+	strProductCode := common.GenerateProductCode(c.PluginUUID)
+	if c.ProductCode != strProductCode {
+		return "产品序列号错误,请确认服务器硬件是否改动", false
+	}
+
+	sn := common.GenerateLicenseCode(c.PluginUUID, c.ProductCode)
+	//验证LicenseCode
+	if sn == c.LicenseCode {
+		return "", true
+	}
+	return "授权码错误", false
+}
+
+func (c *TPluginControl) SetLicense() *common.TResponse {
+	if c.PluginUUID == "" || c.LicenseCode == "" {
+		return common.Failure("参数错误")
+	}
+	errString, ok := c.checkLicense()
+	if !ok {
+		return common.Failure(errString)
+	}
+
+	if err := c.AlterPluginLicense(); err != nil {
+		return common.Failure(err.Error())
+	}
+	return common.Success(nil)
+}
+
+func (c *TPluginControl) GetProductKey() *common.TResponse {
+	err := c.InitByUUID()
+	if err != nil {
+		return common.Failure(err.Error())
+	}
+	var result struct {
+		LicenseCode string `json:"license_code"`
+		ProductCode string `json:"product_code"`
+		IsValid     bool   `json:"is_valid"`
+	}
+	result.ProductCode = c.ProductCode
+	result.LicenseCode = c.LicenseCode
+	if result.ProductCode == "" || result.LicenseCode == "" {
+		result.IsValid = false
+		result.ProductCode = common.GenerateProductCode(c.PluginUUID)
+		return common.RespData(1, result, nil)
+	}
+	result.IsValid = common.GenerateLicenseCode(c.PluginUUID, result.ProductCode) == result.LicenseCode
+	return common.RespData(1, result, nil)
 }
 
 func (c *TPluginControl) SetRunType() *common.TResponse {
@@ -86,6 +156,32 @@ func (c *TPluginControl) GetPlugins() *common.TResponse {
 	return common.Success(&data)
 }
 
+func (c *TPluginControl) GetPluginPort() *common.TResponse {
+	var result []common.TPluginPort
+	var data common.TRespDataSet
+	ArrData, Total, err := c.GetPluginList()
+	if err != nil {
+		return common.Failure(err.Error())
+	}
+	//设置运行状态
+	for _, pluginItem := range ArrData {
+		var pluginPort common.TPluginPort
+		pluginPort.Port = -1
+		pluginPort.PluginUUID = pluginItem.PluginUUID
+		if CheckPluginExists(pluginItem.PluginUUID) {
+			pluginPort.Port = 0
+			if pluginList[pluginItem.PluginUUID].Running() {
+				pluginPort.Port = pluginList[pluginItem.PluginUUID].PluginPort
+			}
+		}
+
+		result = append(result, pluginPort)
+	}
+	data.ArrData = result
+	data.Total = int32(Total)
+	return common.Success(&data)
+}
+
 // UpdatePlugFileName 更新插件文件名称
 func (c *TPluginControl) UpdatePlugFileName() *common.TResponse {
 	if err := c.InitByUUID(); err != nil {
@@ -103,20 +199,30 @@ func (c *TPluginControl) UpdatePlugFileName() *common.TResponse {
 // LoadPlugin 加载插件
 func (c *TPluginControl) LoadPlugin() *common.TResponse {
 	var err error
+	var iPort int32
 	if err = c.InitByUUID(); err != nil {
 		return common.Failure(err.Error())
 	}
 	if c.PluginFile == "" {
 		return common.Failure("插件文件为空，请上传文件")
 	}
-
-	if err = LoadPlugin(c.PluginUUID, c.SerialNumber,
-		c.GetPluginFilePath(),
+	if c.LicenseCode == "" {
+		return common.Failure("该插件需要授权")
+	}
+	/*  todo
+	info, ok := c.checkLicense()
+	if !ok {
+		return common.Failure(info)
+	}
+	*/
+	//todo  c.SerialNumber,
+	c.SerialNumber = "123456"
+	if iPort, err = LoadPlugin(c.PluginUUID, c.SerialNumber,
+		common.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID, c.PluginFile),
 		c.PluginConfig); err != nil {
 		return common.Failure(err.Error())
 	}
-
-	return common.Success(nil)
+	return common.ReturnInt(int(iPort))
 }
 
 // UnloadPlugin 卸载插件不再运行
@@ -125,7 +231,7 @@ func (c *TPluginControl) UnloadPlugin() *common.TResponse {
 	if err := c.InitByUUID(); err != nil {
 		return common.Failure(err.Error())
 	}
-	if err := UnloadPlugin(c.PluginUUID, c.PluginFile); err != nil {
+	if err := UnloadPlugin(c.PluginUUID); err != nil {
 		return common.Failure(err.Error())
 	}
 
@@ -143,6 +249,7 @@ func (c *TPluginControl) RunPlugin() *common.TResponse {
 		return common.Failure(fmt.Sprintf("%s is running", c.PluginName))
 	}
 	result := plugin.ImpPlugin.Run()
+	//plugin.PluginPort = result.Port
 	return &result
 }
 func (c *TPluginControl) StopPlugin() *common.TResponse {
@@ -185,7 +292,7 @@ func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
 		c.PluginConfig = newCfg
 	}
 	plug, err := NewPlugin(c.SerialNumber,
-		c.GetPluginFilePath(),
+		common.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID, c.PluginFile),
 		//"/home/godev/go/output/host/plugin/test/pullmysql",
 	)
 	if err != nil {
@@ -193,7 +300,6 @@ func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
 	}
 	result := plug.ImpPlugin.GetConfigTemplate()
 	return &result
-
 }
 func (c *TPluginControl) GetLoadedPlugins() *common.TResponse {
 	if c.PluginType == "" {

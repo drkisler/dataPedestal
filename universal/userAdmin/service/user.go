@@ -55,6 +55,7 @@ func DeleteUser(ctx *gin.Context) {
 		return
 	}
 	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	ginContext.Reply(IsDebug, usr.DeleteUser())
@@ -68,6 +69,7 @@ func AddUser(ctx *gin.Context) {
 		return
 	}
 	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	ginContext.Reply(IsDebug, usr.AddUser())
@@ -93,6 +95,7 @@ func AlterUser(ctx *gin.Context) {
 		return
 	}
 	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	ginContext.Reply(IsDebug, usr.AlterUser())
@@ -117,6 +120,7 @@ func QueryUser(ctx *gin.Context) {
 		return
 	}
 	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	ginContext.Reply(IsDebug, usr.QueryUser())
@@ -141,6 +145,7 @@ func ResetPassword(ctx *gin.Context) {
 		return
 	}
 	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 
@@ -163,6 +168,7 @@ func CheckUser(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
 	ginContext := common.NewGinContext(ctx)
 	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
 		return
 	}
 	ginContext.Reply(IsDebug, common.ReturnInt(int(usr.UserID)))

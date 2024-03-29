@@ -1,5 +1,6 @@
 package module
 
+/*
 type TTableColumn struct {
 	UserID      int32  `json:"user_id,omitempty"`
 	TableID     int32  `json:"table_id,omitempty"`
@@ -68,3 +69,4 @@ func (col *TTableColumn) SetFilerVal(cols []TTableColumn) error {
 	}
 	return dbs.SetFilterValues(cols)
 }
+*/

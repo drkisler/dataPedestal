@@ -10,21 +10,15 @@ import (
 
 type TBasePlugin struct {
 	*common.TStatus
-	IsDebug      bool
-	Logger       *logAdmin.TLoggerAdmin
-	SerialNumber string
-	LicenseCode  string
+	IsDebug bool
+	Logger  *logAdmin.TLoggerAdmin
+	//LicenseCode string
 }
 
 // GetConfigTemplate 系统配置模板
 func (bp *TBasePlugin) GetConfigTemplate() common.TResponse {
 	var cfg initializers.TConfigure
 	cfg.IsDebug = false
-	cfg.SerialNumber = bp.SerialNumber
-	cfg.LicenseCode = bp.LicenseCode
-	if cfg.LicenseCode == "" {
-		cfg.LicenseCode = "授权码"
-	}
 	var result common.TResponse
 	result.Code = 0
 	data, err := json.Marshal(&cfg)
@@ -41,9 +35,9 @@ func (bp *TBasePlugin) Load(config string) common.TResponse {
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	if cfg.SerialNumber != bp.SerialNumber {
+	/*	if cfg.SerialNumber != bp.SerialNumber {
 		return *common.Failure("序列号错误，请确认是否授权")
-	}
+	}*/
 	bp.IsDebug = cfg.IsDebug
 	if bp.Logger, err = logAdmin.GetLogger(); err != nil {
 		return *common.Failure(err.Error())

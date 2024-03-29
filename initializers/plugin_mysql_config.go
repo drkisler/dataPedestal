@@ -17,12 +17,6 @@ type TMySQLConfig struct {
 }
 
 func (cfg *TMySQLConfig) CheckValid() error {
-	if cfg.SerialNumber == "" {
-		return errors.Errorf("%s 未配置", "序列号")
-	}
-	if cfg.LicenseCode == "" {
-		return errors.Errorf("%s 未配置", "许可证编号")
-	}
 	if cfg.ConnectString == "" {
 		return errors.Errorf("%s 未配置", "源数据库信息")
 	}

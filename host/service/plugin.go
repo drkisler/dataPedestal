@@ -2,11 +2,12 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/control"
 )
 
-// DeletePlugin 删除制定的插件
-func DeletePlugin(pluginUUID []byte) []byte {
+func RemovePlugin(pluginUUID []byte) []byte {
 	strUUID := string(pluginUUID)
 	var plugin control.TPluginControl
 	plugin.PluginUUID = strUUID
@@ -80,6 +81,46 @@ func UpdateConfig(pluginUUID []byte) []byte {
 	plugin.PluginUUID = string(pluginUUID[:36])
 	plugin.PluginConfig = string(pluginUUID[36:])
 	resp := plugin.UpdateConfig()
+	result, _ := json.Marshal(resp)
+	return result
+}
+
+func GetPluginPort() []byte {
+	var pl control.TPluginControl
+	resp := pl.GetPluginPort()
+	result, _ := json.Marshal(resp)
+	return result
+}
+
+func ShowMessage(source []byte) []byte {
+	fmt.Println(string(source))
+	return []byte{1}
+}
+
+func SetLicense(source []byte) []byte {
+	if len(source) != 36+19*2 {
+		resp := common.Failure("请提供正确的序列号和授权码格式")
+		result, _ := json.Marshal(resp)
+		return result
+	}
+	var pl control.TPluginControl
+	pl.PluginUUID = string(source[:36])
+	err := pl.InitByUUID()
+	if err != nil {
+		resp := common.Failure(err.Error())
+		result, _ := json.Marshal(resp)
+		return result
+	}
+	pl.ProductCode = string(source[36:55])
+	pl.LicenseCode = string(source[55:])
+	resp := pl.SetLicense()
+	result, _ := json.Marshal(resp)
+	return result
+}
+func GetProductKey(source []byte) []byte {
+	var pl control.TPluginControl
+	pl.PluginUUID = string(source)
+	resp := pl.GetProductKey()
 	result, _ := json.Marshal(resp)
 	return result
 }

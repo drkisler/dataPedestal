@@ -15,8 +15,6 @@ import (
 	"github.com/takama/daemon"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -39,11 +37,9 @@ func createAndStartGinService() {
 	r := gin.Default()
 	r.MaxMultipartMemory = 8 << 20
 
-	r.Any("/api/:uuid", reverseProxy("http://localhost:8080"))
-
 	r.POST("/login", usrServ.Login)
 	r.NoRoute(func(c *gin.Context) {
-		c.JSON(404, gin.H{"code": -1, "message": "api not found"})
+		c.JSON(404, gin.H{"code": -1, "message": "portal api not found:" + c.Request.URL.Path})
 	})
 
 	user := r.Group("/user")
@@ -56,29 +52,35 @@ func createAndStartGinService() {
 	user.POST("/checkUser", usrServ.CheckUser)
 	plugin := r.Group("/plugin")
 	plugin.Use(common.SetHeader, utils.AuthMiddleware)
-	plugin.POST("/delete", service.DeletePlugin)                 //删除插件
-	plugin.POST("/add", service.AddPlugin)                       // 新增插件
-	plugin.POST("/alter", service.AlterPlugin)                   //修改插件
-	plugin.POST("/get", service.QueryPlugin)                     //获取插件列表，含插件运行状态
-	plugin.POST("/setRunType", service.SetRunType)               //设置运行放松
-	plugin.POST("/upload", service.Upload)                       //上传插件
-	plugin.GET("/download", service.Download)                    //下载插件
-	plugin.POST("/updateConfig", service.UpdateConfig)           //修改配置
-	plugin.POST("/loadPlugin", service.LoadPlugin)               //加载插件
-	plugin.POST("/unloadPlugin", service.UnloadPlugin)           //卸载插件
-	plugin.POST("/runPlugin", service.RunPlugin)                 //运行插件
-	plugin.POST("/stopPlugin", service.StopPlugin)               //停止插件
-	plugin.POST("/getTempConfig", service.GetTempConfig)         //获取模板
-	plugin.POST("/getPluginNameList", service.GetPluginNameList) //获取加载后的插件列表
-	plugin.POST("/pubPlugin/:hostUUID", service.PubPlugin)
-	plugin.GET("/getHosts", service.GetHosts)
-	plugin.POST("/takeDown", service.TakeDown)
+	plugin.POST("/delete", service.DeletePlugin)                               //删除插件
+	plugin.POST("/add", service.AddPlugin)                                     // 新增插件
+	plugin.POST("/alter", service.AlterPlugin)                                 //修改插件
+	plugin.POST("/get", service.QueryPlugin)                                   //获取插件列表，含插件运行状态
+	plugin.POST("/setRunType", service.SetRunType)                             //设置运行放松
+	plugin.POST("/upload", service.Upload)                                     //上传插件
+	plugin.GET("/download", service.Download)                                  //下载插件
+	plugin.POST("/updateConfig", service.UpdateConfig)                         //修改配置
+	plugin.POST("/loadPlugin", service.LoadPlugin)                             //加载插件
+	plugin.POST("/unloadPlugin", service.UnloadPlugin)                         //卸载插件
+	plugin.POST("/runPlugin", service.RunPlugin)                               //运行插件
+	plugin.POST("/stopPlugin", service.StopPlugin)                             //停止插件
+	plugin.POST("/getTempConfig", service.GetTempConfig)                       //获取模板
+	plugin.POST("/getPluginNameList", service.GetPluginNameList)               //获取加载后的插件列表
+	plugin.POST("/pubPlugin/:hostUUID", service.PubPlugin)                     //部署插件
+	plugin.GET("/getHosts", service.GetHosts)                                  //获取主机清单
+	plugin.POST("/takeDown", service.TakeDown)                                 //取消部署
+	plugin.POST("/getProductKey", service.GetProductKey)                       //获取产品序列号
+	plugin.POST("/setLicenseCode/:productSN/:license", service.SetLicenseCode) //设置授权码
 	logs := r.Group("/logger")
 	logs.Use(common.SetHeader, utils.AuthMiddleware)
 	logs.POST("/getLogDate", service.GetLogDate)
 	logs.POST("/getLogInfo", service.GetLogInfo)
 	logs.POST("/delOldLog", service.DelOldLog)
 	logs.POST("/delLog", service.DelLog)
+	//r.Any("/plugins/:uuid/:route/:api", service.GetTargetUrl)
+	plugins := r.Group("/plugins")
+	plugins.Use(common.SetHeader, utils.AuthMiddleware)
+	plugins.Any("/:uuid/:route/:api", service.GetTargetUrl)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", initializers.PortalCfg.ServicePort),
@@ -103,17 +105,7 @@ func createAndStartGinService() {
 
 	common.LogServ.Info("Server Shutdown")
 }
-func reverseProxy(target string) gin.HandlerFunc {
-	remoteUrl, _ := url.Parse(target)
-	proxy := httputil.NewSingleHostReverseProxy(remoteUrl)
-	return func(c *gin.Context) {
-		c.Request.URL.Host = remoteUrl.Host
-		c.Request.URL.Scheme = remoteUrl.Scheme
-		c.Request.Header.Set("X-Forwarded-Host", c.Request.Header.Get("Host"))
-		c.Request.Host = remoteUrl.Host
-		proxy.ServeHTTP(c.Writer, c.Request)
-	}
-}
+
 func (serv *TManagerDaemon) Manage() (string, error) {
 	if len(os.Args) > 1 {
 		command := os.Args[1]
@@ -138,24 +130,43 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	return managerName + " exited", nil
 }
 func main() {
-	var err error
-	common.CurrentPath, err = os.Executable()
+	currentPath, err := os.Executable()
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 	pathSeparator := string(os.PathSeparator)
-	arrDir := strings.Split(common.CurrentPath, pathSeparator)
-	arrDir[len(arrDir)-1] = ""
-	common.CurrentPath = strings.Join(arrDir, pathSeparator)
+	arrDir := strings.Split(currentPath, pathSeparator)
+	arrDir = arrDir[:len(arrDir)-1]
+	currentPath = strings.Join(arrDir, pathSeparator)
+	if err = os.Setenv("MY_PATH", currentPath); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+	if err = os.Setenv("MY_DIR", pathSeparator); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 
 	// region 读取配置文件
-	if err = initializers.PortalCfg.LoadConfig(fmt.Sprintf("%s%s%s", common.CurrentPath, "config", pathSeparator), "config.toml"); err != nil {
+
+	if err = initializers.PortalCfg.LoadConfig(common.GenFilePath("config"), "config.toml"); err != nil {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
 
-	common.NewLogService(common.CurrentPath, pathSeparator,
+	filePath := common.GenFilePath(initializers.PortalCfg.PluginDir)
+	if _, err = os.Stat(filePath); err != nil {
+		if os.IsNotExist(err) {
+			err = os.Mkdir(filePath, 0766)
+			if err != nil {
+				fmt.Printf("创建目录%s出错:%s", filePath, err.Error())
+				os.Exit(1)
+			}
+		}
+	}
+
+	common.NewLogService(currentPath, pathSeparator,
 		initializers.PortalCfg.InfoDir,
 		initializers.PortalCfg.WarnDir,
 		initializers.PortalCfg.ErrorDir,
@@ -168,7 +179,8 @@ func main() {
 	service.IsDebug = initializers.PortalCfg.IsDebug
 
 	// region 初始化数据库
-	module.DbFilePath = fmt.Sprintf("%s%s%s", common.CurrentPath, initializers.PortalCfg.DataDir, pathSeparator)
+
+	module.DbFilePath = common.GenFilePath(initializers.PortalCfg.DataDir) + os.Getenv("MY_DIR")
 	dbs, err := module.GetDbServ()
 	if err != nil {
 		fmt.Printf("初始化数据库失败：%s", err.Error())
@@ -188,15 +200,6 @@ func main() {
 	// endregion
 
 	// region 创建并启动心跳检测服务
-	/*control.Survey, err = messager.NewVote(initializers.PortalCfg.SurveyUrl)
-	if err != nil {
-		fmt.Printf("创建心跳检测服务失败：%s", err.Error())
-		os.Exit(1)
-	}
-	control.Survey.Run()
-	defer control.Survey.Stop()*/
-	// region 创建并启动对话服务
-
 	msg, err := messager.NewMessageServer(initializers.PortalCfg.SurveyUrl,
 		control.Survey.HandleOperate)
 	if err != nil {

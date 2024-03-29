@@ -2,13 +2,13 @@ package module
 
 import (
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/initializers"
-	"strings"
 )
 
 type TPluginInfo = common.TPluginInfo
 type TPlugin struct {
 	TPluginInfo
+	LicenseCode string `json:"license_code"`
+	ProductCode string `json:"product_code"`
 }
 
 // ToByte 将 PluginUUID、PluginFile、RunType、PluginConfig 写入二进制串中,包括长度信息
@@ -30,24 +30,6 @@ func (p *TPlugin) ToByte() []byte {
 	appendData(p.RunType, true)
 	appendData(p.PluginConfig, false)
 	return result
-}
-
-func (p *TPlugin) GetPluginFilePath() string {
-	arrPath := strings.Split(common.CurrentPath, initializers.HostConfig.DirFlag)
-	if arrPath[len(arrPath)-1] == "" {
-		arrPath = arrPath[:len(arrPath)-1]
-	}
-	arrPath = append(arrPath, initializers.HostConfig.PluginDir, p.PluginUUID, p.PluginFile)
-	return strings.Join(arrPath, initializers.HostConfig.DirFlag)
-}
-
-func (p *TPlugin) GetPluginFolder() string {
-	arrPath := strings.Split(common.CurrentPath, initializers.HostConfig.DirFlag)
-	if arrPath[len(arrPath)-1] == "" {
-		arrPath = arrPath[:len(arrPath)-1]
-	}
-	arrPath = append(arrPath, initializers.HostConfig.PluginDir, p.PluginUUID)
-	return strings.Join(arrPath, initializers.HostConfig.DirFlag)
 }
 
 // FromByte 从二进制串中提取 PluginUUID、PluginFile、RunType、PluginConfig
@@ -79,7 +61,17 @@ func (p *TPlugin) AddPlugin() error {
 	if err != nil {
 		return err
 	}
-	return dbs.AddPlugin(p)
+	if err = dbs.AddPlugin(p); err != nil {
+		return err
+	}
+	mdb, err := GetMemServ()
+	if err != nil {
+		return err
+	}
+	if err = mdb.AddPlugin(p); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *TPlugin) DelPlugin() error {
@@ -87,11 +79,21 @@ func (p *TPlugin) DelPlugin() error {
 	if err != nil {
 		return err
 	}
-	return dbs.DeletePlugin(p.PluginUUID)
+	if err = dbs.DeletePlugin(p.PluginUUID); err != nil {
+		return err
+	}
+	mdb, err := GetMemServ()
+	if err != nil {
+		return err
+	}
+	if err = mdb.DeletePlugin(p.PluginUUID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *TPlugin) GetPluginList() ([]TPlugin, int, error) {
-	dbs, err := GetDbServ()
+	dbs, err := GetMemServ()
 	if err != nil {
 		return nil, -1, err
 	}
@@ -107,7 +109,18 @@ func (p *TPlugin) AlterRunType() error {
 	if err != nil {
 		return err
 	}
-	return dbs.AlterPluginRunType(p.PluginUUID, p.RunType)
+
+	if err = dbs.AlterPluginRunType(p.PluginUUID, p.RunType); err != nil {
+		return err
+	}
+	mdb, err := GetMemServ()
+	if err != nil {
+		return err
+	}
+	if err = mdb.AlterPluginRunType(p.PluginUUID, p.RunType); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *TPlugin) AlterFile() error {
@@ -115,11 +128,39 @@ func (p *TPlugin) AlterFile() error {
 	if err != nil {
 		return err
 	}
-	return dbs.AlterPluginFile(p.PluginUUID, p.PluginFile)
+	if err = dbs.AlterPluginFile(p.PluginUUID, p.PluginFile); err != nil {
+		return err
+	}
+	mdb, err := GetMemServ()
+	if err != nil {
+		return err
+	}
+	if err = mdb.AlterPluginFile(p.PluginUUID, p.PluginFile); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *TPlugin) AlterPluginLicense() error {
+	dbs, err := GetDbServ()
+	if err != nil {
+		return err
+	}
+	if err = dbs.AlterPluginLicense(p.PluginUUID, p.LicenseCode, p.ProductCode); err != nil {
+		return err
+	}
+	mdb, err := GetMemServ()
+	if err != nil {
+		return err
+	}
+	if err = mdb.AlterPluginLicense(p.PluginUUID, p.LicenseCode, p.ProductCode); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *TPlugin) InitByUUID() error {
-	dbs, err := GetDbServ()
+	dbs, err := GetMemServ()
 	if err != nil {
 		return err
 	}
@@ -131,13 +172,41 @@ func (p *TPlugin) AlterConfig() error {
 	if err != nil {
 		return err
 	}
-	return dbs.AlterPluginConfig(p.PluginUUID, p.PluginConfig)
+	if err = dbs.AlterPluginConfig(p.PluginUUID, p.PluginConfig); err != nil {
+		return err
+	}
+	mdb, err := GetMemServ()
+	if err != nil {
+		return err
+	}
+	if err = mdb.AlterPluginConfig(p.PluginUUID, p.PluginConfig); err != nil {
+		return err
+	}
+	return nil
 }
 
 func GetAutoRunPlugins() ([]TPlugin, error) {
-	dbs, err := GetDbServ()
+	dbs, err := GetMemServ()
 	if err != nil {
 		return nil, err
 	}
 	return dbs.GetAutoRunPlugins()
+}
+
+func ClearPlugin() error {
+	dbs, err := GetDbServ()
+	if err != nil {
+		return err
+	}
+	if err = dbs.ClearPlugin(); err != nil {
+		return err
+	}
+	mdb, err := GetMemServ()
+	if err != nil {
+		return err
+	}
+	if err = mdb.ClearPlugin(); err != nil {
+		return err
+	}
+	return nil
 }

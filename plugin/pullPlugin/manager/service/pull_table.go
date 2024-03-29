@@ -15,8 +15,10 @@ func Add(ctx *gin.Context) {
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
+	ptc.UserID = ptc.OperatorID
 	ctx.JSON(http.StatusOK, ptc.Add())
 }
 func Alter(ctx *gin.Context) {
@@ -27,8 +29,10 @@ func Alter(ctx *gin.Context) {
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
+	ptc.UserID = ptc.OperatorID
 	ctx.JSON(http.StatusOK, ptc.Alter())
 }
 func Delete(ctx *gin.Context) {
@@ -39,20 +43,26 @@ func Delete(ctx *gin.Context) {
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
+	ptc.UserID = ptc.OperatorID
 	ctx.JSON(http.StatusOK, ptc.Delete())
 }
-func Get(ctx *gin.Context) {
+func GetPullTables(ctx *gin.Context) {
 	var ptc ctl.TPullTableControl
 	err := common.CheckRequest(ctx, &ptc)
 	if err != nil {
 		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
+
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
+
+	ptc.UserID = ptc.OperatorID
 	ctx.JSON(http.StatusOK, ptc.Get())
 }
 func SetStatus(ctx *gin.Context) {
@@ -63,8 +73,10 @@ func SetStatus(ctx *gin.Context) {
 		return
 	}
 	if ptc.OperatorID, ptc.OperatorCode, err = common.GetOperater(ctx); err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
 		return
 	}
+	ptc.UserID = ptc.OperatorID
 	ctx.JSON(http.StatusOK, ptc.SetStatus())
 }
 

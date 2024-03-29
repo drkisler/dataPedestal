@@ -1,7 +1,9 @@
 package initializers
 
 import (
+	"github.com/drkisler/utils"
 	"github.com/google/uuid"
+	"strings"
 )
 
 var HostConfig THostConfig
@@ -20,6 +22,7 @@ type THostConfig struct {
 	InfoDir      string `toml:"info_dir"`
 	DebugDir     string `toml:"debug_dir"`
 	WarnDir      string `toml:"warn_dir"`
+	DefaultKey   string `toml:"default_key"`
 }
 
 func (cfg *THostConfig) SetDefault() {
@@ -36,7 +39,22 @@ func (cfg *THostConfig) SetDefault() {
 	cfg.InfoDir = "info"
 	cfg.DebugDir = "debug"
 	cfg.WarnDir = "warn"
+	enStr := utils.TEnString{String: "Enjoy0rZpJAcL6OnUsORc3XohRpIBUjy"}
+	cfg.DefaultKey = enStr.Encrypt(utils.GetDefaultKey())
 }
 func (cfg *THostConfig) LoadConfig(cfgDir, cfgFile string) error {
 	return cfg.TAppBaseConfig.LoadConfig(cfgDir, cfgFile, cfg)
+}
+func (cfg *THostConfig) GetDefaultKey() (string, error) {
+	cfg.DefaultKey = "Enjoy0rZpJAcL6OnUsORc3XohRpIBUjy"
+	strKey := cfg.DefaultKey
+	if strings.Contains(strKey, "Enjoy0r") {
+		enStr := utils.TEnString{String: strKey}
+		cfg.DefaultKey = enStr.Encrypt(utils.GetDefaultKey())
+		if err := cfg.Update(cfg); err != nil {
+			return "", err
+		}
+	}
+	enStr := utils.TEnString{String: cfg.DefaultKey}
+	return enStr.Decrypt(utils.GetDefaultKey()), nil
 }

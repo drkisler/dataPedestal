@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"os"
+	"strings"
 )
-
-var CurrentPath string
 
 type GinContext struct {
 	ctx *gin.Context
@@ -15,6 +15,16 @@ type GinContext struct {
 
 func NewGinContext(ctx *gin.Context) *GinContext {
 	return &GinContext{ctx: ctx}
+}
+
+func GenFilePath(paths ...string) string {
+	currentPath := os.Getenv("MY_PATH")
+	currentDir := os.Getenv("MY_DIR")
+	arrDir := strings.Split(currentPath, currentDir)
+	for _, path := range paths {
+		arrDir = append(arrDir, path)
+	}
+	return strings.Join(arrDir, currentDir)
 }
 
 func (g *GinContext) CheckRequest(target any) error {
@@ -67,10 +77,7 @@ func (g *GinContext) GetHeader(key string) string {
 func (g *GinContext) Reply(isDebug bool, value any) {
 	if isDebug {
 		strJson, _ := json.Marshal(value)
-		if isDebug {
-			LogServ.Debug(string(strJson))
-		}
-
+		LogServ.Debug(string(strJson))
 	}
 	g.ctx.JSON(200, value)
 }

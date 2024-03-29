@@ -10,9 +10,10 @@ type TPluginInfo = common.TPluginInfo
 type TPlugin struct {
 	UserID int32 `json:"user_id,omitempty"` //用于标识谁维护的插件
 	TPluginInfo
-	HostUUID string `json:"host_uuid,omitempty"`
-	HostName string `json:"host_name,omitempty"`
-	HostIP   string `json:"host_ip,omitempty"`
+	HostUUID   string `json:"host_uuid,omitempty"`
+	HostName   string `json:"host_name,omitempty"`
+	HostIP     string `json:"host_ip,omitempty"`
+	PluginPort int32  `json:"plugin_port,omitempty"`
 }
 
 func (p *TPlugin) PutPlugin() (string, error) {
@@ -21,6 +22,13 @@ func (p *TPlugin) PutPlugin() (string, error) {
 		return "", err
 	}
 	return dbs.PutPlugin(p)
+}
+
+func (p *TPlugin) ResetHost() error {
+	p.HostUUID = ""
+	p.HostName = ""
+	p.HostIP = ""
+	return p.ModifyHostInfo()
 }
 
 func (p *TPlugin) InitByUUID() error {
@@ -91,20 +99,26 @@ func (p *TPlugin) ModifyHostInfo() error {
 	return dbs.ModifyHostInfo(p)
 }
 
+func (p *TPlugin) ModifyPluginPort() error {
+	dbs, err := GetDbServ()
+	if err != nil {
+		return err
+	}
+	return dbs.ModifyPluginPort(p)
+}
+
 func (p *TPlugin) GetPluginNames() ([]TPluginInfo, int, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return nil, -1, err
 	}
 	return dbs.GetPluginNames(p)
-
 }
 
-/*func GetAutoRunPlugins() ([]TPlugin, error) {
+func (p *TPlugin) GetPluginByHostID() ([]TPlugin, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return nil, err
 	}
-	return dbs.GetAutoRunPlugins()
+	return dbs.GetPluginByHostID(p.HostUUID)
 }
-*/

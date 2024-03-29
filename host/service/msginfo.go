@@ -47,7 +47,7 @@ func HandleOperate(msg []byte) []byte {
 	operateType := msg[0]
 	switch operateType {
 	case messager.OperateDeletePlugin:
-		return DeletePlugin(msg[1:])
+		return RemovePlugin(msg[1:])
 	case messager.OperateGetTempConfig:
 		return GetTempConfig(msg[1:])
 	case messager.OperateSetRunType:
@@ -72,6 +72,14 @@ func HandleOperate(msg []byte) []byte {
 		return DelLog(msg[1:])
 	case messager.OperateGetPubError:
 		return GetHandleFileResult(msg[1:])
+	case messager.OperateGetPluginPort:
+		return GetPluginPort()
+	case messager.OperateSetLicense:
+		return SetLicense(msg[1:])
+	case messager.OperateGetProductKey:
+		return GetProductKey(msg[1:])
+	case messager.OperateShowMessage:
+		return ShowMessage(msg[1:])
 	default:
 		return result
 	}

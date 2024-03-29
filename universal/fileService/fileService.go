@@ -119,17 +119,15 @@ func ReceiveFile(conn net.Conn, folder string) (*TFileMeta, error) {
 		fileMeta.FileName = "os.Executable()"
 		return &fileMeta, err
 	}
-	dirFlag := "/"
-	if strings.Contains(currentPath, "\\") {
-		dirFlag = "\\"
-	}
+	dirFlag := string(os.PathSeparator)
+
 	arrPath := strings.Split(currentPath, dirFlag)
 	arrPath = arrPath[:len(arrPath)-1]
 	arrPath = append(arrPath, folder)
 	parentFolder := strings.Join(arrPath, dirFlag)
 	if _, err = os.Stat(parentFolder); err != nil {
 		if os.IsNotExist(err) {
-			err = os.Mkdir(parentFolder, 0755)
+			err = os.Mkdir(parentFolder, 0766)
 			if err != nil {
 				fileMeta.FileSize = -1
 				return &fileMeta, fmt.Errorf("创建目录%s出错:%s", parentFolder, err.Error())
@@ -140,7 +138,7 @@ func ReceiveFile(conn net.Conn, folder string) (*TFileMeta, error) {
 	pluginFolder := strings.Join(arrPath, dirFlag)
 	if _, err = os.Stat(pluginFolder); err != nil {
 		if os.IsNotExist(err) {
-			err = os.Mkdir(pluginFolder, 0755)
+			err = os.Mkdir(pluginFolder, 0766) //0766
 			if err != nil {
 				fileMeta.FileSize = -1
 				return &fileMeta, fmt.Errorf("创建目录%s出错:%s", pluginFolder, err.Error())
@@ -166,6 +164,11 @@ func ReceiveFile(conn net.Conn, folder string) (*TFileMeta, error) {
 		_ = file.Close()
 	}()
 	if _, err = io.CopyN(file, conn, fileMeta.FileSize); err != nil {
+		fileMeta.FileSize = -1
+		return &fileMeta, err
+	}
+
+	if err = os.Chmod(fileFullName, 0755); err != nil {
 		fileMeta.FileSize = -1
 		return &fileMeta, err
 	}
