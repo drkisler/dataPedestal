@@ -1,7 +1,5 @@
 package module
 
-var FuncSendInfo ISendInfo
-
 type TPullTable struct {
 	UserID    int32  `json:"user_id"`
 	TableID   int32  `json:"table_id"`
@@ -14,9 +12,6 @@ type TPullTable struct {
 	KeyCol    string `json:"key_col,omitempty"`
 	Buffer    int    `json:"buffer,omitempty"`
 	Status    string `json:"status,omitempty"`
-}
-type ISendInfo interface {
-	SendInfo(info string)
 }
 
 func (pt *TPullTable) Add() (int64, error) {

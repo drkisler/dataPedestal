@@ -35,10 +35,11 @@ type TMyPlugin struct {
 	//scheduler   gocron.Scheduler
 }
 
-func SendInfo(info string) {
+// todo
+/*func (mp *TMyPlugin) SendInfo(info string) {
 	_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(info))
 }
-
+*/
 func CreatePullMySQLPlugin() (common.IPlugin, error) {
 
 	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus()}}, nil
@@ -52,7 +53,10 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 		}
 	*/
 
-	_, _ = MsgClient.Send("tcp://127.0.0.1:8902", messager.OperateShowMessage, []byte("load"))
+	//_, _ = MsgClient.Send("tcp://127.0.0.1:8902", messager.OperateShowMessage, []byte("load"))
+
+	// todo
+	//module.FuncSendInfo = mp.SendInfo
 
 	logger, err := logAdmin.GetLogger()
 	if err != nil {
@@ -138,17 +142,17 @@ func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 
 // Run 启动程序，启动前必须先Load
 func (mp *TMyPlugin) Run() common.TResponse {
-	_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte("start run"))
+	//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte("start run"))
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
 		// todo
-		_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
+		//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
 		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 	if _, err = scheduler.NewJob(gocron.CronJob(mp.cronExpression, len(strings.Split(mp.cronExpression, " ")) > 5), gocron.NewTask(mp.workerProxy.Run)); err != nil {
 		// todo
-		_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
+		//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
 		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
@@ -167,7 +171,7 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	pull.POST("/alter", Alter)
 	pull.POST("/getPullTables", GetPullTables)
 	pull.POST("/setStatus", SetStatus)
-	pull.GET("/getTables", mp.GetSourceTables)
+	pull.GET("/getSourceTables", mp.GetSourceTables)
 	pull.GET("/getTableColumn", mp.GetTableColumns)
 
 	mp.serv = &http.Server{
@@ -176,11 +180,12 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	}
 	logger, err := logAdmin.GetLogger()
 	if err != nil {
-		_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
+		//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
 		return *common.Failure(err.Error())
 	}
-	logger.WriteInfo("插件已启动")
-	_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte("插件已启动端口："+fmt.Sprintf(":%d", mp.ServerPort)))
+	//mp.SendInfo("插件已启动")
+	//logger.WriteInfo("插件已启动")
+	//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte("插件已启动端口："+fmt.Sprintf(":%d", mp.ServerPort)))
 	go func() {
 		_ = mp.serv.ListenAndServe()
 	}()
@@ -202,6 +207,7 @@ func (mp *TMyPlugin) Run() common.TResponse {
 		logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
 	logger.WriteInfo("插件已停止")
+	//mp.SendInfo("插件已停止")
 	return *common.Success(nil)
 }
 

@@ -55,8 +55,14 @@ func main() {
 
 			// 1 * * * * *  每分钟的第一秒执行
 			// 5 * * * * * 每5秒执行一次
+			cfg := `{"is_debug": false,"connect_string": "sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true","dest_database": "Address=192.168.93.150:9000,Database=default,User=default,Password=Enjoy0r","keep_connect": false,"connect_buffer": 20,"data_buffer": 2000,"skip_hour": [0,1,2,3],"cron_expression": "1 * * * *","server_port": 8904}`
+			//replyUrl := "tcp://192.168.93.150:8902"
+			if resp := pl.Load(cfg); resp.Code < 0 {
+				fmt.Println(resp.Info)
+				return
 
-			pl.Load(`{"is_debug": false,"connect_string": "sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true","dest_database": "Address=192.168.93.150:9000,Database=default,User=default,Password=Enjoy0r","keep_connect": false,"connect_buffer": 20,"data_buffer": 2000,"skip_hour": [0,1,2,3],"cron_expression": "1 * * * *","server_port": 8902}`)
+			}
+
 			var wg sync.WaitGroup
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {

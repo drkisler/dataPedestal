@@ -140,11 +140,9 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 	defer dbs.Unlock()
 	var err error
 	var rows *sqlx.Rows
-	strSQL := "select " +
-		"user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status "
+	strSQL := "select user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status "
 	if pt.TableID > 0 {
-		strSQL += "from PullTable " +
-			"where user_id= ? and table_id = ?"
+		strSQL += "from PullTable where user_id= ? and table_id = ?"
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pt.TableID)
 	} else if pt.TableName != "" {
 		strSQL += "from (select * from PullTable where user_id= ? and table_name like '%" + pt.TableName + "%' order by table_id)t limit ? offset (?-1)*?"
@@ -153,9 +151,8 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 		strSQL += "from (select * from PullTable where user_id= ? and TableCode like '%" + pt.TableCode + "%'  order by table_id)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
 	} else {
-		strSQL += "from (select * from PullTable " +
-			"where user_id= ? order by table_id)t limit ? offset (?-1)*?"
-		rows, err = dbs.Queryx(strSQL, pt.UserID, pt.TableID, pageSize, pageIndex, pageSize)
+		strSQL += "from (select * from PullTable where user_id= ? order by table_id)t limit ? offset (?-1)*?"
+		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
 	}
 	if err != nil {
 		return nil, -1, err
@@ -174,6 +171,7 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 		cnt++
 		result = append(result, p)
 	}
+
 	return result, cnt, nil
 }
 
@@ -181,8 +179,7 @@ func (dbs *TStorage) AlterPullTable(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
-	var strSQL = "update " +
-		"PullTable set table_code=?,table_name=?,dest_table=?,select_sql=?,filter_col=?,filter_val=?,key_col=?,buffer=?,status=?  " +
+	var strSQL = "update PullTable set table_code=?,table_name=?,dest_table=?,select_sql=?,filter_col=?,filter_val=?,key_col=?,buffer=?,status=?  " +
 		"where user_id = ? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
@@ -202,8 +199,7 @@ func (dbs *TStorage) DeletePullTable(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
-	var strSQL = "delete " +
-		"from PullTable where user_id = ? and table_id= ? "
+	var strSQL = "delete from PullTable where user_id = ? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return err
@@ -221,8 +217,7 @@ func (dbs *TStorage) SetPullTableStatus(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
-	var strSQL = "update " +
-		"PullTable set status =? where user_id = ? and table_id= ? "
+	var strSQL = "update PullTable set status =? where user_id = ? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return err
@@ -240,8 +235,7 @@ func (dbs *TStorage) SetPullTableFilterValues(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
-	var strSQL = "update " +
-		"PullTable set filter_val =? where user_id = ? and table_id= ? "
+	var strSQL = "update PullTable set filter_val =? where user_id = ? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return err
@@ -261,8 +255,7 @@ func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 	defer dbs.Unlock()
 	var err error
 	var rows *sqlx.Rows
-	strSQL := "select " +
-		"user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status " +
+	strSQL := "select user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status " +
 		"from PullTable where status=?"
 	rows, err = dbs.Queryx(strSQL, "enabled")
 
