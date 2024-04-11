@@ -161,7 +161,7 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	r := gin.Default()
 	r.NoRoute(func(c *gin.Context) {
 
-		c.JSON(404, gin.H{"code": -1, "message": c.Request.Host + c.Request.URL.Path + "plugin api not found"})
+		c.JSON(404, gin.H{"code": -1, "message": c.Request.Host + c.Request.URL.Path + " plugin api not found"})
 	})
 
 	pull := r.Group("/pull")
