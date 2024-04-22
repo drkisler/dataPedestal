@@ -126,3 +126,11 @@ func (pw *TWorkerProxy) GetSourceTables(schema string) ([]clickHouse.TableInfo, 
 func (pw *TWorkerProxy) GetTableColumns(schemaName, tableName string) ([]clickHouse.ColumnInfo, error) {
 	return pw.worker.GetColumns(schemaName, tableName)
 }
+
+func (pw *TWorkerProxy) GenTableScript(schemaName, tableName string) (*string, error) {
+	return pw.worker.GenTableScript(schemaName, tableName)
+}
+
+func (pw *TWorkerProxy) GetDestTableNames() ([]string, error) {
+	return pw.clickHouseClient.GetTableNames()
+}

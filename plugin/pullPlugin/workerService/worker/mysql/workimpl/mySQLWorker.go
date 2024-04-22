@@ -82,17 +82,11 @@ func (mysql *TMySQLWorker) GetTables(schema string) ([]clickHouse.TableInfo, err
 	}
 	return data, nil
 }
-func (mysql *TMySQLWorker) GenTableScript(data *sql.Rows, tableName string) (*string, error) {
-	var strSchema, strTableName string
-	idx := strings.Index(tableName, ".")
-	if idx >= 0 {
-		strSchema = tableName[:idx]
-		strTableName = tableName[idx+1:]
-	} else {
-		strSchema = ""
-		strTableName = tableName
+func (mysql *TMySQLWorker) GenTableScript(schemaName, tableName string) (*string, error) {
+	if schemaName == "" {
+		schemaName = mysql.dbName
 	}
-	Cols, err := mysql.GetColumns(strSchema, strTableName)
+	Cols, err := mysql.GetColumns(schemaName, tableName)
 	if err != nil {
 		return nil, err
 	}
@@ -102,19 +96,24 @@ func (mysql *TMySQLWorker) GenTableScript(data *sql.Rows, tableName string) (*st
 			KeyColumns = append(KeyColumns, col.ColumnCode)
 		}
 	}
+	data, err := mysql.DataBase.Query(fmt.Sprintf("select * from %s.%s limit 0", schemaName, tableName))
+	if err != nil {
+		return nil, err
+	}
+
 	colType, err := data.ColumnTypes()
 	if err != nil {
 		return nil, err
 	}
 	var sb utils.StringBuffer
-	sb.AppendStr("CREATE TABLE IF NOT EXISTS ").AppendStr(strTableName)
+	sb.AppendStr("CREATE TABLE IF NOT EXISTS ").AppendStr(tableName)
 	isFirst := true
 	for _, col := range colType {
 		if isFirst {
-			sb.AppendStr("(").AppendStr(col.Name())
+			sb.AppendStr("(\n").AppendStr(col.Name())
 			isFirst = false
 		} else {
-			sb.AppendStr(",").AppendStr(col.Name())
+			sb.AppendStr("\n,").AppendStr(col.Name())
 		}
 		nullable, _ := col.Nullable()
 		dataType := col.DatabaseTypeName()
@@ -209,7 +208,7 @@ func (mysql *TMySQLWorker) GenTableScript(data *sql.Rows, tableName string) (*st
 	if len(KeyColumns) > 0 {
 		sb.AppendStr(fmt.Sprintf(" PRIMARY KEY(%s)", strings.Join(KeyColumns, ",")))
 	}
-	sb.AppendStr(")ENGINE=MergeTree --PARTITION BY toYYYYMM(datetimeColumnName) ORDER BY(orderColumn) ")
+	sb.AppendStr("\n)ENGINE=MergeTree --PARTITION BY toYYYYMM([datetimeColumnName]) ORDER BY([orderColumn]) ")
 	result := sb.String()
 	return &result, nil
 }

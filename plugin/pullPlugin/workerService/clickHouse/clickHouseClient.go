@@ -16,7 +16,7 @@ type IPullWorker interface {
 	GetColumns(schema, tableName string) ([]ColumnInfo, error)
 	GetTables(schema string) ([]TableInfo, error)
 	ReadData(strSQL, filter string) (*sql.Rows, error)
-	GenTableScript(data *sql.Rows, tableName string) (*string, error)
+	GenTableScript(schemaName, tableName string) (*string, error)
 	WriteData(tableName string, batch int, data *sql.Rows, client *TClickHouseClient) error
 }
 
@@ -100,6 +100,32 @@ func (chc *TClickHouseClient) LoadData(tableName string, data []proto.InputColum
 		return err
 	}
 	return nil
+}
+
+func (chc *TClickHouseClient) GetTableNames() ([]string, error) {
+	var resultData = make([]proto.ColStr, 1)
+	var result proto.Results
+	var resultCol proto.ResultColumn
+	resultCol.Name = "name"
+	resultCol.Data = &resultData[0]
+	result = append(result, resultCol)
+
+	strBody := fmt.Sprintf("select name from system.tables where database={database:String}")
+	if err := chc.Client.Do(chc.Ctx, ch.Query{Body: strBody,
+		Parameters: ch.Parameters(map[string]any{
+			"database": chc.Options.Database,
+		}),
+		Result: result}); err != nil {
+		return nil, err
+	}
+	var tableNames []string
+	for _, colStr := range resultData {
+		if colStr.Rows() > 0 {
+			tableNames = append(tableNames, colStr.Row(0))
+		}
+	}
+	return tableNames, nil
+
 }
 
 func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterColumn []string) ([]string, error) {

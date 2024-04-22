@@ -173,6 +173,8 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	pull.POST("/setStatus", SetStatus)
 	pull.GET("/getSourceTables", mp.GetSourceTables)
 	pull.GET("/getTableColumn", mp.GetTableColumns)
+	pull.GET("/getDestTables", mp.GetDestTables)
+	pull.GET("/getTableScript", mp.GetTableScript)
 
 	mp.serv = &http.Server{
 		Addr:    fmt.Sprintf(":%d", mp.ServerPort),
@@ -247,5 +249,34 @@ func (mp *TMyPlugin) GetTableColumns(ctx *gin.Context) {
 	data.ArrData = cols
 	data.Total = int32(len(cols))
 	ctx.JSON(http.StatusOK, common.Success(&data))
+	return
+}
+
+func (mp *TMyPlugin) GetDestTables(ctx *gin.Context) {
+	tables, err := mp.workerProxy.GetDestTableNames()
+	if err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		return
+	}
+	var data common.TRespDataSet
+	data.ArrData = tables
+	data.Total = int32(len(tables))
+	ctx.JSON(http.StatusOK, common.Success(&data))
+	return
+}
+
+func (mp *TMyPlugin) GetTableScript(ctx *gin.Context) {
+	strSchemaName := ctx.DefaultQuery("schema", "")
+	strTableName := ctx.Query("table")
+	if strTableName == "" {
+		ctx.JSON(http.StatusOK, common.Failure("table is empty"))
+		return
+	}
+	script, err := mp.workerProxy.GenTableScript(strSchemaName, strTableName)
+	if err != nil {
+		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		return
+	}
+	ctx.JSON(http.StatusOK, common.ReturnStr(*script))
 	return
 }

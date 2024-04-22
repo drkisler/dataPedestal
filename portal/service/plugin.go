@@ -377,8 +377,10 @@ func GetTargetUrl(ctx *gin.Context) {
 	// 通过pluginUUID获取Host信息
 	plugin.PluginUUID = strUUID
 	if err = plugin.InitByUUID(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure("请求的服务不存在，请确认相应的插件是否存在"))
 		return
 	}
+
 	// 组合成 HostIP:pluginPort/route 的形式
 	target := fmt.Sprintf("http://%s:%d/%s/%s", plugin.HostIP, plugin.PluginPort, route, api)
 	remoteUrl, err := url.Parse(target)

@@ -82,6 +82,7 @@ func main() {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
+	//将默认密钥写入环境变量
 	_ = os.Setenv("default_key", default_key)
 	// endregion
 	common.NewLogService(currentPath, pathSeparator,
