@@ -34,6 +34,7 @@ func (log *TLogControl) parsePluginRequester() (*TPluginRequester, error) {
 	var err error
 	var plugin TPluginControl
 	var pluginReq *TPluginRequester
+	plugin.PluginUUID = log.PluginUUID
 	if err = plugin.InitByUUID(); err != nil {
 		return nil, err
 	}
@@ -72,6 +73,7 @@ func (log *TLogControl) GetLogDate() *common.TResponse {
 	var pluginReq *TPluginRequester
 	var result common.TResponse
 	if pluginReq, err = log.parsePluginRequester(); err != nil {
+
 		return common.Failure(err.Error())
 	}
 	switch log.LogType {

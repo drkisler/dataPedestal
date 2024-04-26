@@ -43,6 +43,7 @@ func (log *TLogControl) OperateLog(opType messager.OperateType) *common.TRespons
 
 	//获取UUID所在的Host
 	var plugin module.TPlugin
+	plugin.PluginUUID = log.PluginUUID
 	if err = plugin.InitByUUID(); err != nil {
 		return common.Failure(err.Error())
 	}
@@ -63,6 +64,7 @@ func (log *TLogControl) OperateLog(opType messager.OperateType) *common.TRespons
 	if recvData, err = MsgClient.Send(url, opType, logData); err != nil {
 		return common.Failure(err.Error())
 	}
+
 	_ = json.Unmarshal(recvData, &result)
 	return &result
 

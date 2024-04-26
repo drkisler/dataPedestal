@@ -27,6 +27,18 @@ func GenFilePath(paths ...string) string {
 	return strings.Join(arrDir, currentDir)
 }
 
+func GetCurrentPath() (string, error) {
+	currentPath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	pathSeparator := string(os.PathSeparator)
+	arrDir := strings.Split(currentPath, pathSeparator)
+	arrDir = arrDir[:len(arrDir)-1]
+	currentPath = strings.Join(arrDir, pathSeparator)
+	return currentPath, nil
+}
+
 func (g *GinContext) CheckRequest(target any) error {
 	if err := g.ctx.ShouldBind(target); err != nil {
 		return err

@@ -44,6 +44,7 @@ func NewClickHouseClient(address, database, user, password string) (*TClickHouse
 		User:     user,
 		Password: password,
 	}
+
 	client, err := ch.Dial(ctx, options)
 	if err != nil {
 		return nil, err
@@ -53,10 +54,15 @@ func NewClickHouseClient(address, database, user, password string) (*TClickHouse
 	}
 	return &TClickHouseClient{ctx, client, options}, nil
 }
+
 func (chc *TClickHouseClient) CheckTableExists(tableName string) (bool, error) {
 	var data proto.ColUInt64
+	if err := chc.Connect(); err != nil {
+		return false, err
+	}
 	if err := chc.Client.Do(chc.Ctx, ch.Query{ //count(*)cnt
-		Body: "select count(*) cnt from system.tables where database={database:String} and name={name:String}",
+		Body: "select " +
+			"count(*) cnt from system.tables where database={database:String} and name={name:String}",
 		Parameters: ch.Parameters(map[string]any{
 			"database": chc.Options.Database,
 			"name":     tableName,
@@ -73,13 +79,15 @@ func (chc *TClickHouseClient) CloseConnect() error {
 	return chc.Client.Close()
 }
 
-func (chc *TClickHouseClient) ReConnect() error {
+func (chc *TClickHouseClient) Connect() error {
 	var err error
-	if chc.Client, err = ch.Dial(chc.Ctx, chc.Options); err != nil {
-		return err
-	}
-	if err = chc.Client.Ping(chc.Ctx); err != nil {
-		return nil
+	if chc.Client.IsClosed() {
+		if chc.Client, err = ch.Dial(chc.Ctx, chc.Options); err != nil {
+			return err
+		}
+		if err = chc.Client.Ping(chc.Ctx); err != nil {
+			return nil
+		}
 	}
 	return nil
 }
@@ -90,10 +98,11 @@ func (chc *TClickHouseClient) LoadData(tableName string, data []proto.InputColum
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("%s not exists", tableName)
+		return fmt.Errorf("tableName%s not exists", tableName)
 	}
 	if err = chc.Client.Do(chc.Ctx, ch.Query{
-		Body: fmt.Sprintf("INSERT INTO %s VALUES", tableName),
+		Body: fmt.Sprintf("INSERT"+
+			" INTO %s VALUES", tableName),
 		// Or "INSERT INTO test_table_insert (ts, severity_text, severity_number, body, name, arr) VALUES"
 		Input: data,
 	}); err != nil {
@@ -103,6 +112,9 @@ func (chc *TClickHouseClient) LoadData(tableName string, data []proto.InputColum
 }
 
 func (chc *TClickHouseClient) GetTableNames() ([]string, error) {
+	if err := chc.Connect(); err != nil {
+		return nil, err
+	}
 	var resultData = make([]proto.ColStr, 1)
 	var result proto.Results
 	var resultCol proto.ResultColumn
@@ -110,7 +122,8 @@ func (chc *TClickHouseClient) GetTableNames() ([]string, error) {
 	resultCol.Data = &resultData[0]
 	result = append(result, resultCol)
 
-	strBody := fmt.Sprintf("select name from system.tables where database={database:String}")
+	strBody := fmt.Sprintf("select" +
+		" name from system.tables where database={database:String}")
 	if err := chc.Client.Do(chc.Ctx, ch.Query{Body: strBody,
 		Parameters: ch.Parameters(map[string]any{
 			"database": chc.Options.Database,
@@ -129,6 +142,9 @@ func (chc *TClickHouseClient) GetTableNames() ([]string, error) {
 }
 
 func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterColumn []string) ([]string, error) {
+	if err := chc.Connect(); err != nil {
+		return nil, err
+	}
 	var filterData = make([]proto.ColStr, len(filterColumn))
 	var result proto.Results
 	for i, colName := range filterColumn {
@@ -139,7 +155,8 @@ func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterColumn []stri
 		resultCol.Data = &filterData[i]
 		result = append(result, resultCol)
 	}
-	strBody := fmt.Sprintf("select %s from %s", strings.Join(filterColumn, ","), tableName)
+	strBody := fmt.Sprintf("select "+
+		"%s from %s", strings.Join(filterColumn, ","), tableName)
 	if err := chc.Client.Do(chc.Ctx, ch.Query{Body: strBody, Result: result}); err != nil {
 		return nil, err
 	}

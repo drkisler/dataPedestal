@@ -21,7 +21,8 @@ const checkPluginExists = "Create Table " +
 var DbFilePath string
 var dbService *TStorage
 var memService *TStorage
-var once sync.Once
+
+//var once sync.Once
 
 type TStorage struct {
 	*sqlx.DB
@@ -36,6 +37,9 @@ func newDbServ() (*TStorage, error) {
 	db, err := sqlx.Open("sqlite3", connStr)
 	if err != nil {
 		return nil, err
+	}
+	if err = db.Ping(); err != nil {
+		return nil, fmt.Errorf("%s:%s", connStr, err.Error())
 	}
 	_, err = db.Exec(checkPluginExists)
 	if err != nil {
@@ -61,17 +65,21 @@ func newMemServ() (*TStorage, error) {
 	return &TStorage{db, &lock}, nil
 }
 
+// GetDbServ 如果dbService为空，则创建新的dbService
+// 如果dbService不为空，则直接返回dbService
 func GetDbServ() (*TStorage, error) {
-	var err error
-	once.Do(
-		func() {
-			dbService, err = newDbServ()
-			memService, err = newMemServ()
-		})
-	return dbService, err
+	if dbService == nil {
+		return newDbServ()
+	}
+	return dbService, nil
 }
 
+// GetMemServ 如果memService为空，则创建新的memService
+// 如果memService不为空，则直接返回memService
 func GetMemServ() (*TStorage, error) {
+	if memService == nil {
+		return newMemServ()
+	}
 	return memService, nil
 }
 

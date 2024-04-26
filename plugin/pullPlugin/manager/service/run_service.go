@@ -9,7 +9,6 @@ import (
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
-	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron/v2"
@@ -21,54 +20,33 @@ import (
 	"time"
 )
 
-// const SerialNumber = "224D02E8-7F8E-4332-82DF-5E403A9BA781"
 var SerialNumber string
-var MsgClient *messager.TMessageClient
+var PluginServ common.IPlugin
 
 type TBasePlugin = pluginBase.TBasePlugin
 type TMyPlugin struct {
 	TBasePlugin
-	ServerPort     int32
-	serv           *http.Server
-	workerProxy    *workerService.TWorkerProxy
-	cronExpression string
-	//scheduler   gocron.Scheduler
+	ServerPort  int32
+	serv        *http.Server
+	workerProxy *workerService.TWorkerProxy
+	//cronExpression string
 }
 
-// todo
-/*func (mp *TMyPlugin) SendInfo(info string) {
-	_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(info))
-}
-*/
 func CreatePullMySQLPlugin() (common.IPlugin, error) {
-
 	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus()}}, nil
 }
 
 // Load 根据配置信息设置属性，创建必要的变量
 func (mp *TMyPlugin) Load(config string) common.TResponse {
-	/*	key := os.Getenv("key")
-		if key != "" {
-			return *common.Failure(key)
-		}
-	*/
-
-	//_, _ = MsgClient.Send("tcp://127.0.0.1:8902", messager.OperateShowMessage, []byte("load"))
-
-	// todo
-	//module.FuncSendInfo = mp.SendInfo
-
 	logger, err := logAdmin.GetLogger()
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
 	mp.Logger = logger
-
 	if resp := mp.TBasePlugin.Load(config); resp.Code < 0 {
 		mp.Logger.WriteError(resp.Info)
 		return resp
 	}
-
 	var cfg initializers.TMySQLConfig
 	err = json.Unmarshal([]byte(config), &cfg)
 	if err != nil {
@@ -80,15 +58,6 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 		return *common.Failure(err.Error())
 	}
 	mp.ServerPort = cfg.ServerPort
-	/*	ok, err := common.VerifyCaptcha(SerialNumber, cfg.LicenseCode)
-		if err != nil {
-			mp.Logger.WriteError(err.Error())
-			return *common.Failure(err.Error())
-		}
-		if !ok {
-			mp.Logger.WriteError(cfg.LicenseCode + "验证未通过")
-			return *common.Failure(cfg.LicenseCode + "验证未通过")
-		}*/
 	if err = func(cronExp string) error {
 		var checkError error
 		var s gocron.Scheduler
@@ -96,6 +65,7 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 			return checkError
 		}
 		defer func() { _ = s.Shutdown() }()
+		// 校验cron表达式是否正确
 		if _, checkError = s.NewJob(
 			gocron.CronJob(cronExp, len(strings.Split(cronExp, " ")) > 5),
 			gocron.NewTask(
@@ -109,7 +79,6 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 		mp.Logger.WriteError(cfg.CronExpression + "校验未通过:" + err.Error())
 		return *common.Failure(cfg.CronExpression + "校验未通过:" + err.Error())
 	}
-	mp.cronExpression = cfg.CronExpression
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(&cfg, logger); err != nil {
 		mp.Logger.WriteError(err.Error())
@@ -142,25 +111,10 @@ func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 
 // Run 启动程序，启动前必须先Load
 func (mp *TMyPlugin) Run() common.TResponse {
-	//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte("start run"))
-	scheduler, err := gocron.NewScheduler()
-	if err != nil {
-		// todo
-		//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
-		mp.Logger.WriteError(err.Error())
-		return *common.Failure(err.Error())
-	}
-	if _, err = scheduler.NewJob(gocron.CronJob(mp.cronExpression, len(strings.Split(mp.cronExpression, " ")) > 5), gocron.NewTask(mp.workerProxy.Run)); err != nil {
-		// todo
-		//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
-		mp.Logger.WriteError(err.Error())
-		return *common.Failure(err.Error())
-	}
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.NoRoute(func(c *gin.Context) {
-
 		c.JSON(404, gin.H{"code": -1, "message": c.Request.Host + c.Request.URL.Path + " plugin api not found"})
 	})
 
@@ -185,38 +139,43 @@ func (mp *TMyPlugin) Run() common.TResponse {
 		//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte(err.Error()))
 		return *common.Failure(err.Error())
 	}
-	//mp.SendInfo("插件已启动")
-	//logger.WriteInfo("插件已启动")
-	//_, _ = MsgClient.Send("tcp://192.168.93.150:8902", messager.OperateShowMessage, []byte("插件已启动端口："+fmt.Sprintf(":%d", mp.ServerPort)))
+
 	go func() {
 		_ = mp.serv.ListenAndServe()
 	}()
-	scheduler.Start()
+	if err = mp.workerProxy.Start(); err != nil {
+		return *common.Failure(err.Error())
+	}
+
 	mp.SetRunning(true)
 	defer mp.SetRunning(false)
-
-	quit := make(chan os.Signal)
-	signal.Notify(quit, os.Interrupt)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt) //注册相关信号的接受器
+	//并发等待信号
 	select {
-	case <-mp.workerProxy.SignChan:
-	case <-quit:
-		_ = scheduler.Shutdown()
+	case <-mp.workerProxy.SignChan: //本插件发出停止信号
+	case <-quit: //操作系统发出退出信号
+		mp.workerProxy.StopScheduler()
+
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	if err = mp.serv.Shutdown(ctx); err != nil {
 		logger.WriteError(fmt.Sprintf("停止插件异常:%s", err.Error()))
 	}
+
 	logger.WriteInfo("插件已停止")
-	//mp.SendInfo("插件已停止")
 	return *common.Success(nil)
 }
 
 // Stop 停止程序，释放资源
 func (mp *TMyPlugin) Stop() common.TResponse {
+	mp.TBasePlugin.Stop()
+	// 停止长期任务，对于scheduler的停止，需要单独处理
 	mp.workerProxy.StopRun()
-	return *common.Success(nil)
+
+	return common.TResponse{Info: "success stop plugin"} //*common.Success(nil)
 }
 
 // GetSourceTables 从数据源中获取表清单

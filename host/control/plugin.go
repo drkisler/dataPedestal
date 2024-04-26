@@ -209,14 +209,11 @@ func (c *TPluginControl) LoadPlugin() *common.TResponse {
 	if c.LicenseCode == "" {
 		return common.Failure("该插件需要授权")
 	}
-	/*  todo
+
 	info, ok := c.checkLicense()
 	if !ok {
 		return common.Failure(info)
 	}
-	*/
-	//todo  c.SerialNumber,
-	c.SerialNumber = "123456"
 	if iPort, err = LoadPlugin(c.PluginUUID, c.SerialNumber,
 		common.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID, c.PluginFile),
 		c.PluginConfig); err != nil {
@@ -263,6 +260,7 @@ func (c *TPluginControl) StopPlugin() *common.TResponse {
 	var result common.TResponse
 	if plugin.ImpPlugin.Running().Info == "true" {
 		result = plugin.ImpPlugin.Stop()
+		fmt.Println(result.Info)
 		return &result
 	}
 	return common.Failure(fmt.Sprintf("%s is not running", c.PluginName))

@@ -96,7 +96,8 @@ func (mysql *TMySQLWorker) GenTableScript(schemaName, tableName string) (*string
 			KeyColumns = append(KeyColumns, col.ColumnCode)
 		}
 	}
-	data, err := mysql.DataBase.Query(fmt.Sprintf("select * from %s.%s limit 0", schemaName, tableName))
+	data, err := mysql.DataBase.Query(fmt.Sprintf("select "+
+		"* from %s.%s limit 0", schemaName, tableName))
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +173,24 @@ func (mysql *TMySQLWorker) GenTableScript(schemaName, tableName string) (*string
 			} else {
 				sb.AppendStr(" Float32")
 			}
+		case "DECIMAL":
+			var columnType proto.ColumnType
+			p, s, _ := col.DecimalSize()
+			switch {
+			case (1 <= p) && (p <= 9):
+				columnType = proto.ColumnTypeDecimal32
+			case (10 <= p) && (p <= 19):
+				columnType = proto.ColumnTypeDecimal64
+			case (19 <= p) && (p <= 38):
+				columnType = proto.ColumnTypeDecimal128
+			case (39 <= p) && (p <= 76):
+				columnType = proto.ColumnTypeDecimal256
+			}
+			if nullable {
+				sb.AppendStr(fmt.Sprintf(" Nullable(%s(%d))", columnType, s))
+			} else {
+				sb.AppendStr(fmt.Sprintf(" %s(%d)", columnType, p))
+			}
 		case "DOUBLE":
 			if nullable {
 				sb.AppendStr(" Nullable(Float64)")
@@ -185,10 +204,15 @@ func (mysql *TMySQLWorker) GenTableScript(schemaName, tableName string) (*string
 				sb.AppendStr(" Date")
 			}
 		case "DATETIME", "TIMESTAMP":
+
+			_, precision, ok := col.DecimalSize()
+			if !ok {
+				precision = 0
+			}
 			if nullable {
-				sb.AppendStr(" Nullable(DateTime)")
+				sb.AppendStr(fmt.Sprintf(" Nullable(DateTime64(%d))", precision))
 			} else {
-				sb.AppendStr(" DateTime")
+				sb.AppendStr(fmt.Sprintf(" DateTime64(%d)", precision))
 			}
 		case "BINARY":
 			if nullable {
@@ -206,13 +230,16 @@ func (mysql *TMySQLWorker) GenTableScript(schemaName, tableName string) (*string
 
 	}
 	if len(KeyColumns) > 0 {
-		sb.AppendStr(fmt.Sprintf(" PRIMARY KEY(%s)", strings.Join(KeyColumns, ",")))
+		sb.AppendStr(fmt.Sprintf("\n,PRIMARY KEY(%s)", strings.Join(KeyColumns, ",")))
 	}
 	sb.AppendStr("\n)ENGINE=MergeTree --PARTITION BY toYYYYMM([datetimeColumnName]) ORDER BY([orderColumn]) ")
 	result := sb.String()
 	return &result, nil
 }
 func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows, clickHouseClient *clickHouse.TClickHouseClient) error {
+	defer func() {
+		_ = data.Close()
+	}()
 	colType, err := data.ColumnTypes()
 	if err != nil {
 		return err
@@ -402,13 +429,54 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 		if err = data.Scan(scanArgs...); err != nil {
 			return err
 		}
-
 		for idx, col := range colType {
+			// 字符类型的数据转换成字符串
 			if !slices.Contains(notStringTypes, col.DatabaseTypeName()) {
 				if scanValue[idx] != nil {
-					scanValue[idx] = string(scanValue[idx].(sql.RawBytes))
+					scanValue[idx] = string(scanValue[idx].([]uint8)) //sql.RawBytes
 				}
 			}
+			switch col.DatabaseTypeName() {
+			case "INT", "MEDIUMINT":
+				if scanValue[idx] != nil {
+					switch v := scanValue[idx].(type) {
+					case int64:
+						scanValue[idx] = int32(v)
+					case uint64:
+						scanValue[idx] = int32(uint32(v))
+					case int32, uint32:
+						scanValue[idx] = v
+					case int16:
+						scanValue[idx] = int32(v)
+					case int8:
+						scanValue[idx] = int32(v)
+					default:
+						scanValue[idx] = v
+					}
+				}
+			case "TINYINT":
+				switch v := scanValue[idx].(type) {
+				case int64:
+					scanValue[idx] = int8(v)
+				case uint64:
+					scanValue[idx] = int8(uint8(v))
+				case int32:
+					scanValue[idx] = int8(v)
+				case uint32:
+					scanValue[idx] = int8(uint8(v))
+				case int16:
+					scanValue[idx] = int8(v)
+				case uint16:
+					scanValue[idx] = int8(uint8(v))
+				case int8:
+					scanValue[idx] = v
+				case uint8:
+					scanValue[idx] = int8(v)
+				default:
+					scanValue[idx] = v
+				}
+			}
+
 			if err = buffer[idx].Append(scanValue[idx]); err != nil {
 				return err
 			}
@@ -418,11 +486,9 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 			for i, val := range buffer {
 				clickHouseValue[i] = val.InPutData()
 			}
-
 			if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
 				return err
 			}
-
 			for _, val := range buffer {
 				val.Reset()
 			}

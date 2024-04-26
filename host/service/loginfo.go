@@ -19,7 +19,8 @@ func GetLogDate(data []byte) []byte {
 		result, _ := json.Marshal(common.Failure(err.Error()))
 		return result
 	}
-	result, _ := json.Marshal(log.GetLogDate)
+	logDate := log.GetLogDate()
+	result, _ := json.Marshal(logDate)
 	return result
 }
 
@@ -34,7 +35,7 @@ func GetLogInfo(data []byte) []byte {
 		result, _ := json.Marshal(common.Failure(err.Error()))
 		return result
 	}
-	result, _ := json.Marshal(log.GetLogInfo)
+	result, _ := json.Marshal(log.GetLogInfo())
 	return result
 }
 
@@ -49,7 +50,7 @@ func DelOldLog(data []byte) []byte {
 		result, _ := json.Marshal(common.Failure(err.Error()))
 		return result
 	}
-	result, _ := json.Marshal(log.DelOldLog)
+	result, _ := json.Marshal(log.DelOldLog())
 	return result
 }
 
@@ -64,6 +65,6 @@ func DelLog(data []byte) []byte {
 		result, _ := json.Marshal(common.Failure(err.Error()))
 		return result
 	}
-	result, _ := json.Marshal(log.DelLog)
+	result, _ := json.Marshal(log.DelLog())
 	return result
 }

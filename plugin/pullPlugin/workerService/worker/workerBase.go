@@ -65,8 +65,11 @@ func (db *TDatabase) ReadData(strSQL, filter string) (*sql.Rows, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	/*
+		调用方关闭
+		defer func() {
+			_ = rows.Close()
+		}()
+	*/
 	return rows, nil
 }

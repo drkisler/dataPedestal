@@ -148,7 +148,7 @@ func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex in
 		strSQL += "from (select * from PullTable where user_id= ? and table_name like '%" + pt.TableName + "%' order by table_id)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
 	} else if pt.TableCode != "" {
-		strSQL += "from (select * from PullTable where user_id= ? and TableCode like '%" + pt.TableCode + "%'  order by table_id)t limit ? offset (?-1)*?"
+		strSQL += "from (select * from PullTable where user_id= ? and table_code like '%" + pt.TableCode + "%'  order by table_id)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
 	} else {
 		strSQL += "from (select * from PullTable where user_id= ? order by table_id)t limit ? offset (?-1)*?"
@@ -204,6 +204,11 @@ func (dbs *TStorage) DeletePullTable(pt *TPullTable) error {
 	if err != nil {
 		return err
 	}
+
+	//fmt.Println(pt.UserID, pt.TableID)
+	//writeInfo(pt.UserID)
+	//writeInfo(pt.TableID)
+
 	_, err = ctx.Exec(strSQL, pt.UserID, pt.TableID)
 	if err != nil {
 		_ = ctx.Rollback()
@@ -269,7 +274,7 @@ func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 	var result []TPullTable
 	for rows.Next() {
 		var p TPullTable
-		if err = rows.Scan(&p.UserID, &p.TableID, &p.TableCode, &p.TableName, &p.SelectSql, &p.FilterCol, &p.FilterVal, &p.KeyCol, &p.Status); err != nil {
+		if err = rows.Scan(&p.UserID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol, &p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status); err != nil {
 			return nil, -1, err
 		}
 		cnt++
@@ -278,6 +283,27 @@ func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 
 	return result, cnt, nil
 }
+
+/*
+func writeInfo(val interface{}) {
+	data := []byte(fmt.Sprintf("%v", val))
+	// 目标文件路径
+	filePath := "/home/kisler/go/output/plugins/logs/info.txt"
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("打开文件时出错:", err)
+		return
+
+	}
+	defer file.Close()
+	_, err = file.Write(data)
+	if err != nil {
+		fmt.Println("写文件时出错:", err)
+		return
+	}
+
+}
+*/
 
 /*
 func (dbs *TStorage) AddTableColumn(col *TTableColumn) (int64, error) {

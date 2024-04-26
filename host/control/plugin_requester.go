@@ -128,7 +128,7 @@ func IndexPlugin(UUID, pluginFile string) (*TPluginRequester, error) {
 	defer pluginLock.Unlock()
 	result, ok := pluginList[UUID]
 	if !ok {
-		return nil, fmt.Errorf("%s not exists", pluginFile)
+		return nil, fmt.Errorf("plugin file %s not exists", pluginFile)
 	}
 	return result, nil
 }

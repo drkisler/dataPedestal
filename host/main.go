@@ -13,7 +13,6 @@ import (
 	"github.com/takama/daemon"
 	"os"
 	"os/signal"
-	"strings"
 )
 
 const (
@@ -52,16 +51,23 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 
 func main() {
 	gob.Register([]common.TLogInfo{})
-	var err error
-	currentPath, err := os.Executable()
+	/*
+		currentPath, err := os.Executable()
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+		pathSeparator := string(os.PathSeparator)
+		arrDir := strings.Split(currentPath, pathSeparator)
+		arrDir = arrDir[:len(arrDir)-1]
+		currentPath = strings.Join(arrDir, pathSeparator)
+	*/
+	currentPath, err := common.GetCurrentPath()
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 	pathSeparator := string(os.PathSeparator)
-	arrDir := strings.Split(currentPath, pathSeparator)
-	arrDir = arrDir[:len(arrDir)-1]
-	currentPath = strings.Join(arrDir, pathSeparator)
 	if err = os.Setenv("MY_PATH", currentPath); err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
@@ -124,8 +130,17 @@ func main() {
 	defer fs.Stop()
 	// endregion
 
+	//根据initializers.HostConfig.DataDir 检测 DataDir目录是否存在，如不存在则创建
+	strDataDir := common.GenFilePath(initializers.HostConfig.DataDir) + os.Getenv("MY_DIR")
+	if _, err = os.Stat(strDataDir); os.IsNotExist(err) {
+		if err = os.MkdirAll(strDataDir, 0777); err != nil {
+			fmt.Printf("创建DataDir目录失败：%s", err.Error())
+			os.Exit(1)
+		}
+	}
+
 	// region 初始化数据库
-	module.DbFilePath = common.GenFilePath(initializers.HostConfig.DataDir) + os.Getenv("MY_DIR")
+	module.DbFilePath = strDataDir
 	dbs, err := module.GetDbServ()
 	if err != nil {
 		fmt.Printf("初始化数据库失败：%s", err.Error())

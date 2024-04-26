@@ -243,7 +243,7 @@ func Download(ctx *gin.Context) {
 	}
 	plugin.PluginUUID = ginContext.GetQuery("uuid")
 	if plugin.PluginUUID == "" {
-		ginContext.ReplyBadRequest(IsDebug, common.Failure("需要提供插件名称"))
+		ginContext.ReplyBadRequest(IsDebug, common.Failure("需要提供插件ID"))
 		return
 	}
 	if plugin.OperatorID, plugin.OperatorCode, err = common.GetOperater(ctx); err != nil {
