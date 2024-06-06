@@ -34,6 +34,7 @@ func NewHeartBeat() (*THeartBeat, error) {
 		HostUUID:     initializers.HostConfig.HostUUID,
 		HostName:     initializers.HostConfig.SelfName,
 		HostIP:       initializers.HostConfig.SelfIP,
+		HostPort:     initializers.HostConfig.ServicePort,
 		MessagePort:  initializers.HostConfig.MessagePort,
 		FileServPort: initializers.HostConfig.FileServPort,
 	}

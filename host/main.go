@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/gob"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
@@ -10,9 +11,13 @@ import (
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/universal/fileService"
 	"github.com/drkisler/dataPedestal/universal/messager"
+	"github.com/drkisler/utils"
+	"github.com/gin-gonic/gin"
 	"github.com/takama/daemon"
+	"net/http"
 	"os"
 	"os/signal"
+	"time"
 )
 
 const (
@@ -43,25 +48,51 @@ func (wd *TWorkerDaemon) Manage() (string, error) {
 			return usageHelp, nil
 		}
 	}
+	createAndStartServ()
+	/*
+		quit := make(chan os.Signal)
+		signal.Notify(quit, os.Interrupt)
+		<-quit
+	*/
+	return fmt.Sprintf("%s exited", managerName), nil
+
+}
+func createAndStartServ() {
+	gin.SetMode(gin.ReleaseMode)
+	//启动服务
+	r := gin.Default()
+	r.MaxMultipartMemory = 8 << 20
+	r.Use(common.SetHeader, utils.AuthMiddleware)
+	r.Any("/:uuid/:api", service.PluginApi)
+	//r.POST("/upload", service.UploadFile) //上传文件
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", initializers.HostConfig.ServicePort),
+		Handler: r,
+	}
+	go func() {
+		_ = srv.ListenAndServe()
+	}()
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	return managerName + " exited", nil
-}
+	common.LogServ.Info("Shutdown Server ...")
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		common.LogServ.Error("srv.Shutdown(ctx)", err)
+	}
+
+	common.LogServ.Info("Host Server Shutdown")
+
+}
 func main() {
 	gob.Register([]common.TLogInfo{})
-	/*
-		currentPath, err := os.Executable()
-		if err != nil {
-			fmt.Println(err.Error())
-			os.Exit(1)
-		}
-		pathSeparator := string(os.PathSeparator)
-		arrDir := strings.Split(currentPath, pathSeparator)
-		arrDir = arrDir[:len(arrDir)-1]
-		currentPath = strings.Join(arrDir, pathSeparator)
-	*/
+	gob.Register(common.TPluginOperate{})
+	gob.Register([]common.TPullJob{})
+	gob.Register([]common.TPullTable{})
+	gob.Register([]common.ColumnInfo{})
+	gob.Register([]common.TableInfo{})
 	currentPath, err := common.GetCurrentPath()
 	if err != nil {
 		fmt.Println(err.Error())
@@ -83,6 +114,8 @@ func main() {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
+
+	service.IsDebug = initializers.HostConfig.IsDebug
 	default_key, err := initializers.HostConfig.GetDefaultKey()
 	if err != nil {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
@@ -110,6 +143,7 @@ func main() {
 	// endregion
 
 	// region 创建并启动对话服务
+
 	msg, err := messager.NewMessageServer(fmt.Sprintf("tcp://%s:%d", initializers.HostConfig.SelfIP, initializers.HostConfig.MessagePort),
 		service.HandleOperate)
 	if err != nil {
@@ -181,17 +215,6 @@ func main() {
 	// region 自动启动相关插件
 	control.RunPlugins()
 	// endregion
-	/*
-		os.Setenv("key", "123")
-
-		//os.Chmod("/home/godev/go/output/host/plugin/02377678-70fd-46b9-b216-c9aa47f6aefd/pullmysql", 0777)
-
-			if err = control.LoadPlugin("02377678-70fd-46b9-b216-c9aa47f6aefd", "224D02E8-7F8E-4332-82DF-5E403A9BA781",
-			"/home/godev/go/output/host/plugin/02377678-70fd-46b9-b216-c9aa47f6aefd/pullmysql",
-			"{\"serial_number\": \"插件序列号\"}"); err != nil {
-			fmt.Println(err.Error())
-			return
-		}*/
 
 	// region 启动系统服务
 	srv, err := daemon.New(managerName, serverDesc, daemon.SystemDaemon)

@@ -2,6 +2,7 @@ package module
 
 import (
 	"fmt"
+	"github.com/drkisler/dataPedestal/common"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 	"sync"
@@ -9,7 +10,8 @@ import (
 
 const checkPullTable = "Create " +
 	"Table if not exists PullTable(" +
-	"user_id integer not null" +
+	//"user_id integer not null" +
+	"job_id integer not null" +
 	",table_id integer not null" +
 	",table_code text not null" +
 	",table_name text not null" +
@@ -20,21 +22,25 @@ const checkPullTable = "Create " +
 	",key_col text not null" +
 	",buffer integer not null" + // 读取时的缓存
 	",status text not null default 'disabled' " + //停用 disabled 启用 enabled
-	",constraint pk_PullTable primary key(user_id,table_id));" //+
-/*
-	"create " +
-	"table if not exists tableColumn(" +
+	",last_error text not null default '' " +
+	",constraint pk_PullTable primary key(job_id,table_id));"
+const checkPullJob = "Create " +
+	"Table if not exists PullJob(" +
 	"user_id integer not null" +
-	",table_id integer not null" +
-	",column_id integer not null" +
-	",column_code text not null" +
-	",column_name text not null" +
-	",is_key text not null" +
-	",is_filter text not null" +
-	",filter_value text not null" +
-	",constraint pk_table_column primary key(user_id,table_id,column_id)" +
-	");"
-*/
+	",job_id integer not null" +
+	",job_name text not null" +
+	",source_db_conn text not null" +
+	",dest_db_conn text not null" +
+	",keep_connect text not null default '是' " +
+	",connect_buffer integer not null default 10" +
+	",cron_expression text not null default '* * * * *' " +
+	",skip_hour text not null default '' " +
+	",is_debug text not null default '否' " +
+	",status text not null default 'disabled' " +
+	",last_error text not null default '' " +
+	",constraint pk_PullJob primary key(job_id));" +
+	"create index IF NOT EXISTS idx_job_user on PullJob(user_id);" +
+	"create unique index IF NOT EXISTS idx_job_name on PullJob(job_name)"
 
 var DbFilePath string
 var dbService *TStorage
@@ -55,6 +61,12 @@ func newDbServ() (*TStorage, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	_, err = db.Exec(checkPullJob)
+	if err != nil {
+		return nil, err
+	}
+
 	var lock sync.Mutex
 
 	return &TStorage{db, &lock}, nil
@@ -83,14 +95,14 @@ func (dbs *TStorage) CloseDB() error {
 func (dbs *TStorage) AddPullTable(pt *TPullTable) (int64, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
-	strSQL := "with cet_pull as(select table_id from PullTable where user_id=?)insert " +
-		"into PullTable(user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status) " +
+	strSQL := "with cet_pull as(select table_id from PullTable where job_id=?)insert " +
+		"into PullTable(job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status) " +
 		"select ?,min(a.table_id)+1," +
 		"?,?,?,?,?,?,?,?,? from (select table_id from cet_pull union all select 0) a " +
 		"left join cet_pull b on a.table_id+1=b.table_id " +
 		"where b.table_id is null RETURNING table_id"
 
-	rows, err := dbs.Queryx(strSQL, pt.UserID, pt.UserID, pt.TableCode, pt.TableName, pt.DestTable,
+	rows, err := dbs.Queryx(strSQL, pt.JobID, pt.JobID, pt.TableCode, pt.TableName, pt.DestTable,
 		pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
 	if err != nil {
 		return -1, err
@@ -107,12 +119,12 @@ func (dbs *TStorage) AddPullTable(pt *TPullTable) (int64, error) {
 	return result.(int64), nil
 }
 
-func (dbs *TStorage) GetPullTableByID(userID, tableID int32) (*TPullTable, error) {
+func (dbs *TStorage) GetPullTableByID(pt *TPullTable) (*TPullTable, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
-	strSQL := "select user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status " +
-		"from PullTable where user_id = ? and table_id = ?"
-	rows, err := dbs.Queryx(strSQL, userID, tableID)
+	strSQL := "select job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status,last_error " +
+		"from PullTable where job_id = ? and table_id = ?"
+	rows, err := dbs.Queryx(strSQL, pt.JobID, pt.TableID)
 	if err != nil {
 		return nil, err
 	}
@@ -122,57 +134,81 @@ func (dbs *TStorage) GetPullTableByID(userID, tableID int32) (*TPullTable, error
 	var cnt = 0
 	var p TPullTable
 	for rows.Next() {
-		if err = rows.Scan(&p.UserID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol,
-			&p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status); err != nil {
+		if err = rows.Scan(&p.JobID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol,
+			&p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status, &p.LastError); err != nil {
 			return nil, err
 		}
 		cnt++
 	}
 	if cnt == 0 {
-		return nil, fmt.Errorf("userID,tableID %d,%d不存在", userID, tableID)
+		return nil, fmt.Errorf("userID,jobID,tableID %d,%d不存在", pt.JobID, pt.TableID)
 	}
 	return &p, nil
 }
 
-// QueryPullTable 获取表情单用于系统维护
-func (dbs *TStorage) QueryPullTable(pt *TPullTable, pageSize int32, pageIndex int32) ([]TPullTable, int32, error) {
+func (dbs *TStorage) GetPullTableIDs(pt *TPullTable) ([]int32, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
 	var rows *sqlx.Rows
-	strSQL := "select user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status "
-	if pt.TableID > 0 {
-		strSQL += "from PullTable where user_id= ? and table_id = ?"
-		rows, err = dbs.Queryx(strSQL, pt.UserID, pt.TableID)
-	} else if pt.TableName != "" {
-		strSQL += "from (select * from PullTable where user_id= ? and table_name like '%" + pt.TableName + "%' order by table_id)t limit ? offset (?-1)*?"
-		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
-	} else if pt.TableCode != "" {
-		strSQL += "from (select * from PullTable where user_id= ? and table_code like '%" + pt.TableCode + "%'  order by table_id)t limit ? offset (?-1)*?"
-		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
+	var strSQLFilter string
+	if (pt.TableName != "") || (pt.TableCode != "") {
+		strSQLFilter = "where job_id= ? and (table_name like '%" + pt.TableName + "%' or table_code like '%" + pt.TableCode + "%') "
 	} else {
-		strSQL += "from (select * from PullTable where user_id= ? order by table_id)t limit ? offset (?-1)*?"
-		rows, err = dbs.Queryx(strSQL, pt.UserID, pageSize, pageIndex, pageSize)
+		strSQLFilter = "where job_id= ? "
 	}
-	if err != nil {
-		return nil, -1, err
+	if rows, err = dbs.Queryx(fmt.Sprintf("select table_id from PullTable %s", strSQLFilter), pt.JobID); err != nil {
+		return nil, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
-	var cnt int32 = 0
-	var result []TPullTable
+	var result []int32
 	for rows.Next() {
-		var p TPullTable
-		if err = rows.Scan(&p.UserID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol,
-			&p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status); err != nil {
-			return nil, -1, err
+		var table_id int32
+		if err = rows.Scan(&table_id); err != nil {
+			return nil, err
 		}
-		cnt++
+		result = append(result, table_id)
+	}
+	return result, nil
+}
+
+// QueryPullTable 获取表情单用于系统维护
+func (dbs *TStorage) QueryPullTable(jobID int32, ids *string) ([]common.TPullTable, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var rows *sqlx.Rows
+	strSQL := fmt.Sprintf("WITH RECURSIVE cte(id, val) AS ("+
+		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER), "+
+		"SUBSTR(val, INSTR(val, ',')+1) "+
+		"FROM (SELECT '%s' AS val)"+
+		" UNION ALL "+
+		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER),"+
+		"       SUBSTR(val, INSTR(val, ',')+1) "+
+		" FROM cte"+
+		" WHERE INSTR(val, ',')>0"+
+		")"+
+		"SELECT a.* from PullTable a inner join cte b on a.table_id=b.id where a.job_id=? order by a.table_id", *ids)
+
+	rows, err = dbs.Queryx(strSQL, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var result []common.TPullTable
+	for rows.Next() {
+		var p common.TPullTable
+		if err = rows.Scan(&p.JobID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol,
+			&p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status, &p.LastError); err != nil {
+			return nil, err
+		}
 		result = append(result, p)
 	}
-
-	return result, cnt, nil
+	return result, nil
 }
 
 func (dbs *TStorage) AlterPullTable(pt *TPullTable) error {
@@ -180,13 +216,13 @@ func (dbs *TStorage) AlterPullTable(pt *TPullTable) error {
 	defer dbs.Unlock()
 	var err error
 	var strSQL = "update PullTable set table_code=?,table_name=?,dest_table=?,select_sql=?,filter_col=?,filter_val=?,key_col=?,buffer=?,status=?  " +
-		"where user_id = ? and table_id= ? "
+		"where job_id=? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return err
 	}
 	_, err = ctx.Exec(strSQL, pt.TableCode, pt.TableName, pt.DestTable, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol,
-		pt.Buffer, pt.Status, pt.UserID, pt.TableID)
+		pt.Buffer, pt.Status, pt.JobID, pt.TableID)
 	if err != nil {
 		_ = ctx.Rollback()
 		return err
@@ -199,17 +235,12 @@ func (dbs *TStorage) DeletePullTable(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
-	var strSQL = "delete from PullTable where user_id = ? and table_id= ? "
+	var strSQL = "delete from PullTable where job_id= ? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return err
 	}
-
-	//fmt.Println(pt.UserID, pt.TableID)
-	//writeInfo(pt.UserID)
-	//writeInfo(pt.TableID)
-
-	_, err = ctx.Exec(strSQL, pt.UserID, pt.TableID)
+	_, err = ctx.Exec(strSQL, pt.JobID, pt.TableID)
 	if err != nil {
 		_ = ctx.Rollback()
 		return err
@@ -222,30 +253,12 @@ func (dbs *TStorage) SetPullTableStatus(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
-	var strSQL = "update PullTable set status =? where user_id = ? and table_id= ? "
+	var strSQL = "update PullTable set status =? where job_id= ? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return err
 	}
-	_, err = ctx.Exec(strSQL, pt.Status, pt.UserID, pt.TableID)
-	if err != nil {
-		_ = ctx.Rollback()
-		return err
-	}
-	_ = ctx.Commit()
-	return nil
-}
-
-func (dbs *TStorage) SetPullTableFilterValues(pt *TPullTable) error {
-	dbs.Lock()
-	defer dbs.Unlock()
-	var err error
-	var strSQL = "update PullTable set filter_val =? where user_id = ? and table_id= ? "
-	ctx, err := dbs.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = ctx.Exec(strSQL, pt.FilterVal, pt.UserID, pt.TableID)
+	_, err = ctx.Exec(strSQL, pt.Status, pt.JobID, pt.TableID)
 	if err != nil {
 		_ = ctx.Rollback()
 		return err
@@ -255,14 +268,14 @@ func (dbs *TStorage) SetPullTableFilterValues(pt *TPullTable) error {
 }
 
 // GetAllTables 后台定时获取表信息进行抽取
-func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
+func (dbs *TStorage) GetAllTables(pt *TPullTable) ([]TPullTable, int, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
 	var rows *sqlx.Rows
-	strSQL := "select user_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status " +
-		"from PullTable where status=?"
-	rows, err = dbs.Queryx(strSQL, "enabled")
+	strSQL := "select job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status " +
+		"from PullTable where job_id= ? and status=?"
+	rows, err = dbs.Queryx(strSQL, pt.JobID, "enabled")
 
 	if err != nil {
 		return nil, -1, err
@@ -274,7 +287,7 @@ func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 	var result []TPullTable
 	for rows.Next() {
 		var p TPullTable
-		if err = rows.Scan(&p.UserID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol, &p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status); err != nil {
+		if err = rows.Scan(&p.JobID, &p.TableID, &p.TableCode, &p.TableName, &p.DestTable, &p.SelectSql, &p.FilterCol, &p.FilterVal, &p.KeyCol, &p.Buffer, &p.Status); err != nil {
 			return nil, -1, err
 		}
 		cnt++
@@ -282,6 +295,297 @@ func (dbs *TStorage) GetAllTables() ([]TPullTable, int, error) {
 	}
 
 	return result, cnt, nil
+}
+
+func (dbs *TStorage) SetPullTableFilterValues(pt *TPullTable) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update PullTable set filter_val =? where job_id=? and table_id= ? "
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, pt.FilterVal, pt.JobID, pt.TableID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) SetTableError(pt *TPullTable) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update PullTable set last_error =? where job_id=? and table_id= ? "
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, pt.LastError, pt.JobID, pt.TableID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////
+
+func (dbs *TStorage) AddPullJob(pj *TPullJob) (int64, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	strSQL := "insert " +
+		"into PullJob(user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression,skip_hour,is_debug,status) " +
+		"select ?,min(a.job_id)+1,?,?,?,?,?,?,?,?,? " +
+		"from (select job_id from PullJob union all select 0) a " +
+		"left join PullJob b on a.job_id+1=b.job_id " +
+		"where b.job_id is null RETURNING job_id"
+
+	rows, err := dbs.Queryx(strSQL, pj.UserID, pj.JobName, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer,
+		pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status)
+	if err != nil {
+		return -1, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var result any
+	for rows.Next() {
+		if err = rows.Scan(&result); err != nil {
+			return -1, err
+		}
+	}
+	return result.(int64), nil
+}
+
+// GetPullJobByID 获取任务信息，暂时用不到
+func (dbs *TStorage) GetPullJobByID(pj *TPullJob) (*TPullJob, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	strSQL := "select user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression, is_debug,skip_hour,status,last_error " +
+		"from PullJob where job_id = ?"
+	rows, err := dbs.Queryx(strSQL, pj.JobID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var cnt = 0
+	var p TPullJob
+	for rows.Next() {
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer, &p.CronExpression, &p.IsDebug,
+			&p.SkipHour, &p.Status, &p.LastError); err != nil {
+			return nil, err
+		}
+		cnt++
+	}
+	if cnt == 0 {
+		return nil, fmt.Errorf("jobID %d不存在", pj.JobID)
+	}
+	return &p, nil
+}
+
+func (dbs *TStorage) GetPullJobByName(pj *TPullJob) (*TPullJob, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	strSQL := "select user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression, is_debug,skip_hour,status,last_error " +
+		"from PullJob where job_name = ?"
+	rows, err := dbs.Queryx(strSQL, pj.JobName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var cnt = 0
+	var p TPullJob
+	for rows.Next() {
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer, &p.CronExpression, &p.IsDebug,
+			&p.SkipHour, &p.Status, &p.LastError); err != nil {
+			return nil, err
+		}
+		cnt++
+	}
+	if cnt == 0 {
+		return nil, fmt.Errorf("JobName %s不存在", pj.JobName)
+	}
+	return &p, nil
+}
+
+func (dbs *TStorage) GetPullJobIDs(pj *TPullJob) ([]int32, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var rows *sqlx.Rows
+	strSQLFilter := "where user_id= ?"
+	if pj.JobName != "" {
+		strSQLFilter = fmt.Sprintf("%s and job_name like '%s'", strSQLFilter, "%"+pj.JobName+"%")
+	}
+	rows, err = dbs.Queryx(fmt.Sprintf("select job_id from PullJob %s", strSQLFilter), pj.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var result []int32
+	for rows.Next() {
+		var jobID int32
+		if err = rows.Scan(&jobID); err != nil {
+			return nil, err
+		}
+		result = append(result, jobID)
+	}
+	return result, nil
+
+}
+
+func (dbs *TStorage) QueryPullJob(userID int32, ids *string) ([]common.TPullJob, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var rows *sqlx.Rows
+	strSQL := fmt.Sprintf("WITH RECURSIVE cte(id, val) AS ("+
+		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER), "+
+		"SUBSTR(val, INSTR(val, ',')+1) "+
+		"FROM (SELECT '%s' AS val)"+
+		" UNION ALL "+
+		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER),"+
+		"       SUBSTR(val, INSTR(val, ',')+1) "+
+		" FROM cte"+
+		" WHERE INSTR(val, ',')>0"+
+		")"+
+		"SELECT a.* from PullJob a inner join cte b on a.job_id=b.id where a.user_id=? order by a.job_id", *ids)
+
+	rows, err = dbs.Queryx(strSQL, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var result []common.TPullJob
+	for rows.Next() {
+		var p common.TPullJob
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer,
+			&p.CronExpression, &p.SkipHour, &p.IsDebug, &p.Status, &p.LastError); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+
+	return result, nil
+}
+
+func (dbs *TStorage) AlterPullJob(pj *TPullJob) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update PullJob set job_name=?,source_db_conn=?,dest_db_conn=?,keep_connect=?,connect_buffer=?,cron_expression=?, " +
+		" skip_hour=?, is_debug=?, status=?  " +
+		"where job_id= ? "
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, pj.JobName, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer, pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status, pj.JobID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) DeletePullJob(pj *TPullJob) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "delete from PullJob where job_id= ? "
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+
+	_, err = ctx.Exec(strSQL, pj.JobID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+func (dbs *TStorage) SetPullJobStatus(pj *TPullJob) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update PullJob set status =? where job_id= ? "
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, pj.Status, pj.JobID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
+}
+
+// GetAllJobs 后台定时获取任务信息进行抽取
+func (dbs *TStorage) GetAllJobs() ([]TPullJob, int, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var rows *sqlx.Rows
+	strSQL := "select user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer, cron_expression,skip_hour, is_debug, status,last_error " +
+		"from PullJob where status=?"
+	rows, err = dbs.Queryx(strSQL, "enabled")
+
+	if err != nil {
+		return nil, -1, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var cnt = 0
+	var result []TPullJob
+	for rows.Next() {
+		var p TPullJob
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer,
+			&p.CronExpression, &p.SkipHour, &p.IsDebug, &p.Status, &p.LastError); err != nil {
+			return nil, -1, err
+		}
+		cnt++
+		result = append(result, p)
+	}
+	return result, cnt, nil
+}
+
+func (dbs *TStorage) SetJobError(pj *TPullJob) error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var strSQL = "update PullJob set last_error =? where job_id= ? "
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = ctx.Exec(strSQL, pj.LastError, pj.JobID)
+	if err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+	_ = ctx.Commit()
+	return nil
 }
 
 /*
@@ -303,199 +607,4 @@ func writeInfo(val interface{}) {
 	}
 
 }
-*/
-
-/*
-func (dbs *TStorage) AddTableColumn(col *TTableColumn) (int64, error) {
-	dbs.Lock()
-	defer dbs.Unlock()
-	strSQL := "with cet_col as(select column_id from tableColumn where user_id=? and table_id=?)insert " +
-		"into tableColumn(user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value) " +
-		"select ?,?,min(a.column_id)+1," +
-		"?,?,?,?,? from (select column_id from cet_col union all select 0) a " +
-		"left join cet_col b on a.column_id+1=b.column_id " +
-		"where b.column_id is null RETURNING column_id"
-
-	rows, err := dbs.Queryx(strSQL, col.UserID, col.TableID, col.UserID, col.TableID, col.ColumnCode, col.ColumnName, col.IsKey,
-		col.IsFilter, col.FilterValue)
-	if err != nil {
-		return -1, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var result any
-	for rows.Next() {
-		if err = rows.Scan(&result); err != nil {
-			return -1, err
-		}
-	}
-	return result.(int64), nil
-}
-func (dbs *TStorage) LoadTableColumn(userid int32, tableid int32, cols []TTableColumn) error {
-	dbs.Lock()
-	defer dbs.Unlock()
-	var err error
-	rows, err := dbs.Queryx("select coalesce(max(column_id),0) column_id "+
-		"from tableColumn where user_id=? and table_id=?", userid, tableid)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var result any
-	for rows.Next() {
-		if err = rows.Scan(&result); err != nil {
-			return err
-		}
-	}
-
-	columnID := result.(int64)
-	var strSQL = "into tableColumn(user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value)" +
-		"values(?,?,?,?,?,?,?,?) "
-	ctx, err := dbs.Begin()
-	for i, col := range cols {
-		if err != nil {
-			return err
-		}
-		_, err = ctx.Exec(strSQL, col.UserID, col.TableID, i+int(columnID), col.ColumnCode, col.ColumnName, col.IsKey, col.IsFilter, col.FilterValue)
-		if err != nil {
-			_ = ctx.Rollback()
-			return err
-		}
-	}
-	_ = ctx.Commit()
-	return nil
-}
-
-func (dbs *TStorage) GetColumnsByTableID(col *TTableColumn) ([]TTableColumn, error) {
-	dbs.Lock()
-	defer dbs.Unlock()
-	strSQL := "select user_id,table_id,column_id,column_code,column_name,is_key,is_filter,filter_value " +
-		"from tableColumn where user_id = ? and table_id = ?"
-	rows, err := dbs.Queryx(strSQL, col.UserID, col.TableID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var cnt = 0
-	var result []TTableColumn
-	for rows.Next() {
-		var col TTableColumn
-		if err = rows.Scan(&col.UserID, &col.TableID, &col.ColumnCode, &col.ColumnName, &col.IsKey, &col.IsFilter, &col.FilterValue); err != nil {
-			return nil, err
-		}
-		result = append(result, col)
-		cnt++
-	}
-	if cnt == 0 {
-		return nil, fmt.Errorf("userID,tableID %d,%d不存在", col.UserID, col.TableID)
-	}
-	return result, nil
-}
-
-func (dbs *TStorage) AlterTableColumn(col *TTableColumn) error {
-	dbs.Lock()
-	defer dbs.Unlock()
-	var err error
-	var strSQL = "update " +
-		"tableColumn set column_code=?,column_name=?,is_key=?,is_filter=?,filter_value=?  " +
-		"where user_id = ? and table_id= ? and column_id= ?"
-	ctx, err := dbs.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = ctx.Exec(strSQL, col.ColumnCode, col.ColumnName, col.IsKey, col.IsFilter, col.FilterValue, col.UserID, col.TableID)
-	if err != nil {
-		_ = ctx.Rollback()
-		return err
-	}
-	_ = ctx.Commit()
-	return nil
-}
-
-func (dbs *TStorage) AlterTableColumns(cols []TTableColumn) error {
-	dbs.Lock()
-	defer dbs.Unlock()
-	var err error
-	var strSQL = "update " +
-		"tableColumn set column_code=?,column_name=?,is_key=?,is_filter=?,filter_value=?  " +
-		"where user_id = ? and table_id= ? and column_id= ?"
-	ctx, err := dbs.Begin()
-	if err != nil {
-		return err
-	}
-	for _, col := range cols {
-		_, err = ctx.Exec(strSQL, col.ColumnCode, col.ColumnName, col.IsKey, col.IsFilter, col.FilterValue, col.UserID, col.TableID)
-		if err != nil {
-			_ = ctx.Rollback()
-			return err
-		}
-	}
-	_ = ctx.Commit()
-	return nil
-}
-
-func (dbs *TStorage) DeleteColumn(col *TTableColumn) error {
-	dbs.Lock()
-	defer dbs.Unlock()
-	var err error
-	var strSQL = "delete " +
-		"from tableColumn where user_id = ? and table_id= ? and column_id=?"
-	ctx, err := dbs.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = ctx.Exec(strSQL, col.UserID, col.TableID, col.ColumnID)
-	if err != nil {
-		_ = ctx.Rollback()
-		return err
-	}
-	_ = ctx.Commit()
-	return nil
-}
-
-func (dbs *TStorage) DeleteTableColumn(col *TTableColumn) error {
-	dbs.Lock()
-	defer dbs.Unlock()
-	var err error
-	var strSQL = "delete " +
-		"from tableColumn where user_id = ? and table_id= ?"
-	ctx, err := dbs.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = ctx.Exec(strSQL, col.UserID, col.TableID)
-	if err != nil {
-		_ = ctx.Rollback()
-		return err
-	}
-	_ = ctx.Commit()
-	return nil
-}
-
-func (dbs *TStorage) SetFilterValues(cols []TTableColumn) error {
-	dbs.Lock()
-	defer dbs.Unlock()
-	var err error
-	var strSQL = "update " +
-		"tableColumn set filter_val =? where user_id = ? and table_id= ? and column_id= ?"
-	ctx, err := dbs.Begin()
-	if err != nil {
-		return err
-	}
-	for _, col := range cols {
-		_, err = ctx.Exec(strSQL, col.FilterValue, col.UserID, col.TableID, col.ColumnID)
-		if err != nil {
-			_ = ctx.Rollback()
-			return err
-		}
-	}
-	_ = ctx.Commit()
-	return nil
-}
-
 */

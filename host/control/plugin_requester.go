@@ -23,11 +23,7 @@ type TPluginRequester struct {
 	PluginFile   string
 	Client       *plugin.Client
 	ImpPlugin    common.IPlugin
-	PluginPort   int32
-}
-
-func GetLoadedPlugins() map[string]*TPluginRequester {
-	return pluginList
+	//PluginPort   int32
 }
 
 // RunPlugins 系统启动时自动运行相关插件,记录相关的错误
@@ -52,7 +48,7 @@ func RunPlugins() {
 			return
 		}
 		//resp.Code 返回插件运行的端口，如果有的话
-		req.PluginPort = resp.Code
+		//req.PluginPort = resp.Code
 		pluginList[item.PluginUUID] = req
 		req.ImpPlugin.Run()
 	}
@@ -80,7 +76,7 @@ func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TPluginRequester{serialNumber, pluginFile, client, raw.(common.IPlugin), 0}, nil
+	return &TPluginRequester{serialNumber, pluginFile, client, raw.(common.IPlugin)}, nil
 }
 
 func CheckPluginExists(UUID string) bool {
@@ -103,7 +99,7 @@ func LoadPlugin(UUID, serialNumber, pluginFile, config string) (int32, error) {
 		req.Close()
 		return -1, fmt.Errorf("加载插件失败:%s", resp.Info)
 	}
-	req.PluginPort = resp.Code
+	//req.PluginPort = resp.Code
 	pluginList[UUID] = req
 	return resp.Code, nil
 }
@@ -128,7 +124,7 @@ func IndexPlugin(UUID, pluginFile string) (*TPluginRequester, error) {
 	defer pluginLock.Unlock()
 	result, ok := pluginList[UUID]
 	if !ok {
-		return nil, fmt.Errorf("plugin file %s not exists", pluginFile)
+		return nil, fmt.Errorf("插件%s未加载，请先加载插件", pluginFile)
 	}
 	return result, nil
 }

@@ -1,7 +1,9 @@
 package worker
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"github.com/jmoiron/sqlx"
 	"strings"
 	"time"
@@ -10,13 +12,12 @@ import (
 type TDatabase struct {
 	KeepConnect   bool
 	ConnectBuffer int
-	DataBuffer    int
 	DriverName    string
 	ConnectStr    string
 	DataBase      *sqlx.DB
 }
 
-func NewWorker(driver, connectStr string, connectBuffer, DataBuffer int, keepConnect bool) (*TDatabase, error) {
+func NewWorker(driver, connectStr string, connectBuffer int, keepConnect bool) (*TDatabase, error) {
 	db, err := sqlx.Open(driver, connectStr)
 	if err != nil {
 		return nil, err
@@ -24,10 +25,15 @@ func NewWorker(driver, connectStr string, connectBuffer, DataBuffer int, keepCon
 	db.SetConnMaxIdleTime(2 * time.Minute)
 	db.SetMaxOpenConns(connectBuffer)
 	db.SetConnMaxLifetime(30 * time.Minute)
-	if err = db.Ping(); err != nil {
-		return nil, err
+
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err = db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("数据库连接失败%s", err.Error())
 	}
-	return &TDatabase{keepConnect, connectBuffer, DataBuffer, driver, connectStr, db}, nil
+
+	return &TDatabase{keepConnect, connectBuffer, driver, connectStr, db}, nil
 }
 
 func (db *TDatabase) OpenConnect() error {

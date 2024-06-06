@@ -1,38 +1,28 @@
 package workerService
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/initializers"
-	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
-	"github.com/drkisler/dataPedestal/universal/messager"
-	"github.com/drkisler/utils"
 	"github.com/go-co-op/gocron/v2"
 	"strings"
-	"sync"
 )
 
 var NewWorker TNewWorker
 
-// 测试用
-var msgClient *messager.TMessageClient
+//var GetSourceConnOption TGetSourceConnOption
 
-type TNewWorker = func(connectStr string, connectBuffer, DataBuffer int, keepConnect bool) (clickHouse.IPullWorker, error)
+// 测试用
+// var msgClient *messager.TMessageClient
+type TGetSourceConnOption = func() []string
+type TNewWorker = func(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error)
 type TWorkerProxy struct {
-	pluginBase.TBasePlugin
-	Lock             *sync.Mutex
-	SignChan         chan int
-	worker           clickHouse.IPullWorker
-	clickHouseClient *clickHouse.TClickHouseClient
-	ConnectString    string //datasource
-	DestDatabase     string //数据中心的数据库
-	KeepConnect      bool
-	ConnectBuffer    int
-	scheduler        TScheduler
+	SignChan  chan int
+	scheduler gocron.Scheduler
+	jobs      map[string]*TWorkerJob
+	logger    *logAdmin.TLoggerAdmin
 }
 
 type TScheduler struct {
@@ -41,117 +31,125 @@ type TScheduler struct {
 }
 
 // NewWorkerProxy 初始化
-func NewWorkerProxy(cfg *initializers.TMySQLConfig, logger *logAdmin.TLoggerAdmin) (*TWorkerProxy, error) {
+func NewWorkerProxy() (*TWorkerProxy, error) {
 	var err error
-	var lock sync.Mutex
-	var worker clickHouse.IPullWorker
-	var chClient *clickHouse.TClickHouseClient
 	var scheduler gocron.Scheduler
-	if worker, err = NewWorker(cfg.ConnectString, cfg.ConnectBuffer, cfg.DataBuffer, cfg.KeepConnect); err != nil {
-		return nil, err
-	}
 	var ch = make(chan int)
-	enStr := utils.TEnString{String: cfg.DestDatabase}
-	dbCfg := *enStr.ToMap(",", "=", "")
-	if chClient, err = clickHouse.NewClickHouseClient(dbCfg["Address"], dbCfg["Database"], dbCfg["User"], dbCfg["Password"]); err != nil {
-		return nil, err
-	}
-	msgClient, _ = messager.NewMessageClient()
-
+	//msgClient, _ = messager.NewMessageClient()
+	var runJob = make(map[string]*TWorkerJob)
 	if scheduler, err = gocron.NewScheduler(); err != nil {
 		return nil, err
 	}
-
-	return &TWorkerProxy{TBasePlugin: pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: cfg.IsDebug, Logger: logger},
-		Lock:             &lock,
-		SignChan:         ch,
-		worker:           worker,
-		clickHouseClient: chClient,
-		ConnectString:    cfg.ConnectString,
-		DestDatabase:     cfg.DestDatabase,
-		KeepConnect:      cfg.KeepConnect,
-		ConnectBuffer:    cfg.ConnectBuffer,
-		scheduler:        TScheduler{scheduler, cfg.CronExpression},
+	return &TWorkerProxy{ //TBasePlugin: pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: cfg.IsDebug, Logger: logger},
+		SignChan:  ch,
+		scheduler: scheduler,
+		jobs:      runJob,
 	}, nil
 }
 
+/*
 func SendInfo(info string) {
 	if _, err := msgClient.Send("tcp://192.168.110.129:8902", messager.OperateShowMessage, []byte(info)); err != nil {
 		fmt.Println(err.Error())
 	}
 }
+*/
 
-func (pw *TWorkerProxy) Start() error {
-	var hasSecond = len(strings.Split(pw.scheduler.CronExpression, " ")) > 5
-	if _, err := pw.scheduler.NewJob(
-		gocron.CronJob(pw.scheduler.CronExpression, hasSecond),
-		gocron.NewTask(pw.Run),
-		gocron.WithSingletonMode(gocron.LimitModeReschedule),
-	); err != nil {
+func (pw *TWorkerProxy) Start(logger *logAdmin.TLoggerAdmin) error {
+	// get all jobs
+	jobs, _, err := ctl.GetAllJobs()
+	if err != nil {
 		return err
 	}
+	// 启动scheduler
+	for _, job := range jobs {
+		workerJob, err := NewWorkerJob(&job, logger)
+		if err != nil {
+			return err
+		}
+		pullJob, err := pw.scheduler.NewJob(
+			gocron.CronJob(job.CronExpression, len(strings.Split(job.CronExpression, " ")) > 5),
+			gocron.NewTask(workerJob.Run),
+			gocron.WithSingletonMode(gocron.LimitModeReschedule),
+		)
+		if err != nil {
+			return err
+		}
+		workerJob.JobUUID = pullJob.ID()
+		pw.jobs[job.JobName] = workerJob
+	}
+	pw.logger = logger
 	pw.scheduler.Start()
 	return nil
 }
 
-// Run 运行
-func (pw *TWorkerProxy) Run() {
-	pw.SetRunning(true)
-	defer pw.SetRunning(false)
-
-	// 如果是长期运行的任务，则需要检查Running
-	// 如果是一次性任务，则不需要检查
-	if !pw.KeepConnect {
-		if err := pw.clickHouseClient.Connect(); err != nil {
-			pw.Logger.WriteError(err.Error())
-			return
-		}
+// CheckJob 测试任务运行
+func (pw *TWorkerProxy) CheckJob(jobName string) error {
+	var job ctl.TPullJob
+	var workerJob *TWorkerJob
+	var err error
+	job.JobName = jobName
+	if err = job.InitJobByName(); err != nil {
+		return err
 	}
-	if err := pw.PullTable(); err != nil {
-		pw.Logger.WriteError(err.Error())
-		return
+	if workerJob, err = NewWorkerJob(&job, pw.logger); err != nil {
+		return err
 	}
-	if !pw.KeepConnect {
-		if err := pw.clickHouseClient.Client.Close(); err != nil {
-			pw.Logger.WriteError(err.Error())
-			fmt.Println(err.Error())
-			return
-		}
-	}
+	workerJob.SkipHour = []int{}
+	go workerJob.Run()
+	return nil
 }
 
-func (pw *TWorkerProxy) PullTable() error {
-	var rows *sql.Rows
-	var filters []string
-	err := pw.worker.OpenConnect()
-	if err != nil {
-		return err
-	}
-	tables, cnt, err := ctl.GetAllTables()
-	if err != nil {
-		return err
-	}
-	if cnt > 0 {
-		for _, tbl := range tables {
-			if rows, err = pw.worker.ReadData(tbl.SelectSql, tbl.FilterVal); err != nil {
-				return err
-			}
-			if err = pw.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, pw.clickHouseClient); err != nil {
-				return err
-			}
-			if tbl.FilterCol != "" {
-				arrFilterVal := strings.Split(tbl.FilterCol, ",")
-				filters, err = pw.clickHouseClient.GetMaxFilter(tbl.DestTable, arrFilterVal)
-				if err != nil {
-					return err
-				}
-				tbl.FilterVal = strings.Join(filters, ",")
-				if err = tbl.SetFilterVal(); err != nil {
-					return err
-				}
-			}
+// OnLineJob 将指定任务加入scheduler
+func (pw *TWorkerProxy) OnLineJob(jobName string) error {
+	var ok bool
+	var err error
+	var workerJob *TWorkerJob
+	var job ctl.TPullJob
+	if workerJob, ok = pw.jobs[jobName]; !ok {
+		job.JobName = jobName
+		if err = job.InitJobByName(); err != nil {
+			return err
 		}
+		if workerJob, err = NewWorkerJob(&job, pw.logger); err != nil {
+			return err
+		}
+		pw.jobs[jobName] = workerJob
 	}
+	pullJob, err := pw.scheduler.NewJob(
+		gocron.CronJob(job.CronExpression, len(strings.Split(job.CronExpression, " ")) > 5),
+		gocron.NewTask(workerJob.Run),
+		gocron.WithSingletonMode(gocron.LimitModeReschedule),
+	)
+	if err != nil {
+		return err
+	}
+	pw.jobs[jobName].JobUUID = pullJob.ID()
+	return nil
+}
+
+func (pw *TWorkerProxy) CheckJobLoaded(jobName string) bool {
+	if _, ok := pw.jobs[jobName]; !ok {
+		return false
+	}
+	return true
+}
+
+// OffLineJob 下线指定任务
+func (pw *TWorkerProxy) OffLineJob(jobName string) error {
+	if _, ok := pw.jobs[jobName]; !ok {
+		return fmt.Errorf("job %s not found", jobName)
+	}
+	jobUUID := pw.jobs[jobName].JobUUID
+	if err := pw.scheduler.RemoveJob(jobUUID); err != nil {
+		return err
+	}
+	pw.jobs[jobName].Stop()
+	if err := pw.jobs[jobName].DisableJob(); err != nil {
+		return err
+	}
+	pw.jobs[jobName].Enabled = false
+	//delete(pw.jobs, jobName)
 	return nil
 }
 
@@ -162,22 +160,144 @@ func (pw *TWorkerProxy) StopScheduler() {
 
 // StopRun 停止运行，长期运行的任务用
 func (pw *TWorkerProxy) StopRun() {
-	pw.SetRunning(false)
 	_ = pw.scheduler.StopJobs()
 	pw.SignChan <- 0
 }
 
-func (pw *TWorkerProxy) GetSourceTables(schema string) ([]clickHouse.TableInfo, error) {
-	return pw.worker.GetTables(schema)
-}
-func (pw *TWorkerProxy) GetTableColumns(schemaName, tableName string) ([]clickHouse.ColumnInfo, error) {
-	return pw.worker.GetColumns(schemaName, tableName)
+func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
+	worker, err := NewWorker(nil, 2, false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.GetConnOptions(), nil
 }
 
-func (pw *TWorkerProxy) GenTableScript(schemaName, tableName string) (*string, error) {
-	return pw.worker.GenTableScript(schemaName, tableName)
+func (pw *TWorkerProxy) GetSourceTables(connectOption map[string]string) ([]common.TableInfo, error) {
+	worker, err := NewWorker(connectOption, 2, false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.GetTables()
 }
 
-func (pw *TWorkerProxy) GetDestTableNames() ([]string, error) {
-	return pw.clickHouseClient.GetTableNames()
+func (pw *TWorkerProxy) GetTableColumns(connectOption map[string]string, tableName *string) ([]common.ColumnInfo, error) {
+	worker, err := NewWorker(connectOption, 2, false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.GetColumns(*tableName)
+}
+
+func (pw *TWorkerProxy) GenTableScript(connectOption map[string]string, tableName *string) (*string, error) {
+	worker, err := NewWorker(connectOption, 2, false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.GenTableScript(*tableName)
+}
+
+func (pw *TWorkerProxy) GetDestConnOption() ([]string, error) {
+	return clickHouse.GetConnOptions(), nil
+}
+
+func (pw *TWorkerProxy) GetDestTableNames(connectOption map[string]string) ([]string, error) {
+	var option struct {
+		Host     string `json:"host"`
+		User     string `json:"user"`
+		Password string `json:"password"`
+		Database string `json:"dbname"`
+	}
+	var ok bool
+	if option.Host, ok = connectOption["host"]; !ok {
+		return nil, fmt.Errorf("can not find host in connectStr")
+	}
+
+	if option.User, ok = connectOption["user"]; !ok {
+		return nil, fmt.Errorf("can not find user in connectStr")
+	}
+
+	if option.Password, ok = connectOption["password"]; !ok {
+		return nil, fmt.Errorf("can not find password in connectStr")
+	}
+
+	if option.Database, ok = connectOption["dbname"]; !ok {
+		return nil, fmt.Errorf("can not find dbname in connectStr")
+	}
+
+	client, err := clickHouse.NewClickHouseClient(option.Host, option.Database, option.User, option.Password)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = client.CloseConnect
+	}()
+	return client.GetTableNames()
+}
+
+func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql *string) error {
+	worker, err := NewWorker(connectOption, 2, false)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.CheckSQLValid(*sql)
+}
+
+func (pw *TWorkerProxy) CheckSourceConnect(connectOption map[string]string) error {
+	worker, err := NewWorker(connectOption, 2, false)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return nil
+}
+
+func (pw *TWorkerProxy) CheckDestConnect(connectOption map[string]string) error {
+	var option struct {
+		Host     string `json:"host"`
+		User     string `json:"user"`
+		Password string `json:"password"`
+		Database string `json:"dbname"`
+	}
+	var ok bool
+	if option.Host, ok = connectOption["host"]; !ok {
+		return fmt.Errorf("can not find host in connectStr")
+	}
+
+	if option.User, ok = connectOption["user"]; !ok {
+		return fmt.Errorf("can not find user in connectStr")
+	}
+
+	if option.Password, ok = connectOption["password"]; !ok {
+		return fmt.Errorf("can not find password in connectStr")
+	}
+
+	if option.Database, ok = connectOption["dbname"]; !ok {
+		return fmt.Errorf("can not find dbname in connectStr")
+	}
+
+	client, err := clickHouse.NewClickHouseClient(option.Host, option.Database, option.User, option.Password)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = client.CloseConnect
+	}()
+	return nil
 }

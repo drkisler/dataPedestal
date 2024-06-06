@@ -163,3 +163,11 @@ func (pRPC *PluginRPC) DelDebugLog(params string) TResponse {
 	}
 	return result
 }
+func (pRPC *PluginRPC) CustomInterface(pluginOperate TPluginOperate) TResponse {
+	var result TResponse
+	err := pRPC.client.Call("Plugin.CustomInterface", pluginOperate, &result)
+	if err != nil {
+		return *Failure(err.Error())
+	}
+	return result
+}

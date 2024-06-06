@@ -1,20 +1,29 @@
 package module
 
+import (
+	"fmt"
+	"github.com/drkisler/dataPedestal/common"
+)
+
 type TPullTable struct {
-	UserID    int32  `json:"user_id"`
-	TableID   int32  `json:"table_id"`
-	TableCode string `json:"table_code,omitempty"`
-	TableName string `json:"table_name,omitempty"`
-	DestTable string `json:"dest_table,omitempty"`
-	SelectSql string `json:"select_sql,omitempty"`
-	FilterCol string `json:"filter_col,omitempty"`
-	FilterVal string `json:"filter_val,omitempty"`
-	KeyCol    string `json:"key_col,omitempty"`
-	Buffer    int    `json:"buffer,omitempty"`
-	Status    string `json:"status,omitempty"`
+	/*
+		JobID     int32  `json:"job_id"`
+		TableID   int32  `json:"table_id"`
+		TableCode string `json:"table_code,omitempty"`
+		TableName string `json:"table_name,omitempty"`
+		DestTable string `json:"dest_table,omitempty"`
+		SelectSql string `json:"select_sql,omitempty"`
+		FilterCol string `json:"filter_col,omitempty"`
+		FilterVal string `json:"filter_val,omitempty"`
+		KeyCol    string `json:"key_col,omitempty"`
+		Buffer    int    `json:"buffer,omitempty"`
+		Status    string `json:"status,omitempty"`
+		LastError string `json:"last_error"`
+	*/
+	common.TPullTable
 }
 
-func (pt *TPullTable) Add() (int64, error) {
+func (pt *TPullTable) AddTable() (int64, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return -1, err
@@ -22,12 +31,12 @@ func (pt *TPullTable) Add() (int64, error) {
 	return dbs.AddPullTable(pt)
 }
 
-func (pt *TPullTable) InitByID() error {
+func (pt *TPullTable) InitTableByID() error {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return err
 	}
-	tmp, err := dbs.GetPullTableByID(pt.UserID, pt.TableID)
+	tmp, err := dbs.GetPullTableByID(pt)
 	if err != nil {
 		return err
 	}
@@ -35,16 +44,27 @@ func (pt *TPullTable) InitByID() error {
 	return nil
 }
 
-func (pt *TPullTable) Get(pageSize int32, pageIndex int32) (data []TPullTable, total int32, err error) {
-	var dbs *TStorage
-	if dbs, err = GetDbServ(); err != nil {
-		return nil, 0, err
-	}
-	return dbs.QueryPullTable(pt, pageSize, pageIndex)
-
+func (pt *TPullTable) ToString() string {
+	return fmt.Sprintf("%s:%s", pt.TableCode, pt.TableName)
 }
 
-func (pt *TPullTable) Alter() error {
+func (pt *TPullTable) GetTableIDs() ([]int32, error) {
+	dbs, err := GetDbServ()
+	if err != nil {
+		return nil, err
+	}
+	return dbs.GetPullTableIDs(pt)
+}
+
+func (pt *TPullTable) GetTables(ids *string) (data []common.TPullTable, err error) {
+	var dbs *TStorage
+	if dbs, err = GetDbServ(); err != nil {
+		return nil, err
+	}
+	return dbs.QueryPullTable(pt.JobID, ids)
+}
+
+func (pt *TPullTable) AlterTable() error {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return err
@@ -52,7 +72,7 @@ func (pt *TPullTable) Alter() error {
 	return dbs.AlterPullTable(pt)
 }
 
-func (pt *TPullTable) Delete() error {
+func (pt *TPullTable) DeleteTable() error {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return err
@@ -60,7 +80,7 @@ func (pt *TPullTable) Delete() error {
 	return dbs.DeletePullTable(pt)
 }
 
-func (pt *TPullTable) SetStatus() error {
+func (pt *TPullTable) SetTableStatus() error {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return err
@@ -76,10 +96,19 @@ func (pt *TPullTable) SetFilterVal() error {
 	return dbs.SetPullTableFilterValues(pt)
 }
 
-func GetAllTables() ([]TPullTable, int, error) {
+func (pt *TPullTable) GetAllTables() ([]TPullTable, int, error) {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return nil, -1, err
 	}
-	return dbs.GetAllTables()
+	return dbs.GetAllTables(pt)
+}
+
+func (pt *TPullTable) SetError(errInfo string) error {
+	dbs, err := GetDbServ()
+	if err != nil {
+		return err
+	}
+	pt.LastError = errInfo
+	return dbs.SetTableError(pt)
 }

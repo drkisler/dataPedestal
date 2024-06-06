@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/ClickHouse/ch-go/proto"
+	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker"
 	"github.com/drkisler/utils"
@@ -15,24 +16,74 @@ import (
 type TMySQLWorker struct {
 	worker.TDatabase
 	dbName string
+	schema string //for connect to self database and read other database's table
 }
 
 var notStringTypes = []string{"UNSIGNED TINYINT", "TINYINT", "UNSIGNED SMALLINT", "SMALLINT", "UNSIGNED INT",
 	"UNSIGNED MEDIUMINT", "INT", "MEDIUMINT", "UNSIGNED BIGINT", "BIGINT", "FLOAT", "DOUBLE", "DATE", "DATETIME", "TIMESTAMP"}
 
-func NewMySQLWorker(connectStr string, connectBuffer, DataBuffer int, keepConnect bool) (clickHouse.IPullWorker, error) {
-	dbw, err := worker.NewWorker("mysql", connectStr, connectBuffer, DataBuffer, keepConnect)
+func NewMySQLWorker(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error) {
+	// connectStr := "root:123456@tcp(127.0.0.1:3306)/test"
+	//"sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true"
+
+	if connectOption == nil {
+		return &TMySQLWorker{}, nil
+	}
+
+	strDBName, ok := connectOption["dbname"]
+	if !ok {
+		return nil, fmt.Errorf("can not find dbname in connectStr")
+	}
+	strUser, ok := connectOption["user"]
+	if !ok {
+		return nil, fmt.Errorf("can not find user in connectStr")
+	}
+	strPass, ok := connectOption["password"]
+	if !ok {
+		return nil, fmt.Errorf("can not find password in connectStr")
+	}
+	strHost, ok := connectOption["host"]
+	if !ok {
+		return nil, fmt.Errorf("can not find host in connectStr")
+	}
+	// ?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true
+	strConnect := fmt.Sprintf("%s:%s@tcp(%s)/%s", strUser, strPass, strHost, strDBName)
+	var arrParam []string
+	var strSchema string
+	for k, v := range connectOption {
+		if k == "dbname" || k == "user" || k == "password" || k == "host" {
+			continue
+		}
+		if k == "schema" {
+			strSchema = v
+			continue
+		}
+
+		arrParam = append(arrParam, fmt.Sprintf("%s=%s", k, v))
+	}
+	//if not find schema, use dbName as default schema
+	if strSchema == "" {
+		strSchema = strDBName
+	}
+	if len(arrParam) > 0 {
+		strConnect = fmt.Sprintf("%s?%s", strConnect, strings.Join(arrParam, "&"))
+	}
+	dbw, err := worker.NewWorker("mysql", strConnect, connectBuffer, keepConnect)
 	if err != nil {
 		return nil, err
 	}
-	enStr := utils.TEnString{String: connectStr}
-	strDBName := strings.Trim(enStr.SubStr("/", "?"), " ")
-	return &TMySQLWorker{*dbw, strDBName}, nil
+	return &TMySQLWorker{*dbw, strDBName, strSchema}, nil
 }
 
-func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]clickHouse.ColumnInfo, error) {
+func (mysql *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, error) {
+	iPos := strings.Index(tableName, ".")
+	schema := ""
+	if iPos > 0 {
+		schema = tableName[:iPos]
+		tableName = tableName[iPos+1:]
+	}
 	if schema == "" {
-		schema = mysql.dbName
+		schema = mysql.schema
 	}
 	strSQL := "select column_name column_code,coalesce(column_comment,'') column_name,if(column_key='PRI','是','否') is_key " +
 		"from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
@@ -45,9 +96,9 @@ func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]clickHouse.Co
 		_ = rows.Close()
 
 	}()
-	var data []clickHouse.ColumnInfo
+	var data []common.ColumnInfo
 	for rows.Next() {
-		var val clickHouse.ColumnInfo
+		var val common.ColumnInfo
 		if err = rows.Scan(&val.ColumnCode, &val.ColumnName, &val.IsKey); err != nil {
 			return nil, err
 
@@ -57,13 +108,10 @@ func (mysql *TMySQLWorker) GetColumns(schema, tableName string) ([]clickHouse.Co
 	return data, nil
 
 }
-func (mysql *TMySQLWorker) GetTables(schema string) ([]clickHouse.TableInfo, error) {
-	if schema == "" {
-		schema = mysql.dbName
-	}
+func (mysql *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 	strSQL := "select table_name table_code,coalesce(table_comment,'') table_comment " +
 		"from information_schema.tables where table_schema=?"
-	rows, err := mysql.DataBase.Query(strSQL, schema)
+	rows, err := mysql.DataBase.Query(strSQL, mysql.schema)
 	if err != nil {
 		return nil, err
 
@@ -71,9 +119,9 @@ func (mysql *TMySQLWorker) GetTables(schema string) ([]clickHouse.TableInfo, err
 	defer func() {
 		_ = rows.Close()
 	}()
-	var data []clickHouse.TableInfo
+	var data []common.TableInfo
 	for rows.Next() {
-		var val clickHouse.TableInfo
+		var val common.TableInfo
 		if err = rows.Scan(&val.TableCode, &val.TableName); err != nil {
 			return nil, err
 
@@ -82,11 +130,24 @@ func (mysql *TMySQLWorker) GetTables(schema string) ([]clickHouse.TableInfo, err
 	}
 	return data, nil
 }
-func (mysql *TMySQLWorker) GenTableScript(schemaName, tableName string) (*string, error) {
-	if schemaName == "" {
-		schemaName = mysql.dbName
+
+func (mysql *TMySQLWorker) CheckSQLValid(sql string) error {
+	if !common.IsSafeSQL(sql) {
+		return fmt.Errorf("unsafe sql")
 	}
-	Cols, err := mysql.GetColumns(schemaName, tableName)
+	rows, err := mysql.DataBase.Query(fmt.Sprintf("select "+
+		"* from (%s) t limit 0", sql))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	return nil
+}
+
+func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
+	Cols, err := mysql.GetColumns(tableName)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +158,7 @@ func (mysql *TMySQLWorker) GenTableScript(schemaName, tableName string) (*string
 		}
 	}
 	data, err := mysql.DataBase.Query(fmt.Sprintf("select "+
-		"* from %s.%s limit 0", schemaName, tableName))
+		"* from %s limit 0", tableName))
 	if err != nil {
 		return nil, err
 	}
@@ -512,4 +573,31 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 	}
 
 	return nil
+}
+func (mysql *TMySQLWorker) GetConnOptions() []string {
+	return []string{
+		"allowAllFiles=false",
+		"allowCleartextPasswords=false",
+		"allowFallbackToPlaintext=false",
+		"allowNativePasswords=true",
+		"allowOldPasswords=false",
+		"charset=utf8mb4",
+		"checkConnLiveness=true",
+		"collation=utf8mb4_general_ci",
+		"clientFoundRows=false",
+		"columnsWithAlias=false",
+		"interpolateParams=false",
+		"loc=Local",
+		"timeTruncate=0",
+		"maxAllowedPacket=64*1024*1024",
+		"multiStatements=false",
+		"parseTime=true",
+		"readTimeout=0",
+		"writeTimeout=0",
+		"rejectReadOnly=false",
+		"serverPublicKey=none",
+		"timeout=90s",
+		"tls=false",
+		"connectionAttributes=none",
+	}
 }

@@ -6,28 +6,21 @@ import (
 	"fmt"
 	"github.com/ClickHouse/ch-go"
 	"github.com/ClickHouse/ch-go/proto"
+	"github.com/drkisler/dataPedestal/common"
 	"strings"
 )
 
 type IPullWorker interface {
 	OpenConnect() error
 	CloseConnect() error
+	CheckSQLValid(sql string) error
 	// GetKeyColumns(schema, tableName string) ([]string, error)
-	GetColumns(schema, tableName string) ([]ColumnInfo, error)
-	GetTables(schema string) ([]TableInfo, error)
+	GetColumns(tableName string) ([]common.ColumnInfo, error)
+	GetTables() ([]common.TableInfo, error)
 	ReadData(strSQL, filter string) (*sql.Rows, error)
-	GenTableScript(schemaName, tableName string) (*string, error)
+	GenTableScript(tableName string) (*string, error)
 	WriteData(tableName string, batch int, data *sql.Rows, client *TClickHouseClient) error
-}
-
-type TableInfo struct {
-	TableCode string `json:"table_code"`
-	TableName string `json:"table_name,omitempty"`
-}
-type ColumnInfo struct {
-	ColumnCode string `json:"column_code,omitempty"`
-	ColumnName string `json:"column_name,omitempty"`
-	IsKey      string `json:"is_key,omitempty"`
+	GetConnOptions() []string
 }
 
 type TClickHouseClient struct {
@@ -49,6 +42,7 @@ func NewClickHouseClient(address, database, user, password string) (*TClickHouse
 	if err != nil {
 		return nil, err
 	}
+
 	if err = client.Ping(ctx); err != nil {
 		return nil, err
 	}
@@ -167,4 +161,9 @@ func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterColumn []stri
 		}
 	}
 	return filterValue, nil
+}
+
+func GetConnOptions() []string {
+	//暂时返回空，后期根据实际使用情况再添加相关配置
+	return []string{}
 }

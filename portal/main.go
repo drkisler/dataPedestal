@@ -13,7 +13,6 @@ import (
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/takama/daemon"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -68,8 +67,9 @@ func createAndStartGinService() {
 	plugin.POST("/pubPlugin/:hostUUID", service.PubPlugin)                     //部署插件
 	plugin.GET("/getHosts", service.GetHosts)                                  //获取主机清单
 	plugin.POST("/takeDown", service.TakeDown)                                 //取消部署
-	plugin.POST("/getProductKey", service.GetProductKey)                       //获取产品序列号
+	plugin.POST("/getProductKey", service.GetProductKey)                       //获取并验证产品序列号
 	plugin.POST("/setLicenseCode/:productSN/:license", service.SetLicenseCode) //设置授权码
+	plugin.POST("/updatePluginFile", service.UpdatePluginFile)                 //更新插件文件
 	logs := r.Group("/logger")
 	logs.Use(common.SetHeader, utils.AuthMiddleware)
 	logs.POST("/getLogDate", service.GetLogDate)
@@ -77,24 +77,22 @@ func createAndStartGinService() {
 	logs.POST("/delOldLog", service.DelOldLog)
 	logs.POST("/delLog", service.DelLog)
 	//r.Any("/plugins/:uuid/:route/:api", service.GetTargetUrl)
-	plugins := r.Group("/plugins")
+	plugins := r.Group("/plugins") //使用路由转发的方式
 	plugins.Use(common.SetHeader, utils.AuthMiddleware)
-	plugins.Any("/:uuid/:route/:api", service.GetTargetUrl)
+	plugins.Any("/:uuid/:api", service.PluginAPI)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", initializers.PortalCfg.ServicePort),
 		Handler: r,
 	}
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			common.LogServ.Error("srv.ListenAndServe()", err)
-		}
+		_ = srv.ListenAndServe()
 	}()
 
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	log.Println("Shutdown Server ...")
+	common.LogServ.Info("Shutdown Server ...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -129,17 +127,6 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	return managerName + " exited", nil
 }
 func main() {
-	/*
-		currentPath, err := os.Executable()
-		if err != nil {
-			fmt.Println(err.Error())
-			os.Exit(1)
-		}
-		pathSeparator := string(os.PathSeparator)
-		arrDir := strings.Split(currentPath, pathSeparator)
-		arrDir = arrDir[:len(arrDir)-1]
-		currentPath = strings.Join(arrDir, pathSeparator)
-	*/
 	currentPath, err := common.GetCurrentPath()
 	if err != nil {
 		fmt.Println(err.Error())

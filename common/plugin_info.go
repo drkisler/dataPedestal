@@ -17,18 +17,23 @@ type TPluginInfo struct {
 	PluginVersion string `json:"plugin_version,omitempty"` //插件版本号
 	RunType       string `json:"run_type,omitempty"`       //启动类型（包括：自动启动、手动启动、禁止启动）
 	SerialNumber  string `json:"serial_number,omitempty"`  //用于匹配插件的序列号
+	Status        string `json:"status,omitempty"`         //插件状态（包括：待加载、待运行）
 }
+
+/*
 type TPluginPort struct {
 	PluginUUID string `json:"plugin_uuid"`
 	Port       int32  `json:"port"` // port=-1 待加载  port=0 未启动  port>0 启动
 }
+*/
 
 type THostInfo struct {
 	HostUUID     string `json:"host_uuid"`      //主机UUID
 	HostName     string `json:"host_name"`      //长度不超过256
 	HostIP       string `json:"host_ip"`        //长度不超过256
-	MessagePort  int32  `json:"message_port"`   //消息服务端口
+	HostPort     int32  `json:"host_port"`      //服务端口
 	FileServPort int32  `json:"file_serv_port"` //文件服务端口
+	MessagePort  int32  `json:"message_port"`   //消息端口
 }
 
 func (t *THostInfo) ToByte() []byte {
@@ -41,24 +46,20 @@ func (t *THostInfo) ToByte() []byte {
 	//HostIP
 	result = append(result, uint8(len(t.HostIP)))
 	result = append(result, []byte(t.HostIP)...)
-	//MessagePort
-	strMessagePort := strconv.Itoa(int(t.MessagePort))
-	result = append(result, uint8(len(strMessagePort)))
-	result = append(result, []byte(strMessagePort)...)
+	//HostPort
+	strHostPort := strconv.Itoa(int(t.HostPort))
+	result = append(result, uint8(len(strHostPort)))
+	result = append(result, []byte(strHostPort)...)
 	//FileServPort
 	strFileServPort := strconv.Itoa(int(t.FileServPort))
 	result = append(result, uint8(len(strFileServPort)))
 	result = append(result, []byte(strFileServPort)...)
+	//MessagePort
+	strMessagePort := strconv.Itoa(int(t.MessagePort))
+	result = append(result, uint8(len(strMessagePort)))
+	result = append(result, []byte(strMessagePort)...)
 	return result
 }
-
-/*func (t *THostInfo) FromByte(data []byte)error{
-	index :=0
-	if _,err := t.fromByte(data,index);err!=nil{
-		return err
-	}
-	return nil
-}*/
 
 func (t *THostInfo) FromByte(data []byte) error {
 	var iLen, iPort int
@@ -90,7 +91,7 @@ func (t *THostInfo) FromByte(data []byte) error {
 	}
 	t.HostIP = string(data[index : index+iLen])
 	index += iLen
-	//MessagePort
+	//HostPort
 	if len(data) < index+1 {
 		return fmt.Errorf("转换数据出错")
 	}
@@ -102,7 +103,7 @@ func (t *THostInfo) FromByte(data []byte) error {
 	if iPort, err = strconv.Atoi(string(data[index : index+iLen])); err != nil {
 		return err
 	}
-	t.MessagePort = int32(iPort)
+	t.HostPort = int32(iPort)
 	index += iLen
 	//FileServPort
 	if len(data) < index+1 {
@@ -117,6 +118,20 @@ func (t *THostInfo) FromByte(data []byte) error {
 		return err
 	}
 	t.FileServPort = int32(iPort)
+	index += iLen
+	//MessagePort
+	if len(data) < index+1 {
+		return fmt.Errorf("转换数据出错")
+	}
+	iLen = int(data[index])
+	index += 1
+	if len(data) < index+iLen {
+		return fmt.Errorf("转换数据出错")
+	}
+	if iPort, err = strconv.Atoi(string(data[index : index+iLen])); err != nil {
+		return err
+	}
+	t.MessagePort = int32(iPort)
 	index += iLen
 	return nil
 }

@@ -8,13 +8,13 @@ require (
 	github.com/drkisler/utils v0.1.7
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-co-op/gocron/v2 v2.2.2
-	github.com/go-playground/assert/v2 v2.2.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-plugin v1.6.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mattn/go-sqlite3 v1.14.19
 	github.com/pkg/errors v0.9.1
+	github.com/sijms/go-ora/v2 v2.8.14
 	github.com/takama/daemon v1.0.0
 	go.nanomsg.org/mangos/v3 v3.4.2
 )

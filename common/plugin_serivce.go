@@ -75,3 +75,7 @@ func (s *PluginRPCServer) DelDebugLog(params string, resp *TResponse) error {
 	*resp = s.Impl.DelDebugLog(params)
 	return nil
 }
+func (s *PluginRPCServer) CustomInterface(pluginOperate TPluginOperate, resp *TResponse) error {
+	*resp = s.Impl.CustomInterface(pluginOperate)
+	return nil
+}

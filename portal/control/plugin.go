@@ -76,7 +76,7 @@ func (c *TPluginControl) PublishPlugin(hostUUID string) *common.TResponse {
 	filePath := common.GenFilePath(initializers.PortalCfg.PluginDir,
 		c.PluginUUID, c.PluginFile)
 	// 获取插件序列号
-	if c.SerialNumber, err = common.FileMD5(filePath); err != nil {
+	if c.SerialNumber, err = common.FileHash(filePath); err != nil {
 		return common.Failure(err.Error())
 	}
 	// 将文件传输至host
@@ -112,6 +112,7 @@ func (c *TPluginControl) PublishPlugin(hostUUID string) *common.TResponse {
 	if result.Code < 0 {
 		return result
 	}
+	//无需保存host端口，host端口修改后无需重新发布
 	c.HostUUID, c.HostName, c.HostIP = hostInfo.ActiveHost.HostUUID, hostInfo.ActiveHost.HostName, hostInfo.ActiveHost.HostIP
 	c.SetHostInfo()
 	return common.Success(nil)
@@ -233,85 +234,74 @@ func (c *TPluginControl) SetHostInfo() *common.TResponse {
 }
 
 func (c *TPluginControl) GetPlugin() *common.TResponse {
-	var result []TPluginControl
+	//var result []TPluginControl
 	if c.UserID == 0 {
 		c.UserID = c.OperatorID
+	}
+	if c.PageSize == 0 {
+		c.PageSize = 50
+	}
+	if c.PageIndex == 0 {
+		c.PageIndex = 1
 	}
 	pluginList, Total, err := c.QueryPlugin(c.PageSize, c.PageIndex)
 	if err != nil {
 		return common.Failure(err.Error())
 	}
 
-	// 使用 MsgClient 从 Survey中的ActiveHost请求 common.TPluginPort信息
-	var data []byte
-	var resp common.TResponse
-	var pluginPorts []common.TPluginPort
-	for _, host := range Survey.GetHostInfo() {
-		data, err = MsgClient.Send(fmt.Sprintf("tcp://%s:%d", host.HostIP, host.MessagePort), messager.OperateGetPluginPort, []byte{byte(1)})
-		if err != nil {
-			return common.Failure(err.Error())
+	if Total > 0 {
+		// pluginMap 辅助查找
+		var pluginMap = make(map[string]int)
+		for iIndex, item := range pluginList {
+			pluginMap[item.PluginUUID] = iIndex
 		}
 
-		common.LogServ.Debug(string(data))
-
-		if err = json.Unmarshal(data, &resp); err != nil {
-			return common.Failure(err.Error())
-		}
-		if resp.Code < 0 {
-			return &resp
-		}
-		if resp.Data.Total > 0 {
-			for _, v := range resp.Data.ArrData.([]interface{}) {
-				item := v.(map[string]interface{})
-				pluginPort := common.TPluginPort{
-					PluginUUID: item["plugin_uuid"].(string),
-					Port:       int32(item["port"].(float64)),
-				}
-				pluginPorts = append(pluginPorts, pluginPort)
+		// 使用 MsgClient 从 Survey中的ActiveHost请求 common.TPluginPort信息
+		var data []byte
+		var resp common.TResponse
+		for _, host := range Survey.GetHostInfo() {
+			data, err = MsgClient.Send(fmt.Sprintf("tcp://%s:%d", host.HostIP, host.MessagePort), messager.OperateGetPlugins, []byte{byte(1)})
+			if err != nil {
+				return common.Failure(err.Error())
 			}
-		}
+			common.LogServ.Debug(string(data))
 
-	}
-
-	funcGetPluginPort := func(pluginUUID string) int32 {
-		for _, item := range pluginPorts {
-			if item.PluginUUID == pluginUUID {
-				return item.Port
+			if err = json.Unmarshal(data, &resp); err != nil {
+				return common.Failure(err.Error())
 			}
-		}
-		return -9
-	}
-	//更新插件状态
-
-	for _, pluginItem := range pluginList {
-		var item *TPluginControl
-		var status string
-		if pluginItem.PluginFile == "" {
-			status = "待上传"
-		} else {
-			iPort := funcGetPluginPort(pluginItem.PluginUUID)
-			if iPort < 0 {
-				if iPort == -9 {
-					if pluginItem.HostUUID != "" {
-						status = "已失联"
-					} else {
-						status = "待部署"
+			if resp.Code < 0 {
+				return &resp
+			}
+			if resp.Data.Total > 0 {
+				for _, v := range resp.Data.ArrData.([]interface{}) {
+					item := v.(map[string]interface{})
+					pluginUUID, ok := item["plugin_uuid"]
+					if !ok {
+						return common.Failure("plugin_uuid is empty")
 					}
-				} else if iPort == -1 {
-					status = "待加载"
+					status, ok := item["status"]
+					if !ok {
+						return common.Failure("status is empty")
+					}
+					strUUID := pluginUUID.(string)
+					if _, ok = pluginMap[strUUID]; !ok {
+						//fmt.Printf("plugin %s not found\n", strUUID)
+						return common.Failure(fmt.Sprintf("plugin %s not found", strUUID))
+					}
+					if pluginList[pluginMap[strUUID]].PluginFile == "" {
+						pluginList[pluginMap[strUUID]].Status = "待上传"
+					}
+					if pluginList[pluginMap[strUUID]].HostUUID == "" {
+						pluginList[pluginMap[strUUID]].Status = "待部署"
+					}
+					pluginList[pluginMap[strUUID]].Status = status.(string)
+					pluginList[pluginMap[strUUID]].HostPort = host.HostPort
 				}
-			} else if iPort == 0 {
-				status = "待运行"
-			} else if iPort > 0 {
-				status = "运行中"
 			}
+
 		}
-
-		item = signPluginControl(pluginItem, status)
-		result = append(result, *item)
-
 	}
-	return common.RespData(int32(Total), result, nil)
+	return common.RespData(int32(Total), pluginList, nil)
 }
 
 // UpdatePlugFileName 更新插件名称
@@ -338,11 +328,7 @@ func (c *TPluginControl) LoadPlugin() *common.TResponse {
 	if rep.Code < 0 {
 		return rep
 	}
-	c.PluginPort = rep.Code
-	if err = c.ModifyPluginPort(); err != nil {
-		return common.Failure(err.Error())
-	}
-
+	//c.PluginPort = rep.Code
 	return common.Success(nil)
 }
 
@@ -389,8 +375,22 @@ func (c *TPluginControl) RunPlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	return c.SendRequest(messager.OperateRunPlugin, true, []byte(c.PluginUUID))
-
 }
+
+/*
+func (c *TPluginControl) PluginApi(pluginApi *common.TPluginOperate) *common.TResponse {
+	var err error
+	var data []byte
+	if err = c.InitByUUID(); err != nil {
+		return common.Failure(err.Error())
+	}
+	if data, err = json.Marshal(pluginApi); err != nil {
+		return common.Failure(err.Error())
+	}
+	return c.SendRequest(messager.OperatePluginApi, true, data)
+}
+*/
+
 func (c *TPluginControl) StopPlugin() *common.TResponse {
 	var err error
 	if err = c.InitByUUID(); err != nil {

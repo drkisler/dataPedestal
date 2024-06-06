@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/dataPedestal/universal/fileService"
@@ -15,30 +16,33 @@ func init() {
 }
 
 type THeartBeat struct {
-	HostUUID    string `json:"hostUUID"`
-	HostName    string `json:"hostName"`
-	HostIp      string `json:"hostIp"`
-	MessagePort string `json:"message_port"`
-	FilePort    string `json:"file_port"`
+	HostUUID string `json:"hostUUID"`
+	HostName string `json:"hostName"`
+	HostIp   string `json:"hostIp"`
+	HostPort string `json:"host_port"`
+	FilePort string `json:"file_port"`
 }
 
-func GetHandleFileResult(binUUid []byte) []byte {
-	pluginUUID := string(binUUid)
-	result, ok := errBuffer[pluginUUID]
-	if ok {
-		delete(errBuffer, pluginUUID)
-		data, _ := json.Marshal(result)
-		return data
+func HandleReceiveFile(meta *fileService.TFileMeta, err error) {
+	if err != nil {
+		if meta.FileUUID == "" {
+			errBuffer["NULL"] = common.Failure(err.Error())
+			return
+		}
+		errBuffer[meta.FileUUID] = common.Failure(err.Error())
+		return
 	}
-	result, ok = errBuffer["NULL"]
-	if ok {
-		delete(errBuffer, "NULL")
-		data, _ := json.Marshal(result)
-		return data
+	var plugin control.TPluginControl
+	plugin.PluginUUID = meta.FileUUID
+	plugin.PluginFile = meta.FileName
+	plugin.RunType = meta.RunType
+	plugin.PluginConfig = meta.FileConfig
+	plugin.SerialNumber = meta.SerialNumber
+	if err = plugin.InsertPlugin(); err != nil {
+		errBuffer[meta.FileUUID] = common.Failure(err.Error())
+		return
 	}
-
-	data, _ := json.Marshal(common.Ongoing())
-	return data
+	errBuffer[meta.FileUUID] = common.Success(nil)
 }
 
 // HandleOperate 处理门户发来的操作请求
@@ -72,12 +76,14 @@ func HandleOperate(msg []byte) []byte {
 		return DelLog(msg[1:])
 	case messager.OperateGetPubError:
 		return GetHandleFileResult(msg[1:])
-	case messager.OperateGetPluginPort:
-		return GetPluginPort()
+	case messager.OperateGetPlugins:
+		return GetPlugins()
 	case messager.OperateSetLicense:
 		return SetLicense(msg[1:])
 	case messager.OperateGetProductKey:
 		return GetProductKey(msg[1:])
+	//case messager.OperatePluginApi:
+	//	return PluginApi(msg[1:])
 	case messager.OperateShowMessage:
 		return ShowMessage(msg[1:])
 	default:
@@ -86,24 +92,7 @@ func HandleOperate(msg []byte) []byte {
 
 }
 
-func HandleReceiveFile(meta *fileService.TFileMeta, err error) {
-	if err != nil {
-		if meta.FileUUID == "" {
-			errBuffer["NULL"] = common.Failure(err.Error())
-			return
-		}
-		errBuffer[meta.FileUUID] = common.Failure(err.Error())
-		return
-	}
-	var plugin control.TPluginControl
-	plugin.PluginUUID = meta.FileUUID
-	plugin.PluginFile = meta.FileName
-	plugin.RunType = meta.RunType
-	plugin.PluginConfig = meta.FileConfig
-	plugin.SerialNumber = meta.SerialNumber
-	if err = plugin.InsertPlugin(); err != nil {
-		errBuffer[meta.FileUUID] = common.Failure(err.Error())
-		return
-	}
-	errBuffer[meta.FileUUID] = common.Success(nil)
+func ShowMessage(data []byte) []byte {
+	fmt.Println(string(data))
+	return []byte{1}
 }

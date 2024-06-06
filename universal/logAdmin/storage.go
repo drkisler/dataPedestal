@@ -140,11 +140,29 @@ func (dbs *TLocalLogger) DeleteOldLog(date string) error {
 func (dbs *TLocalLogger) GetLog(logDate string, pageSize int32, pageIndex int32) ([]common.TLogInfo, int32, error) {
 	var strSQL string
 	var err error
-	strSQL = "select * from(select log_id,log_time,log_info " +
-		"from infoLog where log_date = ? order by log_id desc) t limit ? offset (?-1)*? "
+
 	dbs.Lock()
 	defer dbs.Unlock()
-	rows, err := dbs.Queryx(strSQL, logDate, pageSize, pageIndex, pageSize)
+	rows, err := dbs.Queryx("select count(*) "+
+		"from infoLog where log_date = ?", logDate)
+	if err != nil {
+		return nil, -1, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var cnt int32
+	if rows.Next() {
+		if err = rows.Scan(&cnt); err != nil {
+			return nil, -1, err
+		}
+	}
+	if cnt == 0 {
+		return nil, 0, nil
+	}
+	strSQL = "select * from(select log_id,log_time,log_info " +
+		"from infoLog where log_date = ? order by log_id desc) t limit ? offset (?-1)*? "
+	rows, err = dbs.Queryx(strSQL, logDate, pageSize, pageIndex, pageSize)
 	if err != nil {
 		return nil, -1, err
 	}
@@ -152,7 +170,6 @@ func (dbs *TLocalLogger) GetLog(logDate string, pageSize int32, pageIndex int32)
 		_ = rows.Close()
 	}()
 	var data []common.TLogInfo
-
 	for rows.Next() {
 		var item common.TLogInfo
 		if err = rows.Scan(&item.LogID, &item.LogTime, &item.LogInfo); err != nil {
@@ -160,7 +177,6 @@ func (dbs *TLocalLogger) GetLog(logDate string, pageSize int32, pageIndex int32)
 		}
 		data = append(data, item)
 	}
-	cnt := int32(len(data))
 	return data, cnt, nil
 }
 func (dbs *TLocalLogger) GetLogDate() ([]string, int32, error) {

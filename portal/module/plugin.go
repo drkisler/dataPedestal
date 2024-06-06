@@ -10,10 +10,10 @@ type TPluginInfo = common.TPluginInfo
 type TPlugin struct {
 	UserID int32 `json:"user_id,omitempty"` //用于标识谁维护的插件
 	TPluginInfo
-	HostUUID   string `json:"host_uuid,omitempty"`
-	HostName   string `json:"host_name,omitempty"`
-	HostIP     string `json:"host_ip,omitempty"`
-	PluginPort int32  `json:"plugin_port,omitempty"`
+	HostUUID string `json:"host_uuid,omitempty"`
+	HostName string `json:"host_name,omitempty"`
+	HostIP   string `json:"host_ip,omitempty"`
+	HostPort int32  `json:"host_port,omitempty"`
 }
 
 func (p *TPlugin) PutPlugin() (string, error) {
@@ -97,14 +97,6 @@ func (p *TPlugin) ModifyHostInfo() error {
 		return err
 	}
 	return dbs.ModifyHostInfo(p)
-}
-
-func (p *TPlugin) ModifyPluginPort() error {
-	dbs, err := GetDbServ()
-	if err != nil {
-		return err
-	}
-	return dbs.ModifyPluginPort(p)
 }
 
 func (p *TPlugin) GetPluginNames() ([]TPluginInfo, int, error) {

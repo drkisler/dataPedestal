@@ -22,6 +22,7 @@ func (log *TLogControl) CheckValid() error {
 	if log.PageSize == 0 {
 		log.PageSize = 50
 	}
+
 	if log.PluginUUID == "" {
 		return errors.New("插件UUID为空")
 	}

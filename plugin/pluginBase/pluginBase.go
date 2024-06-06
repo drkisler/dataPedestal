@@ -35,9 +35,7 @@ func (bp *TBasePlugin) Load(config string) common.TResponse {
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	/*	if cfg.SerialNumber != bp.SerialNumber {
-		return *common.Failure("序列号错误，请确认是否授权")
-	}*/
+
 	bp.IsDebug = cfg.IsDebug
 	if bp.Logger, err = logAdmin.GetLogger(); err != nil {
 		return *common.Failure(err.Error())

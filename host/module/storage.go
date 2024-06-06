@@ -282,6 +282,29 @@ func (dbs *TStorage) InitPluginByUUID(p *TPlugin) error {
 	return nil
 }
 
+// CheckPluginExists 检查插件是否存在
+func (dbs *TStorage) CheckPluginExists(p *TPlugin) (bool, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var rows *sqlx.Rows
+	strSQL := "select " +
+		"plugin_uuid from plugin where plugin_uuid = ?"
+	rows, err = dbs.Queryx(strSQL, p.PluginUUID)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var result bool
+	for rows.Next() {
+		result = true
+		break
+	}
+	return result, nil
+}
+
 func (dbs *TStorage) GetAutoRunPlugins() ([]TPlugin, error) {
 	dbs.Lock()
 	defer dbs.Unlock()

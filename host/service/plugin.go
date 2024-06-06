@@ -2,125 +2,180 @@ package service
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/control"
+	"github.com/gin-gonic/gin"
 )
 
-func RemovePlugin(pluginUUID []byte) []byte {
-	strUUID := string(pluginUUID)
+var IsDebug bool
+
+func RemovePlugin(data []byte) []byte {
 	var plugin control.TPluginControl
-	plugin.PluginUUID = strUUID
-	resp := plugin.DeletePlugin()
-	result, _ := json.Marshal(resp)
+	plugin.PluginUUID = string(data)
+	result, _ := json.Marshal(plugin.DeletePlugin())
 	return result
 }
 
 // GetTempConfig 获取插件配置文件模板
-func GetTempConfig(pluginUUID []byte) []byte {
+func GetTempConfig(data []byte) []byte {
 	var plugin control.TPluginControl
-	strUUID := string(pluginUUID[:36])
-	plugin.PluginUUID = strUUID
-	if len(pluginUUID) > 36 {
-		plugin.PluginConfig = string(pluginUUID[36:])
+	plugin.PluginUUID = string(data[:36])
+	if len(data) > 36 {
+		plugin.PluginConfig = string(data[36:])
 	}
-	resp := plugin.GetPluginTmpCfg()
-	result, _ := json.Marshal(resp)
+	result, _ := json.Marshal(plugin.GetPluginTmpCfg())
 	return result
 }
 
 // SetRunType 设置插件运行方式
-func SetRunType(pluginUUID []byte) []byte {
+func SetRunType(data []byte) []byte {
 	var plugin control.TPluginControl
-	plugin.PluginUUID = string(pluginUUID[:36])
-	plugin.RunType = string(pluginUUID[36:])
-	result := plugin.SetRunType()
-	data, _ := json.Marshal(result)
-	return data
+	plugin.PluginUUID = string(data[:36])
+	plugin.RunType = string(data[36:])
+	result, _ := json.Marshal(plugin.SetRunType())
+	return result
 }
 
 // UnloadPlugin 卸载插件
-func UnloadPlugin(pluginUUID []byte) []byte {
+func UnloadPlugin(data []byte) []byte {
 	var plugin control.TPluginControl
-	plugin.PluginUUID = string(pluginUUID[:36])
-	resp := plugin.UnloadPlugin()
-	result, _ := json.Marshal(resp)
+	plugin.PluginUUID = string(data)
+	result, _ := json.Marshal(plugin.UnloadPlugin())
 	return result
 }
 
 // LoadPlugin 加载插件
-func LoadPlugin(pluginUUID []byte) []byte {
+func LoadPlugin(data []byte) []byte {
 	var plugin control.TPluginControl
-	plugin.PluginUUID = string(pluginUUID[:36])
-	resp := plugin.LoadPlugin()
-	result, _ := json.Marshal(resp)
+	plugin.PluginUUID = string(data)
+	result, _ := json.Marshal(plugin.LoadPlugin())
 	return result
 }
 
 // RunPlugin 运行插件
-func RunPlugin(pluginUUID []byte) []byte {
+func RunPlugin(data []byte) []byte {
 	var plugin control.TPluginControl
-	plugin.PluginUUID = string(pluginUUID[:36])
-	resp := plugin.RunPlugin()
-	result, _ := json.Marshal(resp)
+	plugin.PluginUUID = string(data)
+	result, _ := json.Marshal(plugin.RunPlugin())
 	return result
 }
 
 // StopPlugin 停止插件
-func StopPlugin(pluginUUID []byte) []byte {
+func StopPlugin(data []byte) []byte {
 	var plugin control.TPluginControl
-	plugin.PluginUUID = string(pluginUUID[:36])
-	resp := plugin.StopPlugin()
-	result, _ := json.Marshal(resp)
+	plugin.PluginUUID = string(data)
+	result, _ := json.Marshal(plugin.StopPlugin())
 	return result
 }
 
 // UpdateConfig 更新插件配置
-func UpdateConfig(pluginUUID []byte) []byte {
+func UpdateConfig(data []byte) []byte {
 	var plugin control.TPluginControl
-	plugin.PluginUUID = string(pluginUUID[:36])
-	plugin.PluginConfig = string(pluginUUID[36:])
-	resp := plugin.UpdateConfig()
-	result, _ := json.Marshal(resp)
+	plugin.PluginUUID = string(data[:36])
+	plugin.PluginConfig = string(data[36:])
+	result, _ := json.Marshal(plugin.UpdateConfig())
 	return result
 }
 
-func GetPluginPort() []byte {
-	var pl control.TPluginControl
-	resp := pl.GetPluginPort()
-	result, _ := json.Marshal(resp)
+func GetPlugins() []byte {
+	var plugin control.TPluginControl
+	result, _ := json.Marshal(plugin.GetPlugins())
 	return result
 }
 
-func ShowMessage(source []byte) []byte {
-	fmt.Println(string(source))
-	return []byte{1}
-}
-
-func SetLicense(source []byte) []byte {
-	if len(source) != 36+19*2 {
+func SetLicense(data []byte) []byte {
+	if len(data) != 36+19*2 {
 		resp := common.Failure("请提供正确的序列号和授权码格式")
 		result, _ := json.Marshal(resp)
 		return result
 	}
-	var pl control.TPluginControl
-	pl.PluginUUID = string(source[:36])
-	err := pl.InitByUUID()
+
+	var plugin control.TPluginControl
+	plugin.PluginUUID = string(data[:36])
+	err := plugin.InitByUUID()
 	if err != nil {
 		resp := common.Failure(err.Error())
 		result, _ := json.Marshal(resp)
 		return result
 	}
-	pl.ProductCode = string(source[36:55])
-	pl.LicenseCode = string(source[55:])
-	resp := pl.SetLicense()
+	plugin.ProductCode = string(data[36:55])
+	plugin.LicenseCode = string(data[55:])
+	resp := plugin.SetLicense()
 	result, _ := json.Marshal(resp)
+	return result
+
+}
+func GetProductKey(data []byte) []byte {
+	var plugin control.TPluginControl
+	plugin.PluginUUID = string(data)
+	result, _ := json.Marshal(plugin.GetProductKey())
 	return result
 }
-func GetProductKey(source []byte) []byte {
-	var pl control.TPluginControl
-	pl.PluginUUID = string(source)
-	resp := pl.GetProductKey()
-	result, _ := json.Marshal(resp)
+
+func GetHandleFileResult(data []byte) []byte {
+	pluginUUID := string(data)
+	result, ok := errBuffer[pluginUUID]
+	if ok {
+		delete(errBuffer, pluginUUID)
+		data, _ = json.Marshal(result)
+		return data
+	}
+	result, ok = errBuffer["NULL"]
+	if ok {
+		delete(errBuffer, "NULL")
+		data, _ = json.Marshal(result)
+		return data
+	}
+
+	data, _ = json.Marshal(common.Ongoing())
+	return data
+}
+
+/*
+func PluginApi(data []byte) []byte {
+	var operate common.TPluginOperate
+	if err := json.Unmarshal(data, &operate); err != nil {
+		result, _ := json.Marshal(common.Failure(err.Error()))
+		return result
+	}
+	var plugin control.TPluginControl
+	plugin.PluginUUID = operate.PluginUUID
+	result, _ := json.Marshal(plugin.RunPluginAPI(&operate))
 	return result
+
+}
+*/
+
+func PluginApi(ctx *gin.Context) {
+	var plugin control.TPluginControl
+	var operate common.TPluginOperate
+	var params map[string]any
+	var err error
+	params = make(map[string]any)
+	ginContext := common.NewGinContext(ctx)
+	if err = ginContext.CheckRequest(&params); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
+		return
+	}
+	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
+		ginContext.Reply(IsDebug, common.Failure(err.Error()))
+		return
+	}
+	strUUID := ctx.Param("uuid")
+	if strUUID == "" {
+		ginContext.Reply(IsDebug, common.Failure("uuid is empty"))
+		return
+	}
+	api := ctx.Param("api")
+	if api == "" {
+		ginContext.Reply(IsDebug, common.Failure("api is empty"))
+		return
+	}
+	plugin.PluginUUID = strUUID
+	operate.UserID = plugin.OperatorID
+	operate.PluginUUID = plugin.PluginUUID
+	operate.OperateName = api
+	operate.Params = params
+
+	ginContext.Reply(IsDebug, plugin.RunPluginAPI(&operate))
 }

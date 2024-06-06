@@ -15,8 +15,12 @@ func GetLogDate(data []byte) []byte {
 		result, _ := json.Marshal(common.Failure(err.Error()))
 		return result
 	}
-	if err = log.CheckValid(); err != nil {
-		result, _ := json.Marshal(common.Failure(err.Error()))
+	if log.PluginUUID == "" {
+		result, _ := json.Marshal(common.Failure("pluginUUID is required"))
+		return result
+	}
+	if log.LogType == "" {
+		result, _ := json.Marshal(common.Failure("logType is required"))
 		return result
 	}
 	logDate := log.GetLogDate()
@@ -46,8 +50,16 @@ func DelOldLog(data []byte) []byte {
 		result, _ := json.Marshal(common.Failure(err.Error()))
 		return result
 	}
-	if err = log.CheckValid(); err != nil {
-		result, _ := json.Marshal(common.Failure(err.Error()))
+	if log.PluginUUID == "" {
+		result, _ := json.Marshal(common.Failure("pluginUUID is required"))
+		return result
+	}
+	if log.LogType == "" {
+		result, _ := json.Marshal(common.Failure("logType is required"))
+		return result
+	}
+	if log.LogDate == "" {
+		result, _ := json.Marshal(common.Failure("logDate is required"))
 		return result
 	}
 	result, _ := json.Marshal(log.DelOldLog())
@@ -61,8 +73,20 @@ func DelLog(data []byte) []byte {
 		result, _ := json.Marshal(common.Failure(err.Error()))
 		return result
 	}
-	if err = log.CheckValid(); err != nil {
-		result, _ := json.Marshal(common.Failure(err.Error()))
+	if log.PluginUUID == "" {
+		result, _ := json.Marshal(common.Failure("pluginUUID is required"))
+		return result
+	}
+	if log.LogType == "" {
+		result, _ := json.Marshal(common.Failure("logType is required"))
+		return result
+	}
+	if log.LogDate == "" {
+		result, _ := json.Marshal(common.Failure("logDate is required"))
+		return result
+	}
+	if log.LogID == 0 {
+		result, _ := json.Marshal(common.Failure("logID is required"))
 		return result
 	}
 	result, _ := json.Marshal(log.DelLog())

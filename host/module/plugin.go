@@ -123,6 +123,7 @@ func (p *TPlugin) AlterRunType() error {
 	return nil
 }
 
+// AlterFile 修改插件文件名称
 func (p *TPlugin) AlterFile() error {
 	dbs, err := GetDbServ()
 	if err != nil {
@@ -165,6 +166,14 @@ func (p *TPlugin) InitByUUID() error {
 		return err
 	}
 	return dbs.InitPluginByUUID(p)
+}
+
+func (p *TPlugin) CheckPluginExists() (bool, error) {
+	dbs, err := GetMemServ()
+	if err != nil {
+		return false, err
+	}
+	return dbs.CheckPluginExists(p)
 }
 
 func (p *TPlugin) AlterConfig() error {

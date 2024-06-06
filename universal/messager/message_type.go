@@ -16,11 +16,12 @@ const (
 	OperateDelOldLog
 	OperateDelLog
 	OperateGetPubError
-	OperateGetPluginPort
+	OperateGetPlugins
 	OperateHeartBeat
 	OperateCheckPlugin
 	OperateSetLicense
 	OperateGetProductKey
+	//OperatePluginApi
 	OperateShowMessage
 )
 

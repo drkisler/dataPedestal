@@ -162,3 +162,26 @@ func DownloadFile(ctx *gin.Context) {
 	})
 }
 */
+
+func IsSafeSQL(sql string) bool {
+	// 将SQL语句转换为小写，方便匹配
+	lowerSQL := strings.ToLower(sql)
+
+	// 定义一个包含所有危险关键词的切片
+	dangerousKeywords := []string{
+		"drop", "delete", "truncate", "alter", "create", "insert",
+		"update", "replace", "grant", "revoke", "shutdown", "backup",
+		"restore", "lock", "unlock", "rename",
+	}
+
+	// 遍历所有危险关键词
+	for _, keyword := range dangerousKeywords {
+		// 检查SQL语句中是否包含当前关键词
+		if strings.Contains(lowerSQL, keyword) {
+			return false
+		}
+	}
+
+	// 如果没有发现任何危险关键词，则返回true
+	return true
+}

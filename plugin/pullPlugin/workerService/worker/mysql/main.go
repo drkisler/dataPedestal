@@ -8,24 +8,25 @@ import (
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/service"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker/mysql/workimpl"
+	"github.com/hashicorp/go-plugin"
 	"log"
 	"os"
 	"sync"
-	//"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
-	//"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker/mysql/workimpl"
-	"github.com/hashicorp/go-plugin"
-	//"log"
-	//"os"
-	//"sync"
 )
 
 func main() {
 	gob.Register([]common.TLogInfo{})
+	gob.Register(common.TPluginOperate{})
+	gob.Register([]common.TPullJob{})
+	gob.Register([]common.TPullTable{})
+	gob.Register([]common.ColumnInfo{})
+	gob.Register([]common.TableInfo{})
+
 	file, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
 	}
-	if service.SerialNumber, err = common.FileMD5(file); err != nil {
+	if service.SerialNumber, err = common.FileHash(file); err != nil {
 		log.Fatal(err)
 	}
 	currentPath, err := common.GetCurrentPath()
@@ -54,24 +55,24 @@ func main() {
 		service.SerialNumber = "123456"
 	*/
 	//通过运行参数控制调试用
-	//*/5 * * * * *
 	if len(os.Args) > 1 {
 
 		if os.Args[1] == "test" {
 			workerService.NewWorker = workimpl.NewMySQLWorker
-			pl, err := service.CreatePullMySQLPlugin()
-			if err != nil {
+			if err = service.InitPlugin(); err != nil {
 				fmt.Println(err.Error())
 				return
 			}
+			pl := service.PluginServ
 
 			// */5 * * * * 每5分钟执行一次
 			// 5 * * * * * 每分钟第5秒执行一次
 			// 1 * * * * * 每分钟第一秒执行一次
 			// 0/1 * * * * ? 每1秒执行一次
 			// 1 * * * * 每小时第一分钟执行一次
-			cfg := `{"is_debug": false,"connect_string": "sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true","dest_database": "Address=192.168.110.129:9000,Database=default,User=default,Password=Enjoy0r","keep_connect": false,"connect_buffer": 20,"data_buffer": 2000,"skip_hour": [0,1,2,3],"cron_expression": "0/1 * * * * ?","server_port": 8904}`
+			//cfg0 := `{"is_debug": false,"connect_string": "sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true","dest_database": "Address=192.168.110.129:9000,Database=default,User=default,Password=Enjoy0r","keep_connect": false,"connect_buffer": 20,"data_buffer": 2000,"skip_hour": [0,1,2,3],"cron_expression": "0/1 * * * * ?","server_port": 8904}`
 			//replyUrl := "tcp://192.168.93.150:8902"
+			cfg := `{"is_debug": false,"server_port": 8904}`
 			if resp := pl.Load(cfg); resp.Code < 0 {
 				fmt.Println(resp.Info)
 				return
@@ -84,6 +85,14 @@ func main() {
 				defer wg.Done()
 				pl.Run()
 			}(&wg)
+			var operate common.TPluginOperate
+			operate.UserID = 1
+			operate.OperateName = "getJobs" //"getDestTables"
+			operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
+			operate.Params = map[string]any{"job_name": "test", "page_size": 50, "page_index": 1}
+			///getTableColumn
+			rest := pl.CustomInterface(operate)
+			fmt.Println(fmt.Sprintf("%v", rest.Info))
 
 			//time.Sleep(10 * time.Second)
 			//pl.Stop()
@@ -93,18 +102,18 @@ func main() {
 
 		}
 	}
-
+	if err = service.InitPlugin(); err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 	var handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,
 		MagicCookieKey:   "SERIAL_NUMBER",
 		MagicCookieValue: service.SerialNumber,
 	}
 	workerService.NewWorker = workimpl.NewMySQLWorker
-	service.PluginServ, err = service.CreatePullMySQLPlugin()
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
+	//workerService.GetSourceConnOption = workimpl.GetConnOptions
+
 	pluginMap := map[string]plugin.Plugin{
 		service.SerialNumber: &common.PluginImplement{Impl: service.PluginServ},
 	}

@@ -17,7 +17,7 @@ const checkPluginExists = "Create Table " +
 	",plugin_file text not null" +
 	",plugin_config text not null" +
 	",plugin_version text not null" +
-	",plugin_port INTEGER not null default 0" +
+	//",plugin_port INTEGER not null default 0" +
 	",host_uuid text not null" +
 	",host_name text not null" +
 	",host_ip text not null" +
@@ -101,7 +101,7 @@ func (dbs *TStorage) PutPlugin(p *TPlugin) (string, error) {
 
 // GetPluginByUUID 根据uuid获取插件信息
 func (dbs *TStorage) GetPluginByUUID(p *TPlugin) error {
-	strSQL := "select plugin_uuid,plugin_name,plugin_type,plugin_desc,plugin_file,plugin_config,plugin_version,plugin_port,host_uuid,host_name,host_ip,run_type,user_id " +
+	strSQL := "select plugin_uuid,plugin_name,plugin_type,plugin_desc,plugin_file,plugin_config,plugin_version,host_uuid,host_name,host_ip,run_type,user_id " +
 		"from plugins where plugin_uuid=?"
 	rows, err := dbs.Queryx(strSQL, p.PluginUUID)
 	if err != nil {
@@ -113,7 +113,7 @@ func (dbs *TStorage) GetPluginByUUID(p *TPlugin) error {
 	var cnt = 0
 	for rows.Next() {
 		if err = rows.Scan(&p.PluginUUID, &p.PluginName, &p.PluginType, &p.PluginDesc, &p.PluginFile,
-			&p.PluginConfig, &p.PluginVersion, &p.PluginPort, &p.HostUUID, &p.HostName, &p.HostIP, &p.RunType, &p.UserID); err != nil {
+			&p.PluginConfig, &p.PluginVersion, &p.HostUUID, &p.HostName, &p.HostIP, &p.RunType, &p.UserID); err != nil {
 			return err
 		}
 		cnt++
@@ -152,7 +152,7 @@ func (dbs *TStorage) QueryPlugin(p *TPlugin, pageSize int32, pageIndex int32) ([
 	var err error
 	var rows *sqlx.Rows
 	strSQL := "select " +
-		"user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file, plugin_config, plugin_version, plugin_port,host_uuid,host_name,host_ip,run_type "
+		"user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file, plugin_config, plugin_version,host_uuid,host_name,host_ip,run_type "
 	if p.PluginName != "" {
 		strSQL += "from (select * from plugins where user_id= ? and plugin_name like '%" + p.PluginName + "%' order by plugin_name)t limit ? offset (?-1)*?"
 		rows, err = dbs.Queryx(strSQL, p.UserID, pageSize, pageIndex, pageSize)
@@ -177,8 +177,14 @@ func (dbs *TStorage) QueryPlugin(p *TPlugin, pageSize int32, pageIndex int32) ([
 	for rows.Next() {
 		var p TPlugin
 		if err = rows.Scan(&p.UserID, &p.PluginUUID, &p.PluginName, &p.PluginType, &p.PluginDesc,
-			&p.PluginFile, &p.PluginConfig, &p.PluginVersion, &p.PluginPort, &p.HostUUID, &p.HostName, &p.HostIP, &p.RunType); err != nil {
+			&p.PluginFile, &p.PluginConfig, &p.PluginVersion, &p.HostUUID, &p.HostName, &p.HostIP, &p.RunType); err != nil {
 			return nil, -1, err
+		}
+		if p.PluginFile == "" {
+			p.Status = "待上传"
+		}
+		if p.HostUUID == "" {
+			p.Status = "待部署"
 		}
 		cnt++
 		result = append(result, p)
@@ -299,23 +305,6 @@ func (dbs *TStorage) ModifyHostInfo(p *TPlugin) error {
 	_ = ctx.Commit()
 	return nil
 }
-func (dbs *TStorage) ModifyPluginPort(p *TPlugin) error {
-	strSQL := "update " +
-		"plugins set plugin_port=? where plugin_uuid=?"
-	dbs.Lock()
-	defer dbs.Unlock()
-	ctx, err := dbs.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = ctx.Exec(strSQL, p.PluginPort, p.PluginUUID)
-	if err != nil {
-		_ = ctx.Rollback()
-		return err
-	}
-	_ = ctx.Commit()
-	return nil
-}
 
 func (dbs *TStorage) GetPluginNames(p *TPlugin /*, pageSize int32, pageIndex int32*/) (plugins []TPluginInfo, total int, err error) {
 	dbs.Lock()
@@ -359,7 +348,7 @@ func (dbs *TStorage) GetAutoRunPlugins() ([]TPlugin, error) {
 	defer dbs.Unlock()
 	var err error
 	var rows *sqlx.Rows
-	strSQL := "select user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file, plugin_config, plugin_version, plugin_port,host_uuid,host_name,host_ip,run_type  " +
+	strSQL := "select user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file, plugin_config, plugin_version,host_uuid,host_name,host_ip,run_type  " +
 		"from plugins where coalesce(plugin_file,'') <>'' and coalesce(plugin_config,'')<>'' and run_type ='自动启动' "
 
 	rows, err = dbs.Queryx(strSQL)
@@ -373,7 +362,7 @@ func (dbs *TStorage) GetAutoRunPlugins() ([]TPlugin, error) {
 	for rows.Next() {
 		var p TPlugin
 		if err = rows.Scan(&p.UserID, &p.PluginUUID, &p.PluginName, &p.PluginType, &p.PluginDesc,
-			&p.PluginFile, &p.PluginConfig, &p.PluginVersion, p.PluginPort, p.HostUUID, p.HostName, p.HostIP, &p.RunType); err != nil {
+			&p.PluginFile, &p.PluginConfig, &p.PluginVersion, &p.HostUUID, &p.HostName, &p.HostIP, &p.RunType); err != nil {
 			return nil, err
 		}
 		result = append(result, p)
