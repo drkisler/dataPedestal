@@ -35,7 +35,6 @@ func RunPlugins() {
 		return
 	}
 	for _, item := range plugins {
-
 		if req, err = NewPlugin(item.SerialNumber,
 			common.GenFilePath(initializers.HostConfig.PluginDir, item.PluginUUID, item.PluginFile)); err != nil {
 			common.LogServ.Error("RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
@@ -112,7 +111,6 @@ func UnloadPlugin(UUID string) error {
 	if runStatus == "true" {
 		req.ImpPlugin.Stop()
 	}
-
 	req.Close()
 	pluginLock.Lock()
 	defer pluginLock.Unlock()

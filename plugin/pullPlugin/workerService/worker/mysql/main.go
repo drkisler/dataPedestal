@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 )
 
 func main() {
@@ -40,6 +41,8 @@ func main() {
 		log.Fatal(err)
 	}
 	module.DbFilePath = strDataDir + pathSeparator
+
+	common.NewLogService(currentPath, pathSeparator, "info", "warn", "err", "debug", false)
 
 	/*
 		// 向host发送消息的客户端，用于调试
@@ -87,16 +90,48 @@ func main() {
 			}(&wg)
 			var operate common.TPluginOperate
 			operate.UserID = 1
-			operate.OperateName = "getJobs" //"getDestTables"
+			operate.OperateName = "getSourceTableDDL" //"offLineJob"
 			operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
-			operate.Params = map[string]any{"job_name": "test", "page_size": 50, "page_index": 1}
-			///getTableColumn
+			operate.Params = map[string]any{"job_name": "test", "table_name": "`case`"}
 			rest := pl.CustomInterface(operate)
-			fmt.Println(fmt.Sprintf("%v", rest.Info))
+			fmt.Println(fmt.Sprintf("getSourceTableDDL %v", rest.Info), rest.Code)
 
-			//time.Sleep(10 * time.Second)
-			//pl.Stop()
+			/*
+				func (mp *TMyPlugin) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
+					return mp.workerProxy.GetSourceTableDDL(connectOption, tableName)
+				}
+					var operate common.TPluginOperate
+					operate.UserID = 1
+					operate.OperateName = "onLineJob" //"offLineJob"
+					operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
+					operate.Params = map[string]any{"job_name": "test", "table_id": float64(2)}
+					///getTableColumn
+					rest := pl.CustomInterface(operate)
+					fmt.Println(fmt.Sprintf("onLineJob %v", rest.Info), rest.Code)
 
+					operate.OperateName = "offLineJob"
+					rest = pl.CustomInterface(operate)
+					fmt.Println(fmt.Sprintf("offLineJob %v", rest.Info), rest.Code)
+
+					operate.OperateName = "onLineJob"
+					rest = pl.CustomInterface(operate)
+					fmt.Println(fmt.Sprintf("onLineJob %v", rest.Info), rest.Code)
+					operate.OperateName = "getJobs"
+					rest = pl.CustomInterface(operate)
+
+					fmt.Println(fmt.Sprintf("getJobs %v", rest.Info), rest.Data.ArrData.([]common.TPullJob))
+			*/
+
+			time.Sleep(10 * time.Second)
+			pl.Stop()
+			wg.Add(1)
+			go func(wg *sync.WaitGroup) {
+				defer wg.Done()
+				resp := pl.Run()
+				fmt.Println(resp.Info)
+			}(&wg)
+			time.Sleep(10 * time.Second)
+			pl.Stop()
 			wg.Wait()
 			return
 

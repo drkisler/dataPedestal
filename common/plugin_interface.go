@@ -45,8 +45,9 @@ type TPullJob struct {
 	CronExpression string `json:"cron_expression,omitempty"`
 	SkipHour       string `json:"skip_hour,omitempty"`
 	IsDebug        string `json:"is_debug,omitempty"`
-	Status         string `json:"status,omitempty"`
+	Status         string `json:"status,omitempty"` // enabled , disabled
 	LastError      string `json:"last_error,omitempty"`
+	LoadStatus     string `json:"load_status,omitempty"` // loaded, unloaded
 }
 
 type TPullTable struct {
@@ -72,4 +73,5 @@ type ColumnInfo struct {
 	ColumnCode string `json:"column_code,omitempty"`
 	ColumnName string `json:"column_name,omitempty"`
 	IsKey      string `json:"is_key,omitempty"`
+	DataType   string `json:"data_type,omitempty"`
 }

@@ -2,7 +2,6 @@ package clickHouse
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/ClickHouse/ch-go"
 	"github.com/ClickHouse/ch-go/proto"
@@ -13,14 +12,15 @@ import (
 type IPullWorker interface {
 	OpenConnect() error
 	CloseConnect() error
-	CheckSQLValid(sql string) error
-	// GetKeyColumns(schema, tableName string) ([]string, error)
+	CheckSQLValid(sql, filterCol, filterVal *string) error
 	GetColumns(tableName string) ([]common.ColumnInfo, error)
 	GetTables() ([]common.TableInfo, error)
-	ReadData(strSQL, filter string) (*sql.Rows, error)
+	ReadData(strSQL, filterCOl, filterVal *string) (interface{}, error)
 	GenTableScript(tableName string) (*string, error)
-	WriteData(tableName string, batch int, data *sql.Rows, client *TClickHouseClient) error
+	WriteData(tableName string, batch int, data interface{}, client *TClickHouseClient) (int64, error)
 	GetConnOptions() []string
+	GetQuoteFlag() string
+	GetSourceTableDDL(tableName string) (*string, error)
 }
 
 type TClickHouseClient struct {
@@ -37,7 +37,6 @@ func NewClickHouseClient(address, database, user, password string) (*TClickHouse
 		User:     user,
 		Password: password,
 	}
-
 	client, err := ch.Dial(ctx, options)
 	if err != nil {
 		return nil, err
@@ -105,62 +104,98 @@ func (chc *TClickHouseClient) LoadData(tableName string, data []proto.InputColum
 	return nil
 }
 
-func (chc *TClickHouseClient) GetTableNames() ([]string, error) {
+func (chc *TClickHouseClient) GetTableNames() ([]common.TableInfo, error) {
 	if err := chc.Connect(); err != nil {
 		return nil, err
 	}
-	var resultData = make([]proto.ColStr, 1)
-	var result proto.Results
-	var resultCol proto.ResultColumn
-	resultCol.Name = "name"
-	resultCol.Data = &resultData[0]
-	result = append(result, resultCol)
-
-	strBody := fmt.Sprintf("select" +
-		" name from system.tables where database={database:String}")
-	if err := chc.Client.Do(chc.Ctx, ch.Query{Body: strBody,
+	var resultData = make([]proto.ColStr, 2)
+	var result = proto.Results{
+		proto.ResultColumn{
+			Name: "name",
+			Data: &resultData[0],
+		},
+		proto.ResultColumn{
+			Name: "comment",
+			Data: &resultData[1],
+		},
+	}
+	/*
+		var resultCol proto.ResultColumn
+		resultCol.Name = "name"
+		resultCol.Data = &resultData[0]
+		result = append(result, resultCol)
+	*/
+	strBody := fmt.Sprintf("select " +
+		"name,comment from system.tables where database={database:String}")
+	if err := chc.Client.Do(chc.Ctx, ch.Query{
+		Body: strBody,
 		Parameters: ch.Parameters(map[string]any{
 			"database": chc.Options.Database,
 		}),
-		Result: result}); err != nil {
+		Result: result,
+		/*
+			other example :
+			var data proto.ColInt64
+			Result: proto.Results{
+						{Name: "v", Data: &data},
+					},
+		*/
+	}); err != nil {
 		return nil, err
 	}
-	var tableNames []string
-	for _, colStr := range resultData {
-		if colStr.Rows() > 0 {
-			tableNames = append(tableNames, colStr.Row(0))
+	var tables []common.TableInfo
+	if resultData[0].Rows() != resultData[1].Rows() {
+		return nil, fmt.Errorf("table name and comment not equal")
+	}
+	if resultData[0].Rows() > 0 {
+		for i := 0; i < resultData[0].Rows(); i++ {
+			tables = append(tables, common.TableInfo{TableCode: resultData[0].Row(i), TableName: resultData[1].Row(i)})
 		}
 	}
-	return tableNames, nil
-
+	/*
+		for _, colStr := range resultData {
+			if colStr.Rows() > 0 {
+				for i := 0; i < colStr.Rows(); i++ {
+					tableNames = append(tableNames, colStr.Row(i))
+				}
+			}
+		}
+	*/
+	return tables, nil
 }
 
-func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterColumn []string) ([]string, error) {
+// GetMaxFilter 获取表中最大的过滤条件值,filterValue 为过滤条件列名数组,如 ["gmt_create(datetime(2017-01-01 15:03:45))", "gmt_number(int(123))"]
+func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterValue []string) ([]string, error) {
 	if err := chc.Connect(); err != nil {
 		return nil, err
 	}
-	var filterData = make([]proto.ColStr, len(filterColumn))
+	var filterData = make([]proto.ColStr, len(filterValue))
 	var result proto.Results
-	for i, colName := range filterColumn {
+	arrColumns, arrTypes, err := common.ConvertFilterColum(filterValue)
+	if err != nil {
+		return nil, err
+	}
+	arrFilter := make([]string, len(arrColumns))
+	for i, colName := range arrColumns {
 		var resultCol proto.ResultColumn
 		//var data proto.ColStr
-		filterColumn[i] = fmt.Sprintf("cast(max(%s) as varchar) %s ", filterColumn[i], filterColumn[i])
+		arrFilter[i] = fmt.Sprintf("cast(max(%s) as varchar) %s ", colName, colName)
 		resultCol.Name = colName
 		resultCol.Data = &filterData[i]
 		result = append(result, resultCol)
 	}
 	strBody := fmt.Sprintf("select "+
-		"%s from %s", strings.Join(filterColumn, ","), tableName)
-	if err := chc.Client.Do(chc.Ctx, ch.Query{Body: strBody, Result: result}); err != nil {
+		"%s from %s", strings.Join(arrFilter, ","), tableName)
+	if err = chc.Client.Do(chc.Ctx, ch.Query{Body: strBody, Result: result}); err != nil {
 		return nil, err
 	}
-	var filterValue []string
-	for _, colStr := range filterData {
+	var newFilterValue []string
+	for iIndex, colStr := range filterData {
 		if colStr.Rows() > 0 {
-			filterValue = append(filterValue, colStr.Row(0))
+			newFilterValue = append(newFilterValue, fmt.Sprintf("%s(%s(%s))", arrColumns[iIndex], arrTypes[iIndex], colStr.Row(0)))
 		}
 	}
-	return filterValue, nil
+	return newFilterValue, nil
 }
 
 func GetConnOptions() []string {

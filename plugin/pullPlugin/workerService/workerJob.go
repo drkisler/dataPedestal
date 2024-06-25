@@ -1,8 +1,12 @@
 package workerService
 
 import (
-	"database/sql"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
@@ -10,10 +14,6 @@ import (
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
 	"github.com/google/uuid"
-	"slices"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type TWorkerJob struct {
@@ -41,7 +41,7 @@ func NewWorkerJob(job *module.TPullJob, logger *logAdmin.TLoggerAdmin) (*TWorker
 	if connOption, err = common.StringToMap(&strConn); err != nil {
 		return nil, err
 	}
-	if worker, err = NewWorker(connOption, job.ConnectBuffer, job.KeepConnect == "是"); err != nil {
+	if worker, err = NewWorker(connOption, job.ConnectBuffer, job.KeepConnect == common.STYES); err != nil {
 		return nil, err
 	}
 
@@ -77,11 +77,11 @@ func NewWorkerJob(job *module.TPullJob, logger *logAdmin.TLoggerAdmin) (*TWorker
 		clickHouseClient: chClient,
 		SourceDbConn:     job.SourceDbConn,
 		DestDbConn:       job.DestDbConn,
-		KeepConnect:      job.KeepConnect == "是",
+		KeepConnect:      job.KeepConnect == common.STYES,
 		ConnectBuffer:    job.ConnectBuffer,
-		TBasePlugin:      pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: job.IsDebug == "是", Logger: logger},
+		TBasePlugin:      pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: job.IsDebug == common.STYES, Logger: logger},
 		SkipHour:         skipHour,
-		Enabled:          job.Status == "enabled",
+		Enabled:          job.Status == common.STENABLED,
 	}, nil
 }
 
@@ -94,50 +94,90 @@ func (wj *TWorkerJob) Run() {
 	defer func() {
 		wj.isWorking = false
 	}()
-
+	var err error
 	job := &ctl.TPullJob{TPullJob: common.TPullJob{JobID: wj.JobID}}
 	loc, err := time.LoadLocation("Local")
 	if err != nil {
-		_ = job.SetError(fmt.Sprintf("加载时区失败：%s", err.Error()))
+		_ = job.SetError(fmt.Sprintf("[%s]加载时区失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 		wj.Logger.WriteError(err.Error())
 		return
 	}
+
 	if slices.Contains[[]int, int](wj.SkipHour, time.Now().In(loc).Hour()) {
 		return
 	}
+
 	// 如果是长期运行的任务，则需要检查Running
 	// 如果是一次性任务，则不需要检查
 	if !wj.KeepConnect {
-		if err := wj.clickHouseClient.Connect(); err != nil {
-			_ = job.SetError(fmt.Sprintf("连接数据中心失败：%s", err.Error()))
+		if err = wj.clickHouseClient.Connect(); err != nil {
+			_ = job.SetError(fmt.Sprintf("[%s]连接数据中心失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 			wj.Logger.WriteError(err.Error())
 			return
 		}
 	}
-	if err = wj.PullTable(); err != nil {
-		_ = job.SetError(fmt.Sprintf("拉取数据失败：%s", err.Error()))
+	_ = job.SetError("运行中...")
+	if err = wj.PullTables(); err != nil {
+		_ = job.SetError(fmt.Sprintf("[%s]拉取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 		wj.Logger.WriteError(err.Error())
 		return
 	}
 	if !wj.KeepConnect {
-		if err := wj.clickHouseClient.Client.Close(); err != nil {
-			_ = job.SetError(fmt.Sprintf("关闭连接失败：%s", err.Error()))
+		if err = wj.clickHouseClient.Client.Close(); err != nil {
+			_ = job.SetError(fmt.Sprintf("[%s]关闭连接失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 			wj.Logger.WriteError(err.Error())
-			//fmt.Println(err.Error())
 			return
 		}
 	}
+	_ = job.SetError(fmt.Sprintf("[%s]：%s", time.Now().Format("2006-01-02 15:04:05"), "任务执行成功"))
 }
-func (wj *TWorkerJob) PullTable() error {
-	var rows *sql.Rows
-	var job ctl.TPullTableControl
+
+func (wj *TWorkerJob) PullTable(tableID int32) error {
+	var rows interface{}
+	var tbl ctl.TPullTableControl
 	var filters []string
-	err := wj.worker.OpenConnect()
+	var err error
+	var total int64
+	tbl.JobID = wj.JobID
+	tbl.TableID = tableID
+	err = tbl.InitTableByID()
 	if err != nil {
 		return err
 	}
-	job.JobID = wj.JobID
-	tables, cnt, err := job.GetAllTables()
+	_ = tbl.SetPullResult("运行中...")
+	strSQL, strCOLs, strVals := tbl.SelectSql, tbl.FilterCol, tbl.FilterVal
+	if rows, err = wj.worker.ReadData(&strSQL, &strCOLs, &strVals); err != nil {
+		_ = tbl.SetPullResult(fmt.Sprintf("[%s]读取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+		return err
+	}
+	if total, err = wj.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, wj.clickHouseClient); err != nil {
+		_ = tbl.SetPullResult(fmt.Sprintf("[%s]写入数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+		return err
+	}
+	if strVals != "" {
+		arrFilterVal := strings.Split(strVals, ",")
+		filters, err = wj.clickHouseClient.GetMaxFilter(tbl.DestTable, arrFilterVal)
+		if err != nil {
+			_ = tbl.SetPullResult(fmt.Sprintf("[%s]获取过滤值失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+			return err
+		}
+		tbl.FilterVal = strings.Join(filters, ",")
+		if err = tbl.SetFilterVal(); err != nil {
+			_ = tbl.SetPullResult(fmt.Sprintf("[%s]更新过滤值失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+			return err
+		}
+	}
+	// convert current time to string
+
+	_ = tbl.SetPullResult(fmt.Sprintf("[%s]拉取数据成功，共%d条", time.Now().Format("2006-01-02 15:04:05"), total))
+	return nil
+
+}
+
+func (wj *TWorkerJob) PullTables() error {
+	var tblCtl ctl.TPullTableControl
+	tblCtl.JobID = wj.JobID
+	tables, cnt, err := tblCtl.GetAllTables()
 	if err != nil {
 		return err
 	}
@@ -146,26 +186,9 @@ func (wj *TWorkerJob) PullTable() error {
 			if !wj.IsRunning() {
 				return nil
 			}
-			if rows, err = wj.worker.ReadData(tbl.SelectSql, tbl.FilterVal); err != nil {
-				_ = tbl.SetError(fmt.Sprintf("读取数据失败：%s", err.Error()))
-				return err
-			}
-			if err = wj.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, wj.clickHouseClient); err != nil {
-				_ = tbl.SetError(fmt.Sprintf("写入数据失败：%s", err.Error()))
-				return err
-			}
-			if tbl.FilterCol != "" {
-				arrFilterVal := strings.Split(tbl.FilterCol, ",")
-				filters, err = wj.clickHouseClient.GetMaxFilter(tbl.DestTable, arrFilterVal)
-				if err != nil {
-					_ = tbl.SetError(fmt.Sprintf("获取过滤值失败：%s", err.Error()))
-					return err
-				}
-				tbl.FilterVal = strings.Join(filters, ",")
-				if err = tbl.SetFilterVal(); err != nil {
-					_ = tbl.SetError(fmt.Sprintf("更新过滤值失败：%s", err.Error()))
-					return err
-				}
+			if err = wj.PullTable(tbl.TableID); err != nil {
+				_ = tbl.SetPullResult(fmt.Sprintf("[%s]拉取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+				continue
 			}
 		}
 	}
@@ -179,6 +202,12 @@ func (wj *TWorkerJob) IsWorking() bool {
 func (wj *TWorkerJob) DisableJob() error {
 	var job ctl.TPullJob
 	job.JobID = wj.JobID
-	job.Status = "disabled"
+	job.Status = common.STDISABLED
+	return job.SetJobStatus()
+}
+func (wj *TWorkerJob) EnableJob() error {
+	var job ctl.TPullJob
+	job.JobID = wj.JobID
+	job.Status = common.STENABLED
 	return job.SetJobStatus()
 }

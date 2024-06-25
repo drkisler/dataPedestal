@@ -24,7 +24,7 @@ type TPullTableControl struct {
 }
 
 // AddTable 新增表
-func (pc *TPullTableControl) AddTable() *common.TResponse {
+func (pc *TPullTableControl) AppendTable() *common.TResponse {
 	pullTable := pc.TPullTable
 	id, err := pullTable.AddTable()
 	if err != nil {
@@ -32,24 +32,24 @@ func (pc *TPullTableControl) AddTable() *common.TResponse {
 	}
 	return common.ReturnInt(int(id))
 }
-func (pc *TPullTableControl) AlterTable() *common.TResponse {
+func (pc *TPullTableControl) ModifyTable() *common.TResponse {
 	pullTable := pc.TPullTable
 	if err := pullTable.AlterTable(); err != nil {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
 }
-func (pc *TPullTableControl) DeleteTable() *common.TResponse {
+func (pc *TPullTableControl) RemoveTable() *common.TResponse {
 	pullTable := pc.TPullTable
 	if err := pullTable.DeleteTable(); err != nil {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
 }
-func (pc *TPullTableControl) GetTables() *common.TResponse {
+func (pc *TPullTableControl) QueryTables() *common.TResponse {
 	var result common.TRespDataSet
 	pageBuffer, ok := tablePageID[pc.OperatorID]
-	if (!ok) || (pageBuffer.QueryParam != pc.ToString()) {
+	if (!ok) || (pageBuffer.QueryParam != pc.ToString()) || (pc.PageIndex == 1) {
 		ids, err := pc.TPullTable.GetTableIDs()
 		if err != nil {
 			return common.Failure(err.Error())
@@ -82,7 +82,7 @@ func (pc *TPullTableControl) SetFilterValue() *common.TResponse {
 	return common.Success(nil)
 }
 
-func (pc *TPullTableControl) SetTableStatus() *common.TResponse {
+func (pc *TPullTableControl) AlterTableStatus() *common.TResponse {
 	var err error
 	pullTable := pc.TPullTable
 	if err = pullTable.SetTableStatus(); err != nil {
@@ -97,9 +97,9 @@ func (pc *TPullTableControl) GetAllTables() ([]TPullTable, int, error) {
 	return pullTable.GetAllTables()
 }
 
-func (pc *TPullTableControl) SetError(errInfo string) error {
+func (pc *TPullTableControl) SetPullResult(errInfo string) error {
 	pullTable := pc.TPullTable
-	return pullTable.SetError(errInfo)
+	return pullTable.SetPullResult(errInfo)
 }
 
 func ParsePullTableControl(data *map[string]any) (*TPullTableControl, error) {

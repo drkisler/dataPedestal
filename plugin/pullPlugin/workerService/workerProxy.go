@@ -8,6 +8,8 @@ import (
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
 	"github.com/go-co-op/gocron/v2"
 	"strings"
+	"sync"
+	"time"
 )
 
 var NewWorker TNewWorker
@@ -16,13 +18,16 @@ var NewWorker TNewWorker
 
 // 测试用
 // var msgClient *messager.TMessageClient
-type TGetSourceConnOption = func() []string
+type TCheckFunc = func()
 type TNewWorker = func(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error)
 type TWorkerProxy struct {
 	SignChan  chan int
+	CheckChan chan TCheckFunc
 	scheduler gocron.Scheduler
 	jobs      map[string]*TWorkerJob
 	logger    *logAdmin.TLoggerAdmin
+	status    *common.TStatus
+	wg        *sync.WaitGroup
 }
 
 type TScheduler struct {
@@ -34,27 +39,48 @@ type TScheduler struct {
 func NewWorkerProxy() (*TWorkerProxy, error) {
 	var err error
 	var scheduler gocron.Scheduler
+	var wg sync.WaitGroup
 	var ch = make(chan int)
-	//msgClient, _ = messager.NewMessageClient()
+	chkChan := make(chan TCheckFunc)
+	status := common.NewStatus()
 	var runJob = make(map[string]*TWorkerJob)
 	if scheduler, err = gocron.NewScheduler(); err != nil {
 		return nil, err
 	}
 	return &TWorkerProxy{ //TBasePlugin: pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: cfg.IsDebug, Logger: logger},
 		SignChan:  ch,
+		CheckChan: chkChan,
 		scheduler: scheduler,
 		jobs:      runJob,
+		status:    status,
+		wg:        &wg,
 	}, nil
 }
 
 /*
-func SendInfo(info string) {
-	if _, err := msgClient.Send("tcp://192.168.110.129:8902", messager.OperateShowMessage, []byte(info)); err != nil {
-		fmt.Println(err.Error())
+	func SendInfo(info string) {
+		if _, err := msgClient.Send("tcp://192.168.110.129:8902", messager.OperateShowMessage, []byte(info)); err != nil {
+			fmt.Println(err.Error())
+		}
 	}
-}
 */
 
+func (pw *TWorkerProxy) StartCheckPool() {
+	pw.wg.Add(1)
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		for pw.status.IsRunning() {
+			select {
+			case checkFunc := <-pw.CheckChan:
+				checkFunc()
+			case <-time.After(time.Second * 2):
+				if pw.status.IsRunning() {
+					continue
+				}
+			}
+		}
+	}(pw.wg)
+}
 func (pw *TWorkerProxy) Start(logger *logAdmin.TLoggerAdmin) error {
 	// get all jobs
 	jobs, _, err := ctl.GetAllJobs()
@@ -63,16 +89,16 @@ func (pw *TWorkerProxy) Start(logger *logAdmin.TLoggerAdmin) error {
 	}
 	// 启动scheduler
 	for _, job := range jobs {
-		workerJob, err := NewWorkerJob(&job, logger)
-		if err != nil {
+		var workerJob *TWorkerJob
+		var pullJob gocron.Job
+		if workerJob, err = NewWorkerJob(&job, logger); err != nil {
 			return err
 		}
-		pullJob, err := pw.scheduler.NewJob(
+		if pullJob, err = pw.scheduler.NewJob(
 			gocron.CronJob(job.CronExpression, len(strings.Split(job.CronExpression, " ")) > 5),
 			gocron.NewTask(workerJob.Run),
 			gocron.WithSingletonMode(gocron.LimitModeReschedule),
-		)
-		if err != nil {
+		); err != nil {
 			return err
 		}
 		workerJob.JobUUID = pullJob.ID()
@@ -80,7 +106,18 @@ func (pw *TWorkerProxy) Start(logger *logAdmin.TLoggerAdmin) error {
 	}
 	pw.logger = logger
 	pw.scheduler.Start()
+	pw.status.SetRunning(true)
+	pw.StartCheckPool()
 	return nil
+}
+
+// GetOnlineJobID 获取在线任务ID用于前端展示任务状态(online/offline)
+func (pw *TWorkerProxy) GetOnlineJobID() []int32 {
+	var result []int32
+	for _, job := range pw.jobs {
+		result = append(result, job.JobID)
+	}
+	return result
 }
 
 // CheckJob 测试任务运行
@@ -96,7 +133,27 @@ func (pw *TWorkerProxy) CheckJob(jobName string) error {
 		return err
 	}
 	workerJob.SkipHour = []int{}
-	go workerJob.Run()
+	pw.CheckChan <- func() {
+		workerJob.Run()
+	}
+	return nil
+}
+
+func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
+	var job ctl.TPullJob
+	var workerJob *TWorkerJob
+	var err error
+	job.JobName = jobName
+	if err = job.InitJobByName(); err != nil {
+		return err
+	}
+	if workerJob, err = NewWorkerJob(&job, pw.logger); err != nil {
+		return err
+	}
+	workerJob.SkipHour = []int{}
+	pw.CheckChan <- func() {
+		_ = workerJob.PullTable(tableID)
+	}
 	return nil
 }
 
@@ -111,7 +168,11 @@ func (pw *TWorkerProxy) OnLineJob(jobName string) error {
 		if err = job.InitJobByName(); err != nil {
 			return err
 		}
+
 		if workerJob, err = NewWorkerJob(&job, pw.logger); err != nil {
+			return err
+		}
+		if err = workerJob.EnableJob(); err != nil {
 			return err
 		}
 		pw.jobs[jobName] = workerJob
@@ -149,7 +210,7 @@ func (pw *TWorkerProxy) OffLineJob(jobName string) error {
 		return err
 	}
 	pw.jobs[jobName].Enabled = false
-	//delete(pw.jobs, jobName)
+	delete(pw.jobs, jobName)
 	return nil
 }
 
@@ -161,7 +222,9 @@ func (pw *TWorkerProxy) StopScheduler() {
 // StopRun 停止运行，长期运行的任务用
 func (pw *TWorkerProxy) StopRun() {
 	_ = pw.scheduler.StopJobs()
+	pw.status.SetRunning(false)
 	pw.SignChan <- 0
+	pw.wg.Wait()
 }
 
 func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
@@ -173,6 +236,14 @@ func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
 		_ = worker.CloseConnect
 	}()
 	return worker.GetConnOptions(), nil
+}
+
+func (pw *TWorkerProxy) GetSourceQuoteFlag() string {
+	worker, _ := NewWorker(nil, 2, false)
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.GetQuoteFlag()
 }
 
 func (pw *TWorkerProxy) GetSourceTables(connectOption map[string]string) ([]common.TableInfo, error) {
@@ -196,6 +267,16 @@ func (pw *TWorkerProxy) GetTableColumns(connectOption map[string]string, tableNa
 	}()
 	return worker.GetColumns(*tableName)
 }
+func (pw *TWorkerProxy) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
+	worker, err := NewWorker(connectOption, 2, false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.GetSourceTableDDL(*tableName)
+}
 
 func (pw *TWorkerProxy) GenTableScript(connectOption map[string]string, tableName *string) (*string, error) {
 	worker, err := NewWorker(connectOption, 2, false)
@@ -212,7 +293,7 @@ func (pw *TWorkerProxy) GetDestConnOption() ([]string, error) {
 	return clickHouse.GetConnOptions(), nil
 }
 
-func (pw *TWorkerProxy) GetDestTableNames(connectOption map[string]string) ([]string, error) {
+func (pw *TWorkerProxy) GetDestTableNames(connectOption map[string]string) ([]common.TableInfo, error) {
 	var option struct {
 		Host     string `json:"host"`
 		User     string `json:"user"`
@@ -223,15 +304,12 @@ func (pw *TWorkerProxy) GetDestTableNames(connectOption map[string]string) ([]st
 	if option.Host, ok = connectOption["host"]; !ok {
 		return nil, fmt.Errorf("can not find host in connectStr")
 	}
-
 	if option.User, ok = connectOption["user"]; !ok {
 		return nil, fmt.Errorf("can not find user in connectStr")
 	}
-
 	if option.Password, ok = connectOption["password"]; !ok {
 		return nil, fmt.Errorf("can not find password in connectStr")
 	}
-
 	if option.Database, ok = connectOption["dbname"]; !ok {
 		return nil, fmt.Errorf("can not find dbname in connectStr")
 	}
@@ -246,7 +324,7 @@ func (pw *TWorkerProxy) GetDestTableNames(connectOption map[string]string) ([]st
 	return client.GetTableNames()
 }
 
-func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql *string) error {
+func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql, filterCol, filterVal *string) error {
 	worker, err := NewWorker(connectOption, 2, false)
 	if err != nil {
 		return err
@@ -254,7 +332,7 @@ func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql *stri
 	defer func() {
 		_ = worker.CloseConnect
 	}()
-	return worker.CheckSQLValid(*sql)
+	return worker.CheckSQLValid(sql, filterCol, filterVal)
 }
 
 func (pw *TWorkerProxy) CheckSourceConnect(connectOption map[string]string) error {

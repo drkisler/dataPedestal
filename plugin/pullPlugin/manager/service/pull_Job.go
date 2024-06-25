@@ -39,14 +39,17 @@ func GetJobs(userID int32, params map[string]any) common.TResponse {
 	if userID == 0 {
 		return *common.Failure("need UserID")
 	}
-
 	job, err := ctl.ParsePullJobControl(&params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
 	job.UserID = userID
 	job.OperatorID = userID
-	return *job.GetJobs()
+
+	myPlugin := PluginServ.(*TMyPlugin)
+	onlineJobIDs := (*myPlugin).GetOnlineJobIDs()
+
+	return *job.GetJobs(onlineJobIDs)
 }
 
 func SetJobStatus(userID int32, params map[string]any) common.TResponse {
@@ -60,9 +63,13 @@ func SetJobStatus(userID int32, params map[string]any) common.TResponse {
 }
 
 func GetSourceConnOption(_ int32, params map[string]any) common.TResponse {
-
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).GetSourceConnOption(params)
+}
+
+func GetSourceQuoteFlag(_ int32, params map[string]any) common.TResponse {
+	myPlugin := PluginServ.(*TMyPlugin)
+	return (*myPlugin).GetSourceQuoteFlag(params)
 }
 
 func GetDestConnOption(_ int32, params map[string]any) common.TResponse {
@@ -97,7 +104,10 @@ func CheckJob(_ int32, params map[string]any) common.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).CheckJob(params)
 }
-
+func CheckJobTable(_ int32, params map[string]any) common.TResponse {
+	myPlugin := PluginServ.(*TMyPlugin)
+	return (*myPlugin).CheckJobTable(params)
+}
 func OnLineJob(_ int32, params map[string]any) common.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).OnLineJob(params)

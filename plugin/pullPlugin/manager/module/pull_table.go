@@ -104,11 +104,11 @@ func (pt *TPullTable) GetAllTables() ([]TPullTable, int, error) {
 	return dbs.GetAllTables(pt)
 }
 
-func (pt *TPullTable) SetError(errInfo string) error {
+func (pt *TPullTable) SetPullResult(errInfo string) error {
 	dbs, err := GetDbServ()
 	if err != nil {
 		return err
 	}
 	pt.LastError = errInfo
-	return dbs.SetTableError(pt)
+	return dbs.SetPullResult(pt)
 }

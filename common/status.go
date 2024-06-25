@@ -2,6 +2,13 @@ package common
 
 import "sync"
 
+const (
+	STENABLED  = "enabled"
+	STDISABLED = "disabled"
+	STYES      = "是"
+	STNO       = "否"
+)
+
 type TStatus struct {
 	Lock    *sync.Mutex
 	Running bool

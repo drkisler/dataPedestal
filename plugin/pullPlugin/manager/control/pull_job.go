@@ -3,6 +3,7 @@ package control
 import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	"slices"
 )
 
 var jobPageID map[int32]common.PageBuffer
@@ -110,10 +111,10 @@ func (job *TPullJobControl) DeleteJob() *common.TResponse {
 	return common.Success(nil)
 }
 
-func (job *TPullJobControl) GetJobs() *common.TResponse {
+func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
 	var result common.TRespDataSet
 	pageBuffer, ok := jobPageID[job.OperatorID]
-	if (!ok) || (pageBuffer.QueryParam != job.ToString()) {
+	if (!ok) || (pageBuffer.QueryParam != job.ToString()) || job.PageIndex == 1 {
 		ids, err := job.GetPullJobIDs()
 		if err != nil {
 			return common.Failure(err.Error())
@@ -131,9 +132,24 @@ func (job *TPullJobControl) GetJobs() *common.TResponse {
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	if result.ArrData, err = job.TPullJob.GetJobs(ids); err != nil {
+
+	jobs, err := job.TPullJob.GetJobs(ids)
+	if err != nil {
 		return common.Failure(err.Error())
 	}
+	for iIndex := range jobs {
+		jobs[iIndex].LoadStatus = "unloaded"
+		if slices.Contains[[]int32, int32](onlineIDs, jobs[iIndex].JobID) {
+			jobs[iIndex].LoadStatus = "loaded"
+		}
+	}
+	result.ArrData = jobs
+	/*
+		if result.ArrData, err = job.TPullJob.GetJobs(ids); err != nil {
+			return common.Failure(err.Error())
+		}
+	*/
+
 	result.Total = pageBuffer.Total
 	return common.Success(&result)
 }

@@ -75,14 +75,10 @@ func (dbs *TStorage) CloseDB() error {
 func (dbs *TStorage) AddUser(user *TUser) (int64, error) {
 	dbs.Lock()
 	defer dbs.Unlock()
-	strSQL := "insert " +
-		"into User(user_id,account,user_name,role,password,status) " +
-		"select min(a.user_id)+1,?,?,?,?,? " +
-		"from(select user_id from User union all select 0) a left join User b on a.user_id+1=b.user_id " +
-		"where b.user_id is null RETURNING user_id"
-	var enStr = utils.TEnString{String: "123456"}
-	user.Password = enStr.Encrypt(utils.GetDefaultKey())
-	rows, err := dbs.Queryx(strSQL, user.Account, user.UserName, user.Role, user.Password, user.Status)
+	strSQL := "with cet_user as(select user_id from User union all select 0)" +
+		"select min(a.user_id)+1 " +
+		"from cet_user a left join User b on a.user_id+1=b.user_id where b.user_id is null"
+	rows, err := dbs.Queryx(strSQL)
 	if err != nil {
 		return -1, err
 	}
@@ -95,6 +91,22 @@ func (dbs *TStorage) AddUser(user *TUser) (int64, error) {
 			return -1, err
 		}
 	}
+	user.UserID = int32(result.(int64))
+	strSQL = "insert " +
+		"into User(user_id,account,user_name,role,password,status) " +
+		"values(?,?,?,?,?,?)"
+	var enStr = utils.TEnString{String: "123456"}
+	user.Password = enStr.Encrypt(utils.GetDefaultKey())
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return -1, err
+	}
+
+	if _, err = ctx.Exec(strSQL, user.UserID, user.Account, user.UserName, user.Role, user.Password, user.Status); err != nil {
+		_ = ctx.Rollback()
+		return -1, err
+	}
+	_ = ctx.Commit()
 	return result.(int64), nil
 }
 func (dbs *TStorage) GetUserByAccount(account string) (*TUser, error) {

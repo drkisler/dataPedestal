@@ -85,8 +85,20 @@ func (mysql *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, er
 	if schema == "" {
 		schema = mysql.schema
 	}
-	strSQL := "select column_name column_code,coalesce(column_comment,'') column_name,if(column_key='PRI','是','否') is_key " +
-		"from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
+	//获取字段名词，字段类型，是否主键，字段类型转换为常见的数据类型
+	strSQL := "select column_name column_code," +
+		"coalesce(column_comment,'') column_name," +
+		"if(column_key='PRI','是','否') is_key," +
+		"case when data_type like '%int%' then 'int' " +
+		" when data_type in('float','real','double','decimal','numeric') then 'float' " +
+		" when data_type = 'date' then 'date' when data_type = 'datetime' then 'datetime' when data_type = 'timestamp' then 'timestamp' " +
+		" else 'varchar' " +
+		"end date_type " +
+		"from INFORMATION_SCHEMA.COLUMNS where table_schema=? and table_name=? " +
+		"order by ordinal_position"
+
+	//"select column_name column_code,coalesce(column_comment,'') column_name,if(column_key='PRI','是','否') is_key " +
+	//"from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
 	rows, err := mysql.DataBase.Query(strSQL, schema, tableName)
 	if err != nil {
 		return nil, err
@@ -99,7 +111,7 @@ func (mysql *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, er
 	var data []common.ColumnInfo
 	for rows.Next() {
 		var val common.ColumnInfo
-		if err = rows.Scan(&val.ColumnCode, &val.ColumnName, &val.IsKey); err != nil {
+		if err = rows.Scan(&val.ColumnCode, &val.ColumnName, &val.IsKey, &val.DataType); err != nil {
 			return nil, err
 
 		}
@@ -131,29 +143,41 @@ func (mysql *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 	return data, nil
 }
 
-func (mysql *TMySQLWorker) CheckSQLValid(sql string) error {
-	if !common.IsSafeSQL(sql) {
-		return fmt.Errorf("unsafe sql")
-	}
-	rows, err := mysql.DataBase.Query(fmt.Sprintf("select "+
-		"* from (%s) t limit 0", sql))
+func (mysql *TMySQLWorker) CheckSQLValid(strSQL, strFilterCol, strFilterVal *string) error {
+	_, err := mysql.TDatabase.CheckSQLValid(strSQL, strFilterCol, strFilterVal)
+	return err
+}
+
+func (mySQL *TMySQLWorker) GetSourceTableDDL(tableName string) (*string, error) {
+	// SHOW CREATE TABLE sanyu.`case`;
+	rows, err := mySQL.DataBase.Query(fmt.Sprintf("SHOW CREATE TABLE %s", tableName))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
-	return nil
+	var ddl string
+	if rows.Next() {
+		var createTable string
+		var tbl string
+		if err = rows.Scan(&tbl, &createTable); err != nil {
+			return nil, err
+		}
+		ddl = createTable
+	}
+	return &ddl, nil
 }
 
 func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
+
 	Cols, err := mysql.GetColumns(tableName)
 	if err != nil {
 		return nil, err
 	}
 	var KeyColumns []string
 	for _, col := range Cols {
-		if col.IsKey == "是" {
+		if col.IsKey == common.STYES {
 			KeyColumns = append(KeyColumns, col.ColumnCode)
 		}
 	}
@@ -297,13 +321,17 @@ func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 	result := sb.String()
 	return &result, nil
 }
-func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows, clickHouseClient *clickHouse.TClickHouseClient) error {
+func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data interface{}, clickHouseClient *clickHouse.TClickHouseClient) (int64, error) {
+	rows, ok := data.(*sql.Rows)
+	if !ok {
+		return -1, fmt.Errorf("data is not *sql.Rows")
+	}
 	defer func() {
-		_ = data.Close()
+		_ = rows.Close()
 	}()
-	colType, err := data.ColumnTypes()
+	colType, err := rows.ColumnTypes()
 	if err != nil {
-		return err
+		return -1, err
 	}
 	iLen := len(colType)
 	var buffer = make([]clickHouse.TBufferData, iLen)
@@ -322,111 +350,111 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 		case "UNSIGNED TINYINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeUInt8)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeUInt8); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "TINYINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt8)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeInt8); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "UNSIGNED SMALLINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeUInt16)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeUInt16); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "SMALLINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt16)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeInt16); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "UNSIGNED INT", "UNSIGNED MEDIUMINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeUInt32)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeUInt32); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "INT", "MEDIUMINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt32)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeInt32); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "UNSIGNED BIGINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeUInt64)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeUInt64); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "BIGINT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt64)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeInt64); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "FLOAT":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeFloat32)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeFloat32); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "DOUBLE":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeFloat64)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeFloat64); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "DATE":
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeDate32)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeDate32); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "DATETIME", "TIMESTAMP":
@@ -436,11 +464,11 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 			}
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeDateTime64), precision); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeDateTime64, precision); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		case "DECIMAL":
@@ -464,31 +492,32 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 			}
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(columnType), p, s); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), columnType, p, s); err != nil {
-					return err
+					return -1, err
 				}
 			}
 
 		default:
 			if nullable {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeNullable.Sub(proto.ColumnTypeString)); err != nil {
-					return err
+					return -1, err
 				}
 			} else {
 				if err = buffer[idx].Initialize(col.Name(), proto.ColumnTypeString); err != nil {
-					return err
+					return -1, err
 				}
 			}
 		}
 	}
 	rowCount := 0
+	totalCount := int64(0)
 	isEmpty := true
-	for data.Next() {
-		if err = data.Scan(scanArgs...); err != nil {
-			return err
+	for rows.Next() {
+		if err = rows.Scan(scanArgs...); err != nil {
+			return -1, err
 		}
 		for idx, col := range colType {
 			// 字符类型的数据转换成字符串
@@ -539,16 +568,17 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 			}
 
 			if err = buffer[idx].Append(scanValue[idx]); err != nil {
-				return err
+				return -1, err
 			}
 		}
 		rowCount++
+		totalCount++
 		if rowCount >= batch {
 			for i, val := range buffer {
 				clickHouseValue[i] = val.InPutData()
 			}
 			if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
-				return err
+				return -1, err
 			}
 			for _, val := range buffer {
 				val.Reset()
@@ -558,21 +588,21 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data *sql.Rows
 		isEmpty = false
 	}
 	if isEmpty {
-		return nil
+		return 0, nil
 	}
 	if rowCount > 0 {
 		for i, val := range buffer {
 			clickHouseValue[i] = val.InPutData()
 		}
 		if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
-			return err
+			return -1, err
 		}
 		for _, val := range buffer {
 			val.Reset()
 		}
 	}
 
-	return nil
+	return totalCount, nil
 }
 func (mysql *TMySQLWorker) GetConnOptions() []string {
 	return []string{
@@ -600,4 +630,7 @@ func (mysql *TMySQLWorker) GetConnOptions() []string {
 		"tls=false",
 		"connectionAttributes=none",
 	}
+}
+func (mysql *TMySQLWorker) GetQuoteFlag() string {
+	return "`"
 }

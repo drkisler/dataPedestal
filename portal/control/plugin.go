@@ -264,8 +264,6 @@ func (c *TPluginControl) GetPlugin() *common.TResponse {
 			if err != nil {
 				return common.Failure(err.Error())
 			}
-			common.LogServ.Debug(string(data))
-
 			if err = json.Unmarshal(data, &resp); err != nil {
 				return common.Failure(err.Error())
 			}
@@ -285,7 +283,6 @@ func (c *TPluginControl) GetPlugin() *common.TResponse {
 					}
 					strUUID := pluginUUID.(string)
 					if _, ok = pluginMap[strUUID]; !ok {
-						//fmt.Printf("plugin %s not found\n", strUUID)
 						return common.Failure(fmt.Sprintf("plugin %s not found", strUUID))
 					}
 					if pluginList[pluginMap[strUUID]].PluginFile == "" {

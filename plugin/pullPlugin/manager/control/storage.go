@@ -7,7 +7,7 @@ func OpenDB() (*module.TStorage, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = db.Ping(); err != nil {
+	if err = db.OpenDB(); err != nil {
 		return nil, err
 	}
 	return db, nil
@@ -18,5 +18,5 @@ func CloseDB() error {
 		return err
 	}
 
-	return db.Close()
+	return db.CloseDB()
 }

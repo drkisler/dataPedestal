@@ -9,10 +9,6 @@ type PluginRPC struct {
 	done   *rpc.Call
 }
 
-func NewPluginRPC() IPlugin {
-	return &PluginRPC{}
-}
-
 func (pRPC *PluginRPC) Load(config string) TResponse {
 	var result TResponse
 	err := pRPC.client.Call("Plugin.Load",

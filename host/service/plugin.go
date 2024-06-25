@@ -176,6 +176,5 @@ func PluginApi(ctx *gin.Context) {
 	operate.PluginUUID = plugin.PluginUUID
 	operate.OperateName = api
 	operate.Params = params
-
 	ginContext.Reply(IsDebug, plugin.RunPluginAPI(&operate))
 }

@@ -433,6 +433,7 @@ func PluginAPI(ctx *gin.Context) {
 
 	// 组合成 HostIP:HostPort/route 的形式
 	target := fmt.Sprintf("http://%s:%d/%s/%s", hostInfo.ActiveHost.HostIP, hostInfo.ActiveHost.HostPort, strUUID, api)
+
 	remoteUrl, err := url.Parse(target)
 	if err != nil {
 		ginContext.Reply(IsDebug, common.Failure(err.Error()))

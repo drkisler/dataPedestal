@@ -6,11 +6,8 @@ import (
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
-
-	//"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
-	//_ "github.com/go-sql-driver/mysql"
 	"os"
 	"os/signal"
 )
@@ -40,7 +37,7 @@ func InitPlugin() error {
 	operateMap["addTable"] = AddTable
 	operateMap["alterTable"] = AlterTable
 	operateMap["getTables"] = GetPullTables
-	operateMap["setTableStatus"] = SetStatus
+	operateMap["setTableStatus"] = SetTableStatus
 	operateMap["getSourceTables"] = GetSourceTables
 	operateMap["getDestTables"] = GetDestTables
 	operateMap["getTableColumn"] = GetTableColumns
@@ -54,11 +51,14 @@ func InitPlugin() error {
 	operateMap["offLineJob"] = OffLineJob
 	operateMap["checkJobExist"] = CheckJobLoaded
 	operateMap["checkJob"] = CheckJob
+	operateMap["checkJobTable"] = CheckJobTable
 	operateMap["checkSQLValid"] = CheckSQLValid
 	operateMap["checkSourceConnection"] = CheckSourceConnect
 	operateMap["checkDestConnection"] = CheckDestConnect
 	operateMap["getSourceConnOption"] = GetSourceConnOption
+	operateMap["getSourceQuoteFlag"] = GetSourceQuoteFlag
 	operateMap["getDestConnOption"] = GetDestConnOption
+	operateMap["getSourceTableDDL"] = GetSourceTableDDL
 	return nil
 }
 
@@ -85,15 +85,6 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
-	if _, err = ctl.OpenDB(); err != nil {
-		mp.Logger.WriteError(err.Error())
-		return *common.Failure(err.Error())
-	}
-	//_, err = module.GetDbServ()
-	//if err != nil {
-	//	mp.Logger.WriteError(err.Error())
-	//	return *common.Failure(err.Error())
-	//}
 
 	mp.Logger.WriteInfo("插件加载成功")
 	//需要返回端口号，如果没有则返回1
@@ -125,12 +116,13 @@ func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 
 // Run 启动程序，启动前必须先Load
 func (mp *TMyPlugin) Run() common.TResponse {
-	logger, err := logAdmin.GetLogger()
-	if err != nil {
+	if _, err := ctl.OpenDB(); err != nil {
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 	//启动调度器
-	if err = mp.workerProxy.Start(logger); err != nil {
+	if err := mp.workerProxy.Start(mp.Logger); err != nil {
+		mp.Logger.WriteError(err.Error())
 		return *common.Failure(err.Error())
 	}
 
@@ -138,13 +130,14 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	defer mp.SetRunning(false)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt) //注册相关信号的接受器
+	mp.Logger.WriteInfo("插件已启动")
 	//并发等待信号
 	select {
 	case <-mp.workerProxy.SignChan: //本插件发出停止信号
 	case <-quit: //操作系统发出退出信号
 		mp.workerProxy.StopScheduler()
 	}
-	logger.WriteInfo("插件已停止")
+	mp.Logger.WriteInfo("插件已停止")
 	return *common.Success(nil)
 }
 
@@ -153,11 +146,9 @@ func (mp *TMyPlugin) Stop() common.TResponse {
 	mp.TBasePlugin.Stop()
 	// 停止长期任务，对于scheduler的停止，需要单独处理
 	mp.workerProxy.StopRun()
-
 	if err := ctl.CloseDB(); err != nil {
 		return common.TResponse{Code: -1, Info: err.Error()}
 	}
-
 	return common.TResponse{Code: 0, Info: "success stop plugin"} //*common.Success(nil)
 }
 
@@ -168,6 +159,14 @@ func (mp *TMyPlugin) GetSourceConnOption(_ map[string]any) common.TResponse {
 		return *common.Failure(err.Error())
 	}
 	return *common.Success(&common.TRespDataSet{ArrData: options, Total: int32(len(options))})
+}
+
+func (mp *TMyPlugin) GetOnlineJobIDs() []int32 {
+	return mp.workerProxy.GetOnlineJobID()
+}
+
+func (mp *TMyPlugin) GetSourceQuoteFlag(_ map[string]any) common.TResponse {
+	return common.TResponse{Code: 0, Info: mp.workerProxy.GetSourceQuoteFlag()}
 }
 
 // GetSourceTables 从数据源中获取表清单
@@ -196,6 +195,21 @@ func (mp *TMyPlugin) CheckJob(params map[string]any) common.TResponse {
 		return *common.Failure("jobName is empty")
 	}
 	if err := mp.workerProxy.CheckJob(strJobName.(string)); err != nil {
+		return *common.Failure(err.Error())
+	}
+	return *common.Success(nil)
+}
+
+func (mp *TMyPlugin) CheckJobTable(params map[string]any) common.TResponse {
+	strJobName, ok := params["job_name"]
+	if !ok {
+		return *common.Failure("jobName is empty")
+	}
+	intTableID, ok := params["table_id"]
+	if !ok {
+		return *common.Failure("tableID is empty")
+	}
+	if err := mp.workerProxy.CheckJobTable(strJobName.(string), int32(intTableID.(float64))); err != nil {
 		return *common.Failure(err.Error())
 	}
 	return *common.Success(nil)
@@ -230,6 +244,11 @@ func (mp *TMyPlugin) GetTableColumns(connectOption map[string]string, tableName 
 	}
 	return *common.Success(&common.TRespDataSet{ArrData: cols, Total: int32(len(cols))})
 }
+
+func (mp *TMyPlugin) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
+	return mp.workerProxy.GetSourceTableDDL(connectOption, tableName)
+}
+
 func (mp *TMyPlugin) GetDestConnOption(_ map[string]any) common.TResponse {
 	options, err := mp.workerProxy.GetDestConnOption()
 	if err != nil {
@@ -253,8 +272,8 @@ func (mp *TMyPlugin) GetTableScript(connectOption map[string]string, tableName *
 	return *common.ReturnStr(*script)
 }
 
-func (mp *TMyPlugin) CheckSQLValid(connectOption map[string]string, sql *string) common.TResponse {
-	if err := mp.workerProxy.CheckSQLValid(connectOption, sql); err != nil {
+func (mp *TMyPlugin) CheckSQLValid(connectOption map[string]string, sql, filterCol, filterVal *string) common.TResponse {
+	if err := mp.workerProxy.CheckSQLValid(connectOption, sql, filterCol, filterVal); err != nil {
 		return *common.Failure(err.Error())
 	}
 	return *common.Success(nil)

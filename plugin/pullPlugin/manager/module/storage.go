@@ -46,9 +46,18 @@ var DbFilePath string
 var dbService *TStorage
 var once sync.Once
 
+type DBStatus uint8
+
+const (
+	StOpened DBStatus = iota
+	StClosed
+)
+
 type TStorage struct {
 	*sqlx.DB
 	*sync.Mutex
+	connStr string
+	status  DBStatus
 }
 
 func newDbServ() (*TStorage, error) {
@@ -69,7 +78,7 @@ func newDbServ() (*TStorage, error) {
 
 	var lock sync.Mutex
 
-	return &TStorage{db, &lock}, nil
+	return &TStorage{db, &lock, connStr, StOpened}, nil
 }
 
 func GetDbServ() (*TStorage, error) {
@@ -81,29 +90,52 @@ func GetDbServ() (*TStorage, error) {
 	return dbService, err
 }
 
-func (dbs *TStorage) Connect() error {
-	if err := dbs.Ping(); err != nil {
+func (dbs *TStorage) OpenDB() error {
+	dbs.Lock()
+	defer dbs.Unlock()
+	if dbs.status == StOpened {
+		return nil
+	}
+	var err error
+	if dbs.DB, err = sqlx.Open("sqlite3", dbs.connStr); err != nil {
 		return err
 	}
+	if err = dbs.Ping(); err != nil {
+		return err
+	}
+	dbs.status = StOpened
 	return nil
 }
 
+/*
+	func (dbs *TStorage) Connect() error {
+		dbs.Lock()
+		defer dbs.Unlock()
+		if dbs.status == StClosed {
+
+		}
+		if err := dbs.Ping(); err != nil {
+			return err
+		}
+
+		return nil
+	}
+*/
 func (dbs *TStorage) CloseDB() error {
-	return dbs.Close()
+	if err := dbs.Close(); err != nil {
+		return err
+	}
+	dbs.status = StClosed
+	return nil
 }
 
 func (dbs *TStorage) AddPullTable(pt *TPullTable) (int64, error) {
+	strSQL := "with cet_pull as(select table_id from PullTable where job_id=?) select " +
+		"min(a.table_id)+1 from (select table_id from cet_pull union all select 0) a left join cet_pull b on a.table_id+1=b.table_id " +
+		"where b.table_id is null"
 	dbs.Lock()
 	defer dbs.Unlock()
-	strSQL := "with cet_pull as(select table_id from PullTable where job_id=?)insert " +
-		"into PullTable(job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status) " +
-		"select ?,min(a.table_id)+1," +
-		"?,?,?,?,?,?,?,?,? from (select table_id from cet_pull union all select 0) a " +
-		"left join cet_pull b on a.table_id+1=b.table_id " +
-		"where b.table_id is null RETURNING table_id"
-
-	rows, err := dbs.Queryx(strSQL, pt.JobID, pt.JobID, pt.TableCode, pt.TableName, pt.DestTable,
-		pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
+	rows, err := dbs.Queryx(strSQL, pt.JobID)
 	if err != nil {
 		return -1, err
 	}
@@ -116,6 +148,21 @@ func (dbs *TStorage) AddPullTable(pt *TPullTable) (int64, error) {
 			return -1, err
 		}
 	}
+	pt.TableID = int32(result.(int64))
+	strSQL = "insert " +
+		"into PullTable(job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status) " +
+		"values(?,?,?,?,?,?,?,?,?,?,?)"
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return -1, err
+	}
+	_, err = ctx.Exec(strSQL, pt.JobID, pt.TableID, pt.TableCode, pt.TableName, pt.DestTable,
+		pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
+	if err != nil {
+		_ = ctx.Rollback()
+		return -1, err
+	}
+	_ = ctx.Commit()
 	return result.(int64), nil
 }
 
@@ -275,7 +322,7 @@ func (dbs *TStorage) GetAllTables(pt *TPullTable) ([]TPullTable, int, error) {
 	var rows *sqlx.Rows
 	strSQL := "select job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status " +
 		"from PullTable where job_id= ? and status=?"
-	rows, err = dbs.Queryx(strSQL, pt.JobID, "enabled")
+	rows, err = dbs.Queryx(strSQL, pt.JobID, common.STENABLED)
 
 	if err != nil {
 		return nil, -1, err
@@ -315,7 +362,7 @@ func (dbs *TStorage) SetPullTableFilterValues(pt *TPullTable) error {
 	return nil
 }
 
-func (dbs *TStorage) SetTableError(pt *TPullTable) error {
+func (dbs *TStorage) SetPullResult(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
@@ -337,17 +384,12 @@ func (dbs *TStorage) SetTableError(pt *TPullTable) error {
 ///////////////////////////////////////////////////////////////////////////////////
 
 func (dbs *TStorage) AddPullJob(pj *TPullJob) (int64, error) {
+	strSQL := "with cet_pull as(select job_id from PullJob) select " +
+		"min(a.job_id)+1 from (select job_id from cet_pull union all select 0) a left join cet_pull b on a.job_id+1=b.job_id " +
+		"where b.job_id is null"
 	dbs.Lock()
 	defer dbs.Unlock()
-	strSQL := "insert " +
-		"into PullJob(user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression,skip_hour,is_debug,status) " +
-		"select ?,min(a.job_id)+1,?,?,?,?,?,?,?,?,? " +
-		"from (select job_id from PullJob union all select 0) a " +
-		"left join PullJob b on a.job_id+1=b.job_id " +
-		"where b.job_id is null RETURNING job_id"
-
-	rows, err := dbs.Queryx(strSQL, pj.UserID, pj.JobName, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer,
-		pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status)
+	rows, err := dbs.Queryx(strSQL)
 	if err != nil {
 		return -1, err
 	}
@@ -360,6 +402,22 @@ func (dbs *TStorage) AddPullJob(pj *TPullJob) (int64, error) {
 			return -1, err
 		}
 	}
+	pj.JobID = int32(result.(int64))
+
+	strSQL = "insert " +
+		"into PullJob(user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression,skip_hour,is_debug,status) " +
+		"values(?,?,?,?,?,?,?,?,?,?,?)"
+	ctx, err := dbs.Begin()
+	if err != nil {
+		return -1, err
+	}
+	_, err = ctx.Exec(strSQL, pj.UserID, pj.JobID, pj.JobName, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer,
+		pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status)
+	if err != nil {
+		_ = ctx.Rollback()
+		return -1, err
+	}
+	_ = ctx.Commit()
 	return result.(int64), nil
 }
 
@@ -548,7 +606,7 @@ func (dbs *TStorage) GetAllJobs() ([]TPullJob, int, error) {
 	var rows *sqlx.Rows
 	strSQL := "select user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer, cron_expression,skip_hour, is_debug, status,last_error " +
 		"from PullJob where status=?"
-	rows, err = dbs.Queryx(strSQL, "enabled")
+	rows, err = dbs.Queryx(strSQL, common.STENABLED)
 
 	if err != nil {
 		return nil, -1, err

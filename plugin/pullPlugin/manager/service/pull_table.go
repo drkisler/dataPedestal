@@ -11,7 +11,7 @@ func AddTable(userID int32, params map[string]any) common.TResponse {
 		return *common.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	return *ptc.AddTable()
+	return *(ptc.AppendTable())
 }
 func AlterTable(userID int32, params map[string]any) common.TResponse {
 	ptc, err := ctl.ParsePullTableControl(&params)
@@ -19,7 +19,7 @@ func AlterTable(userID int32, params map[string]any) common.TResponse {
 		return *common.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	return *ptc.AlterTable()
+	return *(ptc.ModifyTable())
 }
 func DeleteTable(userID int32, params map[string]any) common.TResponse {
 	ptc, err := ctl.ParsePullTableControl(&params)
@@ -27,7 +27,7 @@ func DeleteTable(userID int32, params map[string]any) common.TResponse {
 		return *common.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	return *ptc.DeleteTable()
+	return *(ptc.RemoveTable())
 }
 func GetPullTables(userID int32, params map[string]any) common.TResponse {
 	ptc, err := ctl.ParsePullTableControl(&params)
@@ -36,15 +36,15 @@ func GetPullTables(userID int32, params map[string]any) common.TResponse {
 	}
 	ptc.OperatorID = userID
 
-	return *ptc.GetTables()
+	return *(ptc.QueryTables())
 }
-func SetStatus(userID int32, params map[string]any) common.TResponse {
+func SetTableStatus(userID int32, params map[string]any) common.TResponse {
 	ptc, err := ctl.ParsePullTableControl(&params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	return *ptc.SetTableStatus()
+	return *(ptc.AlterTableStatus())
 }
 
 func GetSourceTables(_ int32, params map[string]any) common.TResponse {
@@ -65,6 +65,38 @@ func GetSourceTables(_ int32, params map[string]any) common.TResponse {
 	}
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).GetSourceTables(connOption)
+}
+
+func GetSourceTableDDL(_ int32, params map[string]any) common.TResponse {
+	strJobName, ok := params["job_name"]
+	if !ok {
+		return *common.Failure("jobName is empty")
+	}
+	var job ctl.TPullJob
+	var err error
+	job.JobName = strJobName.(string)
+	if err = job.InitJobByName(); err != nil {
+		return *common.Failure(err.Error())
+	}
+	strConn := job.SourceDbConn
+	var connOption map[string]string
+	if connOption, err = common.StringToMap(&strConn); err != nil {
+		return *common.Failure(err.Error())
+	}
+	tableName, ok := params["table_name"]
+	if !ok {
+		return *common.Failure("table name is empty")
+	}
+	strTableName := tableName.(string)
+
+	myPlugin := PluginServ.(*TMyPlugin)
+
+	result, err := (*myPlugin).GetSourceTableDDL(connOption, &strTableName)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	return common.TResponse{Info: *result}
+
 }
 
 func GetDestTables(_ int32, params map[string]any) common.TResponse {
@@ -140,7 +172,7 @@ func GetTableScript(_ int32, params map[string]any) common.TResponse {
 }
 
 func CheckSQLValid(_ int32, params map[string]any) common.TResponse {
-	//job_name sql
+	//job_name sqlString; filterColumn; filterValue
 	strJobName, ok := params["job_name"]
 	if !ok {
 		return *common.Failure("jobName is empty")
@@ -149,6 +181,17 @@ func CheckSQLValid(_ int32, params map[string]any) common.TResponse {
 	if !ok {
 		return *common.Failure("sql is empty")
 	}
+	filterColumn, ok := params["filter_column"]
+	if !ok {
+		return *common.Failure("filterColumn is empty")
+	}
+	strFilterColumn := filterColumn.(string)
+	filterValue, ok := params["filter_value"]
+	if !ok {
+		return *common.Failure("filterValue is empty")
+	}
+	strFilterValue := filterValue.(string)
+
 	var job ctl.TPullJob
 	var err error
 	job.JobName = strJobName.(string)
@@ -164,5 +207,5 @@ func CheckSQLValid(_ int32, params map[string]any) common.TResponse {
 	sql := strSQL.(string)
 
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckSQLValid(connOption, &sql)
+	return (*myPlugin).CheckSQLValid(connOption, &sql, &strFilterColumn, &strFilterValue)
 }
