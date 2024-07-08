@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 )
 
 type GinContext struct {
@@ -188,8 +186,8 @@ func IsSafeSQL(sql string) bool {
 	return true
 }
 
-// ConvertFilterValue 将过滤器值转换为对应的类型
-// {"gmt_create(datetime(2017-01-01 15:03:45))", "gmt_number(int(123))"} => ["gmt_create","gmt_number"],[]interface{}{time.Parse("2006-01-02 15:04:05"),123}
+/*
+// ConvertFilterValue 将过json格式的滤器值转换为对应的类型
 func ConvertFilterValue(values []string) ([]string, []interface{}, error) {
 	var filterColumn []string
 	var vilterValue []interface{}
@@ -264,3 +262,5 @@ func ConvertFilterColum(values []string) ([]string, []string, error) {
 	}
 	return filterColumn, dataType, nil
 }
+
+*/

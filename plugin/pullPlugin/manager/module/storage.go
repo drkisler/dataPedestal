@@ -10,12 +10,12 @@ import (
 
 const checkPullTable = "Create " +
 	"Table if not exists PullTable(" +
-	//"user_id integer not null" +
 	"job_id integer not null" +
 	",table_id integer not null" +
 	",table_code text not null" +
 	",table_name text not null" +
 	",dest_table text not null" +
+	",source_ddl text not null" +
 	",select_sql text not null" +
 	",filter_col text not null" +
 	",filter_val text not null" +
@@ -150,14 +150,14 @@ func (dbs *TStorage) AddPullTable(pt *TPullTable) (int64, error) {
 	}
 	pt.TableID = int32(result.(int64))
 	strSQL = "insert " +
-		"into PullTable(job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status) " +
-		"values(?,?,?,?,?,?,?,?,?,?,?)"
+		"into PullTable(job_id,table_id,table_code,table_name,dest_table,source_ddl,select_sql,filter_col,filter_val,key_col,buffer,status) " +
+		"values(?,?,?,?,?,?,?,?,?,?,?,?)"
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return -1, err
 	}
 	_, err = ctx.Exec(strSQL, pt.JobID, pt.TableID, pt.TableCode, pt.TableName, pt.DestTable,
-		pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
+		pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
 	if err != nil {
 		_ = ctx.Rollback()
 		return -1, err
@@ -237,7 +237,9 @@ func (dbs *TStorage) QueryPullTable(jobID int32, ids *string) ([]common.TPullTab
 		" FROM cte"+
 		" WHERE INSTR(val, ',')>0"+
 		")"+
-		"SELECT a.* from PullTable a inner join cte b on a.table_id=b.id where a.job_id=? order by a.table_id", *ids)
+		"SELECT a.job_id,a.table_id,a.table_code,a.table_name,a.dest_table,a.select_sql,"+
+		"a.filter_col,a.filter_val,a.key_col,a.buffer,a.status,a.last_error from PullTable a "+
+		"inner join cte b on a.table_id=b.id where a.job_id=? order by a.table_id", *ids)
 
 	rows, err = dbs.Queryx(strSQL, jobID)
 	if err != nil {
@@ -262,13 +264,13 @@ func (dbs *TStorage) AlterPullTable(pt *TPullTable) error {
 	dbs.Lock()
 	defer dbs.Unlock()
 	var err error
-	var strSQL = "update PullTable set table_code=?,table_name=?,dest_table=?,select_sql=?,filter_col=?,filter_val=?,key_col=?,buffer=?,status=?  " +
+	var strSQL = "update PullTable set table_code=?,table_name=?,dest_table=?,source_ddl=?,select_sql=?,filter_col=?,filter_val=?,key_col=?,buffer=?,status=?  " +
 		"where job_id=? and table_id= ? "
 	ctx, err := dbs.Begin()
 	if err != nil {
 		return err
 	}
-	_, err = ctx.Exec(strSQL, pt.TableCode, pt.TableName, pt.DestTable, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol,
+	_, err = ctx.Exec(strSQL, pt.TableCode, pt.TableName, pt.DestTable, pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol,
 		pt.Buffer, pt.Status, pt.JobID, pt.TableID)
 	if err != nil {
 		_ = ctx.Rollback()
@@ -340,7 +342,6 @@ func (dbs *TStorage) GetAllTables(pt *TPullTable) ([]TPullTable, int, error) {
 		cnt++
 		result = append(result, p)
 	}
-
 	return result, cnt, nil
 }
 
@@ -378,6 +379,29 @@ func (dbs *TStorage) SetPullResult(pt *TPullTable) error {
 	}
 	_ = ctx.Commit()
 	return nil
+}
+
+func (dbs *TStorage) GetSourceTableDDL(pt *TPullTable) (string, error) {
+	dbs.Lock()
+	defer dbs.Unlock()
+	var err error
+	var rows *sqlx.Rows
+	strSQL := "select source_ddl from PullTable where job_id= ? and table_id= ? "
+	rows, err = dbs.Queryx(strSQL, pt.JobID, pt.TableID)
+
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	var ddl string
+	for rows.Next() {
+		if err = rows.Scan(&ddl); err != nil {
+			return "", err
+		}
+	}
+	return ddl, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -519,7 +543,9 @@ func (dbs *TStorage) QueryPullJob(userID int32, ids *string) ([]common.TPullJob,
 		" FROM cte"+
 		" WHERE INSTR(val, ',')>0"+
 		")"+
-		"SELECT a.* from PullJob a inner join cte b on a.job_id=b.id where a.user_id=? order by a.job_id", *ids)
+		"SELECT a.user_id,a.job_id,a.job_name,a.source_db_conn,a.dest_db_conn,a.keep_connect,a.connect_buffer,"+
+		"a.cron_expression, a.is_debug,a.skip_hour,a.status,a.last_error "+
+		"from PullJob a inner join cte b on a.job_id=b.id where a.user_id=? order by a.job_id", *ids)
 
 	rows, err = dbs.Queryx(strSQL, userID)
 	if err != nil {

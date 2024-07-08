@@ -97,65 +97,74 @@ func (pc *TPullTableControl) GetAllTables() ([]TPullTable, int, error) {
 	return pullTable.GetAllTables()
 }
 
+func (pc *TPullTableControl) GetSourceTableDDL() *common.TResponse {
+	pullTable := pc.TPullTable
+	ddl, err := pullTable.GetSourceTableDDL()
+	if err != nil {
+		return common.Failure(err.Error())
+	}
+	return common.ReturnStr(ddl)
+}
+
 func (pc *TPullTableControl) SetPullResult(errInfo string) error {
 	pullTable := pc.TPullTable
 	return pullTable.SetPullResult(errInfo)
 }
 
-func ParsePullTableControl(data *map[string]any) (*TPullTableControl, error) {
+func ParsePullTableControl(data *map[string]any) (*TPullTableControl, *TPullJob, error) {
 	var err error
 	var result TPullTableControl
 	if result.JobName, err = common.GetStringValueFromMap("job_name", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.JobName == "" {
-		return nil, fmt.Errorf("require job_name")
+		return nil, nil, fmt.Errorf("require job_name")
 	}
 
 	var job TPullJob
 	job.JobName = result.JobName
 	if err = job.InitJobByName(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result.JobID = job.JobID
 	if result.TableID, err = common.GetInt32ValueFromMap("table_id", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.TableName, err = common.GetStringValueFromMap("table_name", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.TableCode, err = common.GetStringValueFromMap("table_code", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.DestTable, err = common.GetStringValueFromMap("dest_table", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.SelectSql, err = common.GetStringValueFromMap("select_sql", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.FilterCol, err = common.GetStringValueFromMap("filter_col", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.FilterVal, err = common.GetStringValueFromMap("filter_val", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.KeyCol, err = common.GetStringValueFromMap("key_col", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.Buffer, err = common.GetIntValueFromMap("buffer", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.Status, err = common.GetStringValueFromMap("status", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.LastError, err = common.GetStringValueFromMap("last_error", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.PageIndex, err = common.GetInt32ValueFromMap("page_index", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.PageSize, err = common.GetInt32ValueFromMap("page_size", data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if result.PageIndex == 0 {
 		result.PageIndex = 1
@@ -163,5 +172,5 @@ func ParsePullTableControl(data *map[string]any) (*TPullTableControl, error) {
 	if result.PageSize == 0 {
 		result.PageSize = 50
 	}
-	return &result, nil
+	return &result, &job, nil
 }

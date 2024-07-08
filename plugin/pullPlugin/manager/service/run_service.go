@@ -57,8 +57,9 @@ func InitPlugin() error {
 	operateMap["checkDestConnection"] = CheckDestConnect
 	operateMap["getSourceConnOption"] = GetSourceConnOption
 	operateMap["getSourceQuoteFlag"] = GetSourceQuoteFlag
+	operateMap["getSourceDatabaseType"] = GetDatabaseType
 	operateMap["getDestConnOption"] = GetDestConnOption
-	operateMap["getSourceTableDDL"] = GetSourceTableDDL
+	//operateMap["getSourceTableDDL"] = GetSourceTableDDLSQL //GetSourceTableDDLSQL   GetSourceTableDDL
 	return nil
 }
 
@@ -169,6 +170,10 @@ func (mp *TMyPlugin) GetSourceQuoteFlag(_ map[string]any) common.TResponse {
 	return common.TResponse{Code: 0, Info: mp.workerProxy.GetSourceQuoteFlag()}
 }
 
+func (mp *TMyPlugin) GetDatabaseType(_ map[string]any) common.TResponse {
+	return common.TResponse{Code: 0, Info: mp.workerProxy.GetDatabaseType()}
+}
+
 // GetSourceTables 从数据源中获取表清单
 func (mp *TMyPlugin) GetSourceTables(connectOption map[string]string) common.TResponse {
 	tables, err := mp.workerProxy.GetSourceTables(connectOption)
@@ -272,11 +277,12 @@ func (mp *TMyPlugin) GetTableScript(connectOption map[string]string, tableName *
 	return *common.ReturnStr(*script)
 }
 
-func (mp *TMyPlugin) CheckSQLValid(connectOption map[string]string, sql, filterCol, filterVal *string) common.TResponse {
-	if err := mp.workerProxy.CheckSQLValid(connectOption, sql, filterCol, filterVal); err != nil {
+func (mp *TMyPlugin) CheckSQLValid(connectOption map[string]string, sql, filterVal *string) common.TResponse {
+	columns, err := mp.workerProxy.CheckSQLValid(connectOption, sql, filterVal)
+	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	return *common.Success(nil)
+	return *common.RespData(int32(len(columns)), columns, nil)
 }
 
 func (mp *TMyPlugin) CheckSourceConnect(connectOption map[string]string) common.TResponse {

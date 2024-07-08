@@ -23,13 +23,9 @@ var notStringTypes = []string{"UNSIGNED TINYINT", "TINYINT", "UNSIGNED SMALLINT"
 	"UNSIGNED MEDIUMINT", "INT", "MEDIUMINT", "UNSIGNED BIGINT", "BIGINT", "FLOAT", "DOUBLE", "DATE", "DATETIME", "TIMESTAMP"}
 
 func NewMySQLWorker(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error) {
-	// connectStr := "root:123456@tcp(127.0.0.1:3306)/test"
-	//"sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true"
-
 	if connectOption == nil {
 		return &TMySQLWorker{}, nil
 	}
-
 	strDBName, ok := connectOption["dbname"]
 	if !ok {
 		return nil, fmt.Errorf("can not find dbname in connectStr")
@@ -75,7 +71,7 @@ func NewMySQLWorker(connectOption map[string]string, connectBuffer int, keepConn
 	return &TMySQLWorker{*dbw, strDBName, strSchema}, nil
 }
 
-func (mysql *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, error) {
+func (mSQL *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, error) {
 	iPos := strings.Index(tableName, ".")
 	schema := ""
 	if iPos > 0 {
@@ -83,7 +79,7 @@ func (mysql *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, er
 		tableName = tableName[iPos+1:]
 	}
 	if schema == "" {
-		schema = mysql.schema
+		schema = mSQL.schema
 	}
 	//获取字段名词，字段类型，是否主键，字段类型转换为常见的数据类型
 	strSQL := "select column_name column_code," +
@@ -92,14 +88,14 @@ func (mysql *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, er
 		"case when data_type like '%int%' then 'int' " +
 		" when data_type in('float','real','double','decimal','numeric') then 'float' " +
 		" when data_type = 'date' then 'date' when data_type = 'datetime' then 'datetime' when data_type = 'timestamp' then 'timestamp' " +
-		" else 'varchar' " +
+		" else 'string' " +
 		"end date_type " +
 		"from INFORMATION_SCHEMA.COLUMNS where table_schema=? and table_name=? " +
 		"order by ordinal_position"
 
 	//"select column_name column_code,coalesce(column_comment,'') column_name,if(column_key='PRI','是','否') is_key " +
 	//"from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
-	rows, err := mysql.DataBase.Query(strSQL, schema, tableName)
+	rows, err := mSQL.DataBase.Query(strSQL, schema, tableName)
 	if err != nil {
 		return nil, err
 
@@ -120,10 +116,10 @@ func (mysql *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, er
 	return data, nil
 
 }
-func (mysql *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
+func (mSQL *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 	strSQL := "select table_name table_code,coalesce(table_comment,'') table_comment " +
 		"from information_schema.tables where table_schema=?"
-	rows, err := mysql.DataBase.Query(strSQL, mysql.schema)
+	rows, err := mSQL.DataBase.Query(strSQL, mSQL.schema)
 	if err != nil {
 		return nil, err
 
@@ -143,14 +139,90 @@ func (mysql *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 	return data, nil
 }
 
-func (mysql *TMySQLWorker) CheckSQLValid(strSQL, strFilterCol, strFilterVal *string) error {
-	_, err := mysql.TDatabase.CheckSQLValid(strSQL, strFilterCol, strFilterVal)
-	return err
+func (mSQL *TMySQLWorker) CheckSQLValid(strSQL, strFilterVal *string) ([]common.ColumnInfo, error) {
+	if !common.IsSafeSQL(*strSQL + *strFilterVal) {
+		return nil, fmt.Errorf("unsafe sql")
+	}
+	var arrValues []interface{}
+	var filters []common.FilterValue
+	var err error
+	if (strFilterVal != nil) && (*strFilterVal != "") {
+		if filters, err = common.JSONToFilterValues(strFilterVal); err != nil {
+			return nil, err
+		}
+		for _, item := range filters {
+			arrValues = append(arrValues, item.Value)
+		}
+	}
+
+	rows, err := mSQL.DataBase.Query(fmt.Sprintf("select "+
+		"* from (%s) t limit 0", *strSQL), arrValues...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, err
+	}
+	var cols []common.ColumnInfo
+	for _, col := range colTypes {
+		var val common.ColumnInfo
+		val.ColumnCode = col.Name()
+		val.ColumnName = col.Name()
+		val.IsKey = "否"
+		switch col.DatabaseTypeName() {
+		case "UNSIGNED TINYINT", "TINYINT", "UNSIGNED SMALLINT", "SMALLINT", "UNSIGNED INT", "UNSIGNED MEDIUMINT", "INT", "MEDIUMINT", "UNSIGNED BIGINT", "BIGINT":
+			val.DataType = "int"
+		case "FLOAT", "DOUBLE", "DECIMAL", "NUMERIC":
+			val.DataType = "float"
+		case "DATE", "DATETIME", "TIMESTAMP":
+			val.DataType = "datetime"
+		case "BINARY":
+			val.DataType = "string"
+		default:
+			val.DataType = "string"
+		}
+		cols = append(cols, val)
+	}
+	return cols, nil
 }
 
-func (mySQL *TMySQLWorker) GetSourceTableDDL(tableName string) (*string, error) {
-	// SHOW CREATE TABLE sanyu.`case`;
-	rows, err := mySQL.DataBase.Query(fmt.Sprintf("SHOW CREATE TABLE %s", tableName))
+// ReadData 读取数据,调用方关闭 rows.Close()
+func (mSQL *TMySQLWorker) ReadData(strSQL, filterVal *string) (interface{}, error) {
+	var paramValues []interface{}
+	var filterValues []common.FilterValue
+	var err error
+	var rows *sql.Rows
+	_, err = mSQL.CheckSQLValid(strSQL, filterVal)
+	if err != nil {
+		return nil, err
+	}
+	filterValues, err = common.JSONToFilterValues(filterVal)
+	for _, item := range filterValues {
+		paramValues = append(paramValues, item.Value)
+	}
+	rows, err = mSQL.DataBase.Query(*strSQL, paramValues...)
+	if err != nil {
+		return nil, err
+	}
+
+	/*
+		调用方关闭
+		defer func() {
+			_ = rows.Close()
+		}()
+	*/
+	return rows, nil
+
+}
+func (mSQL *TMySQLWorker) GetSourceTableDDL(tableCode string) (*string, error) {
+	if strings.Index(tableCode, "`") < 0 {
+		tableCode = fmt.Sprintf("%s%s%s", mSQL.GetQuoteFlag(), tableCode, mSQL.GetQuoteFlag())
+	}
+	rows, err := mSQL.DataBase.Query(fmt.Sprintf("SHOW CREATE TABLE %s", tableCode))
 	if err != nil {
 		return nil, err
 	}
@@ -169,9 +241,9 @@ func (mySQL *TMySQLWorker) GetSourceTableDDL(tableName string) (*string, error) 
 	return &ddl, nil
 }
 
-func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
+func (mSQL *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 
-	Cols, err := mysql.GetColumns(tableName)
+	Cols, err := mSQL.GetColumns(tableName)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +253,7 @@ func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 			KeyColumns = append(KeyColumns, col.ColumnCode)
 		}
 	}
-	data, err := mysql.DataBase.Query(fmt.Sprintf("select "+
+	data, err := mSQL.DataBase.Query(fmt.Sprintf("select "+
 		"* from %s limit 0", tableName))
 	if err != nil {
 		return nil, err
@@ -274,7 +346,7 @@ func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 			if nullable {
 				sb.AppendStr(fmt.Sprintf(" Nullable(%s(%d))", columnType, s))
 			} else {
-				sb.AppendStr(fmt.Sprintf(" %s(%d)", columnType, p))
+				sb.AppendStr(fmt.Sprintf(" %s(%d)", columnType, s))
 			}
 		case "DOUBLE":
 			if nullable {
@@ -289,7 +361,7 @@ func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 				sb.AppendStr(" Date")
 			}
 		case "DATETIME", "TIMESTAMP":
-
+			// scal 对应为 DATETIME_PRECISION
 			_, precision, ok := col.DecimalSize()
 			if !ok {
 				precision = 0
@@ -317,11 +389,11 @@ func (mysql *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 	if len(KeyColumns) > 0 {
 		sb.AppendStr(fmt.Sprintf("\n,PRIMARY KEY(%s)", strings.Join(KeyColumns, ",")))
 	}
-	sb.AppendStr("\n)ENGINE=MergeTree --PARTITION BY toYYYYMM([datetimeColumnName]) ORDER BY([orderColumn]) ")
+	sb.AppendStr("\n)ENGINE=ReplacingMergeTree --PARTITION BY toYYYYMM([datetimeColumnName]) ORDER BY([orderColumn]) ")
 	result := sb.String()
 	return &result, nil
 }
-func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data interface{}, clickHouseClient *clickHouse.TClickHouseClient) (int64, error) {
+func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{}, clickHouseClient *clickHouse.TClickHouseClient) (int64, error) {
 	rows, ok := data.(*sql.Rows)
 	if !ok {
 		return -1, fmt.Errorf("data is not *sql.Rows")
@@ -573,6 +645,7 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data interface
 		}
 		rowCount++
 		totalCount++
+		isEmpty = false
 		if rowCount >= batch {
 			for i, val := range buffer {
 				clickHouseValue[i] = val.InPutData()
@@ -585,7 +658,7 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data interface
 			}
 			rowCount = 0
 		}
-		isEmpty = false
+
 	}
 	if isEmpty {
 		return 0, nil
@@ -604,7 +677,7 @@ func (mysql *TMySQLWorker) WriteData(tableName string, batch int, data interface
 
 	return totalCount, nil
 }
-func (mysql *TMySQLWorker) GetConnOptions() []string {
+func (mSQL *TMySQLWorker) GetConnOptions() []string {
 	return []string{
 		"allowAllFiles=false",
 		"allowCleartextPasswords=false",
@@ -631,6 +704,9 @@ func (mysql *TMySQLWorker) GetConnOptions() []string {
 		"connectionAttributes=none",
 	}
 }
-func (mysql *TMySQLWorker) GetQuoteFlag() string {
+func (mSQL *TMySQLWorker) GetQuoteFlag() string {
 	return "`"
+}
+func (mSQL *TMySQLWorker) GetDatabaseType() string {
+	return "mysql"
 }

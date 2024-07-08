@@ -112,3 +112,11 @@ func (pt *TPullTable) SetPullResult(errInfo string) error {
 	pt.LastError = errInfo
 	return dbs.SetPullResult(pt)
 }
+
+func (pt *TPullTable) GetSourceTableDDL() (string, error) {
+	dbs, err := GetDbServ()
+	if err != nil {
+		return "", err
+	}
+	return dbs.GetSourceTableDDL(pt)
+}

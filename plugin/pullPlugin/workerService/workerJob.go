@@ -117,11 +117,13 @@ func (wj *TWorkerJob) Run() {
 		}
 	}
 	_ = job.SetError("运行中...")
+
 	if err = wj.PullTables(); err != nil {
 		_ = job.SetError(fmt.Sprintf("[%s]拉取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 		wj.Logger.WriteError(err.Error())
 		return
 	}
+
 	if !wj.KeepConnect {
 		if err = wj.clickHouseClient.Client.Close(); err != nil {
 			_ = job.SetError(fmt.Sprintf("[%s]关闭连接失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
@@ -135,7 +137,6 @@ func (wj *TWorkerJob) Run() {
 func (wj *TWorkerJob) PullTable(tableID int32) error {
 	var rows interface{}
 	var tbl ctl.TPullTableControl
-	var filters []string
 	var err error
 	var total int64
 	tbl.JobID = wj.JobID
@@ -144,31 +145,38 @@ func (wj *TWorkerJob) PullTable(tableID int32) error {
 	if err != nil {
 		return err
 	}
-	_ = tbl.SetPullResult("运行中...")
-	strSQL, strCOLs, strVals := tbl.SelectSql, tbl.FilterCol, tbl.FilterVal
-	if rows, err = wj.worker.ReadData(&strSQL, &strCOLs, &strVals); err != nil {
+	if err = tbl.SetPullResult("运行中..."); err != nil {
+		return err
+	}
+	strSQL, strVals := tbl.SelectSql, tbl.FilterVal
+	if rows, err = wj.worker.ReadData(&strSQL, &strVals); err != nil {
 		_ = tbl.SetPullResult(fmt.Sprintf("[%s]读取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 		return err
 	}
+	// 全量抽取
+	if strVals == "" {
+		if err = wj.clickHouseClient.ClearTableData(tbl.DestTable); err != nil {
+			_ = tbl.SetPullResult(fmt.Sprintf("[%s]清空数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+			return err
+		}
+	}
+
 	if total, err = wj.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, wj.clickHouseClient); err != nil {
 		_ = tbl.SetPullResult(fmt.Sprintf("[%s]写入数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 		return err
 	}
 	if strVals != "" {
-		arrFilterVal := strings.Split(strVals, ",")
-		filters, err = wj.clickHouseClient.GetMaxFilter(tbl.DestTable, arrFilterVal)
+		tbl.FilterVal, err = wj.clickHouseClient.GetMaxFilter(tbl.DestTable, &strVals)
 		if err != nil {
 			_ = tbl.SetPullResult(fmt.Sprintf("[%s]获取过滤值失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 			return err
 		}
-		tbl.FilterVal = strings.Join(filters, ",")
 		if err = tbl.SetFilterVal(); err != nil {
 			_ = tbl.SetPullResult(fmt.Sprintf("[%s]更新过滤值失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
 			return err
 		}
 	}
 	// convert current time to string
-
 	_ = tbl.SetPullResult(fmt.Sprintf("[%s]拉取数据成功，共%d条", time.Now().Format("2006-01-02 15:04:05"), total))
 	return nil
 

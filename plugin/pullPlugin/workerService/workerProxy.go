@@ -246,6 +246,14 @@ func (pw *TWorkerProxy) GetSourceQuoteFlag() string {
 	return worker.GetQuoteFlag()
 }
 
+func (pw *TWorkerProxy) GetDatabaseType() string {
+	worker, _ := NewWorker(nil, 2, false)
+	defer func() {
+		_ = worker.CloseConnect
+	}()
+	return worker.GetDatabaseType()
+}
+
 func (pw *TWorkerProxy) GetSourceTables(connectOption map[string]string) ([]common.TableInfo, error) {
 	worker, err := NewWorker(connectOption, 2, false)
 	if err != nil {
@@ -267,7 +275,7 @@ func (pw *TWorkerProxy) GetTableColumns(connectOption map[string]string, tableNa
 	}()
 	return worker.GetColumns(*tableName)
 }
-func (pw *TWorkerProxy) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
+func (pw *TWorkerProxy) GetSourceTableDDL(connectOption map[string]string, tableCode *string) (*string, error) {
 	worker, err := NewWorker(connectOption, 2, false)
 	if err != nil {
 		return nil, err
@@ -275,10 +283,10 @@ func (pw *TWorkerProxy) GetSourceTableDDL(connectOption map[string]string, table
 	defer func() {
 		_ = worker.CloseConnect
 	}()
-	return worker.GetSourceTableDDL(*tableName)
+	return worker.GetSourceTableDDL(*tableCode)
 }
 
-func (pw *TWorkerProxy) GenTableScript(connectOption map[string]string, tableName *string) (*string, error) {
+func (pw *TWorkerProxy) GenTableScript(connectOption map[string]string, tableCode *string) (*string, error) {
 	worker, err := NewWorker(connectOption, 2, false)
 	if err != nil {
 		return nil, err
@@ -286,7 +294,7 @@ func (pw *TWorkerProxy) GenTableScript(connectOption map[string]string, tableNam
 	defer func() {
 		_ = worker.CloseConnect
 	}()
-	return worker.GenTableScript(*tableName)
+	return worker.GenTableScript(*tableCode)
 }
 
 func (pw *TWorkerProxy) GetDestConnOption() ([]string, error) {
@@ -324,15 +332,15 @@ func (pw *TWorkerProxy) GetDestTableNames(connectOption map[string]string) ([]co
 	return client.GetTableNames()
 }
 
-func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql, filterCol, filterVal *string) error {
+func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql, filterVal *string) ([]common.ColumnInfo, error) {
 	worker, err := NewWorker(connectOption, 2, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		_ = worker.CloseConnect
 	}()
-	return worker.CheckSQLValid(sql, filterCol, filterVal)
+	return worker.CheckSQLValid(sql, filterVal)
 }
 
 func (pw *TWorkerProxy) CheckSourceConnect(connectOption map[string]string) error {

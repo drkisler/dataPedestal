@@ -12,14 +12,15 @@ import (
 type IPullWorker interface {
 	OpenConnect() error
 	CloseConnect() error
-	CheckSQLValid(sql, filterCol, filterVal *string) error
+	CheckSQLValid(strSQL, strFilterVal *string) ([]common.ColumnInfo, error)
 	GetColumns(tableName string) ([]common.ColumnInfo, error)
 	GetTables() ([]common.TableInfo, error)
-	ReadData(strSQL, filterCOl, filterVal *string) (interface{}, error)
+	ReadData(strSQL, filterVal *string) (interface{}, error)
 	GenTableScript(tableName string) (*string, error)
 	WriteData(tableName string, batch int, data interface{}, client *TClickHouseClient) (int64, error)
 	GetConnOptions() []string
 	GetQuoteFlag() string
+	GetDatabaseType() string
 	GetSourceTableDDL(tableName string) (*string, error)
 }
 
@@ -68,6 +69,19 @@ func (chc *TClickHouseClient) CheckTableExists(tableName string) (bool, error) {
 	}
 	return data[0] == 1, nil
 }
+
+func (chc *TClickHouseClient) ClearTableData(tableName string) error {
+	if err := chc.Connect(); err != nil {
+		return err
+	}
+	if err := chc.Client.Do(chc.Ctx, ch.Query{
+		Body: fmt.Sprintf("TRUNCATE TABLE %s", tableName),
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (chc *TClickHouseClient) CloseConnect() error {
 	return chc.Client.Close()
 }
@@ -165,37 +179,43 @@ func (chc *TClickHouseClient) GetTableNames() ([]common.TableInfo, error) {
 }
 
 // GetMaxFilter 获取表中最大的过滤条件值,filterValue 为过滤条件列名数组,如 ["gmt_create(datetime(2017-01-01 15:03:45))", "gmt_number(int(123))"]
-func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterValue []string) ([]string, error) {
+func (chc *TClickHouseClient) GetMaxFilter(tableName string, filterValue *string) (string, error) {
 	if err := chc.Connect(); err != nil {
-		return nil, err
+		return "", err
 	}
-	var filterData = make([]proto.ColStr, len(filterValue))
-	var result proto.Results
-	arrColumns, arrTypes, err := common.ConvertFilterColum(filterValue)
+
+	filterCondition, err := common.JSONToFilterConditions(filterValue)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	arrFilter := make([]string, len(arrColumns))
-	for i, colName := range arrColumns {
+
+	var filterData = make([]proto.ColStr, len(filterCondition))
+	var result proto.Results
+
+	arrFilter := make([]string, len(filterCondition))
+	for i, filter := range filterCondition {
 		var resultCol proto.ResultColumn
 		//var data proto.ColStr
-		arrFilter[i] = fmt.Sprintf("cast(max(%s) as varchar) %s ", colName, colName)
-		resultCol.Name = colName
+		arrFilter[i] = fmt.Sprintf("cast(max(%s) as varchar) %s ", filter.Column, filter.Column)
+		resultCol.Name = filter.Column
 		resultCol.Data = &filterData[i]
 		result = append(result, resultCol)
 	}
 	strBody := fmt.Sprintf("select "+
 		"%s from %s", strings.Join(arrFilter, ","), tableName)
 	if err = chc.Client.Do(chc.Ctx, ch.Query{Body: strBody, Result: result}); err != nil {
-		return nil, err
+		return "", err
 	}
-	var newFilterValue []string
 	for iIndex, colStr := range filterData {
 		if colStr.Rows() > 0 {
-			newFilterValue = append(newFilterValue, fmt.Sprintf("%s(%s(%s))", arrColumns[iIndex], arrTypes[iIndex], colStr.Row(0)))
+			filterCondition[iIndex].Value = colStr.Row(0)
 		}
 	}
-	return newFilterValue, nil
+	strFilter, err := common.FilterConditionsToJSON(filterCondition)
+	if err != nil {
+		return "", err
+	}
+	return strFilter, nil
 }
 
 func GetConnOptions() []string {

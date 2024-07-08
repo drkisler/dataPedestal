@@ -72,6 +72,11 @@ func GetSourceQuoteFlag(_ int32, params map[string]any) common.TResponse {
 	return (*myPlugin).GetSourceQuoteFlag(params)
 }
 
+func GetDatabaseType(_ int32, params map[string]any) common.TResponse {
+	myPlugin := PluginServ.(*TMyPlugin)
+	return (*myPlugin).GetDatabaseType(params)
+}
+
 func GetDestConnOption(_ int32, params map[string]any) common.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).GetDestConnOption(params)

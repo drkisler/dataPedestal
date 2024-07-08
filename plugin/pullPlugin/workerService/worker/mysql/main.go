@@ -90,11 +90,11 @@ func main() {
 			}(&wg)
 			var operate common.TPluginOperate
 			operate.UserID = 1
-			operate.OperateName = "getSourceTableDDL" //"offLineJob"
+			operate.OperateName = "checkJobTable" //"offLineJob"
 			operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
-			operate.Params = map[string]any{"job_name": "test", "table_name": "`case`"}
+			operate.Params = map[string]any{"job_name": "test", "table_name": "`case`", "table_id": float64(1)}
 			rest := pl.CustomInterface(operate)
-			fmt.Println(fmt.Sprintf("getSourceTableDDL %v", rest.Info), rest.Code)
+			fmt.Println(fmt.Sprintf("checkJobTable %v", rest.Info), rest.Code)
 
 			/*
 				func (mp *TMyPlugin) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
@@ -123,7 +123,7 @@ func main() {
 			*/
 
 			time.Sleep(10 * time.Second)
-			pl.Stop()
+			/*pl.Stop()
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
 				defer wg.Done()
@@ -131,6 +131,7 @@ func main() {
 				fmt.Println(resp.Info)
 			}(&wg)
 			time.Sleep(10 * time.Second)
+			*/
 			pl.Stop()
 			wg.Wait()
 			return

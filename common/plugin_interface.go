@@ -56,6 +56,7 @@ type TPullTable struct {
 	TableCode string `json:"table_code,omitempty"`
 	TableName string `json:"table_name,omitempty"`
 	DestTable string `json:"dest_table,omitempty"`
+	SourceDDL string `json:"source_ddl,omitempty"`
 	SelectSql string `json:"select_sql,omitempty"`
 	FilterCol string `json:"filter_col,omitempty"`
 	FilterVal string `json:"filter_val,omitempty"`
