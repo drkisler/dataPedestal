@@ -16,8 +16,7 @@ var NewWorker TNewWorker
 
 //var GetSourceConnOption TGetSourceConnOption
 
-// 测试用
-// var msgClient *messager.TMessageClient
+// TCheckFunc 用于异步在线测试任务和表
 type TCheckFunc = func()
 type TNewWorker = func(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error)
 type TWorkerProxy struct {
@@ -142,6 +141,7 @@ func (pw *TWorkerProxy) CheckJob(jobName string) error {
 func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 	var job ctl.TPullJob
 	var workerJob *TWorkerJob
+
 	var err error
 	job.JobName = jobName
 	if err = job.InitJobByName(); err != nil {
@@ -152,7 +152,28 @@ func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 	}
 	workerJob.SkipHour = []int{}
 	pw.CheckChan <- func() {
-		_ = workerJob.PullTable(tableID)
+		var tableLog ctl.PullTableLogControl
+		tableLog.JobID = job.JobID
+		tableLog.TableID = tableID
+		var iStartTime int64
+		if iStartTime, err = tableLog.StartTableLog(); err != nil {
+			pw.logger.WriteError(fmt.Sprintf("start table log failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()))
+			return
+		}
+		var tableInfo ctl.TPullTableControl
+		tableInfo.JobID = job.JobID
+		tableInfo.TableID = tableID
+		if err = tableInfo.SetLastRun(iStartTime); err != nil {
+			_ = tableLog.StopTableLog(iStartTime, err.Error())
+			pw.logger.WriteError(fmt.Sprintf("set last run failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()))
+			return
+		}
+		if tableLog.RecordCount, err = workerJob.PullTable(tableID); err != nil {
+			_ = tableLog.StopTableLog(iStartTime, err.Error())
+			pw.logger.WriteError(fmt.Sprintf("pull table failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()))
+			return
+		}
+		_ = tableLog.StopTableLog(iStartTime, "")
 	}
 	return nil
 }

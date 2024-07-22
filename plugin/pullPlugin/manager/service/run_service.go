@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/universal/logAdmin"
+	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"os"
 	"os/signal"
 )
@@ -42,17 +44,26 @@ func InitPlugin() error {
 	operateMap["getDestTables"] = GetDestTables
 	operateMap["getTableColumn"] = GetTableColumns
 	operateMap["getTableScript"] = GetTableScript
+	operateMap["checkJobTable"] = CheckJobTable
+	operateMap["checkSQLValid"] = CheckSQLValid
+	operateMap["clearJobLog"] = ClearJobLog
+	operateMap["deleteJobLog"] = DeleteJobLog
+	operateMap["queryJobLogs"] = QueryJobLogs
+
 	operateMap["addJob"] = AddJob
 	operateMap["alterJob"] = AlterJob
 	operateMap["deleteJob"] = DeleteJob
 	operateMap["getJobs"] = GetJobs
+	operateMap["getJobUUID"] = GetJobUUID
 	operateMap["setJobStatus"] = SetJobStatus
 	operateMap["onLineJob"] = OnLineJob
 	operateMap["offLineJob"] = OffLineJob
 	operateMap["checkJobExist"] = CheckJobLoaded
 	operateMap["checkJob"] = CheckJob
-	operateMap["checkJobTable"] = CheckJobTable
-	operateMap["checkSQLValid"] = CheckSQLValid
+	operateMap["clearTableLog"] = ClearTableLog
+	operateMap["deleteTableLog"] = DeleteTableLog
+	operateMap["queryTableLogs"] = QueryTableLogs
+
 	operateMap["checkSourceConnection"] = CheckSourceConnect
 	operateMap["checkDestConnection"] = CheckDestConnect
 	operateMap["getSourceConnOption"] = GetSourceConnOption
@@ -80,6 +91,20 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 	if resp := mp.TBasePlugin.Load(config); resp.Code < 0 {
 		mp.Logger.WriteError(resp.Info)
 		return resp
+	}
+	var pubServCfg initializers.TPublishConfig
+	if err = json.Unmarshal([]byte(config), &pubServCfg); err != nil {
+		return *common.Failure(fmt.Sprintf("解析配置失败:%s", err.Error()))
+	}
+	if err = pubServCfg.CheckValid(); err != nil {
+		return *common.Failure(fmt.Sprintf("配置信息不正确:%s", err.Error()))
+	}
+	// 任务完成后消息发送的地址
+	ctl.PublishServiceUrl = pubServCfg.ReplyUrl
+
+	if _, err = metaDataBase.GetDbServ(metaDataBase.PullJobDDL, metaDataBase.PullTableDDL, metaDataBase.PullTableLogDDL, metaDataBase.PullJobLogDDL); err != nil {
+		mp.Logger.WriteError(err.Error())
+		return *common.Failure(err.Error())
 	}
 
 	if mp.workerProxy, err = workerService.NewWorkerProxy(); err != nil {
@@ -117,10 +142,6 @@ func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 
 // Run 启动程序，启动前必须先Load
 func (mp *TMyPlugin) Run() common.TResponse {
-	if _, err := ctl.OpenDB(); err != nil {
-		mp.Logger.WriteError(err.Error())
-		return *common.Failure(err.Error())
-	}
 	//启动调度器
 	if err := mp.workerProxy.Start(mp.Logger); err != nil {
 		mp.Logger.WriteError(err.Error())
@@ -147,7 +168,9 @@ func (mp *TMyPlugin) Stop() common.TResponse {
 	mp.TBasePlugin.Stop()
 	// 停止长期任务，对于scheduler的停止，需要单独处理
 	mp.workerProxy.StopRun()
-	if err := ctl.CloseDB(); err != nil {
+
+	dbs, _ := metaDataBase.GetDbServ()
+	if err := dbs.Close(); err != nil {
 		return common.TResponse{Code: -1, Info: err.Error()}
 	}
 	return common.TResponse{Code: 0, Info: "success stop plugin"} //*common.Success(nil)

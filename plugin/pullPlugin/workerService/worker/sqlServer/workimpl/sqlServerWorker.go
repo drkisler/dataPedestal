@@ -186,7 +186,7 @@ func (msSQL *TMSSQLWorker) CheckSQLValid(strSQL, strFilterVal *string) ([]common
 	var arrValues []interface{}
 	var filters []common.FilterValue
 	var err error
-	if (strFilterVal != nil) && (*strFilterVal != "") {
+	if *strFilterVal != "" {
 		if filters, err = common.JSONToFilterValues(strFilterVal); err != nil {
 			return nil, err
 		}
@@ -424,6 +424,7 @@ func (msSQL *TMSSQLWorker) GenTableScript(tableName string) (*string, error) {
 		}
 
 	}
+	sb.AppendStr("\n,").AppendStr("pull_time Int64")
 	if len(KeyColumns) > 0 {
 		sb.AppendStr(fmt.Sprintf("\n,PRIMARY KEY(%s)", strings.Join(KeyColumns, ",")))
 	}
@@ -558,6 +559,10 @@ func (msSQL *TMSSQLWorker) WriteData(tableName string, batch int, data interface
 			}
 		}
 	}
+	// 添加时间戳列
+	if err = buffer[iLen].Initialize(common.TimeStampColumn, proto.ColumnTypeInt64); err != nil {
+		return -1, err
+	}
 	rowCount := 0
 	totalCount := int64(0)
 	isEmpty := true
@@ -598,6 +603,11 @@ func (msSQL *TMSSQLWorker) WriteData(tableName string, batch int, data interface
 			if err = buffer[idx].Append(scanValue[idx]); err != nil {
 				return -1, err
 			}
+		}
+		// 添加时间戳
+		if err = buffer[iLen].Append(clickHouseClient.GetJobStartTime()); err != nil {
+			return -1, err
+
 		}
 		rowCount++
 		totalCount++

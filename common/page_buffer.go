@@ -9,26 +9,26 @@ import (
 type PageBuffer struct {
 	UserID     int32
 	QueryParam string
-	Total      int32
-	Page       [][]int32
+	Total      int64
+	Page       [][]int64
 }
 
-func NewPageBuffer(userID int32, queryParam string, pageSize int32, ids []int32) PageBuffer {
-	var iLen = int32(len(ids))
+func NewPageBuffer(userID int32, queryParam string, pageSize int64, ids []int64) PageBuffer {
+	var iLen = int64(len(ids))
 	rowCount := iLen / pageSize
 	if iLen%pageSize != 0 {
 		rowCount++
 	}
 
 	// 创建二维数组
-	matrix := make([][]int32, rowCount)
+	matrix := make([][]int64, rowCount)
 
 	// 填充二维数组
 	row := 0
-	col := int32(0)
-	for i := 0; i < len(ids); i++ {
+	col := int64(0)
+	for i := int64(0); i < int64(len(ids)); i++ {
 		if col == 0 {
-			matrix[row] = make([]int32, 0, pageSize)
+			matrix[row] = make([]int64, 0, pageSize)
 		}
 
 		matrix[row] = append(matrix[row], ids[i])
@@ -42,8 +42,8 @@ func NewPageBuffer(userID int32, queryParam string, pageSize int32, ids []int32)
 	return PageBuffer{userID, queryParam, iLen, matrix}
 }
 
-func (pg *PageBuffer) GetPageIDs(pageIndex int32) (*string, error) {
-	if pageIndex < 0 || pageIndex >= int32(len(pg.Page)) {
+func (pg *PageBuffer) GetPageIDs(pageIndex int64) (*string, error) {
+	if pageIndex < 0 || pageIndex >= int64(len(pg.Page)) {
 		return nil, fmt.Errorf("page index %d is out of range[0, %d]", pageIndex, len(pg.Page))
 	}
 	page := pg.Page[pageIndex]

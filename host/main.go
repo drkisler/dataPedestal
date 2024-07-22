@@ -128,7 +128,7 @@ func main() {
 	)
 	defer common.CloseLogService()
 
-	// region 创建并启动心跳监测服务
+	// region 创建并启动心跳监测服务,定期向门户发送自己的信息，以表明自己在线
 	hb, err := control.NewHeartBeat()
 	if err != nil {
 		fmt.Printf("创建心跳监测服务失败：%s", err.Error())

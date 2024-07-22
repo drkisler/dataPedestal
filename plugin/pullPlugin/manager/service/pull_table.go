@@ -6,7 +6,7 @@ import (
 )
 
 func AddTable(userID int32, params map[string]any) common.TResponse {
-	ptc, job, err := ctl.ParsePullTableControl(&params)
+	ptc, job, err := ctl.ParsePullTableControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
@@ -30,7 +30,7 @@ func AddTable(userID int32, params map[string]any) common.TResponse {
 	return *(ptc.AppendTable())
 }
 func AlterTable(userID int32, params map[string]any) common.TResponse {
-	ptc, job, err := ctl.ParsePullTableControl(&params)
+	ptc, job, err := ctl.ParsePullTableControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
@@ -54,7 +54,7 @@ func AlterTable(userID int32, params map[string]any) common.TResponse {
 	return *(ptc.ModifyTable())
 }
 func DeleteTable(userID int32, params map[string]any) common.TResponse {
-	ptc, _, err := ctl.ParsePullTableControl(&params)
+	ptc, _, err := ctl.ParsePullTableControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
@@ -62,13 +62,40 @@ func DeleteTable(userID int32, params map[string]any) common.TResponse {
 	return *(ptc.RemoveTable())
 }
 func GetPullTables(userID int32, params map[string]any) common.TResponse {
-	ptc, _, err := ctl.ParsePullTableControl(&params)
+	ptc, _, err := ctl.ParsePullTableControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
 
 	return *(ptc.QueryTables())
+}
+
+func ClearTableLog(userID int32, params map[string]any) common.TResponse {
+	tbc, err := ctl.ParseTableLogControl(params)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	tbc.OperatorID = userID
+	return *tbc.ClearTableLog()
+}
+
+func DeleteTableLog(userID int32, params map[string]any) common.TResponse {
+	tbc, err := ctl.ParseTableLogControl(params)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	tbc.OperatorID = userID
+	return *tbc.DeleteTableLog()
+}
+
+func QueryTableLogs(userID int32, params map[string]any) common.TResponse {
+	tbc, err := ctl.ParseTableLogControl(params)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	tbc.OperatorID = userID
+	return *tbc.QueryTableLogs()
 }
 
 /*
@@ -82,7 +109,7 @@ func GetPullTables(userID int32, params map[string]any) common.TResponse {
 	}
 */
 func SetTableStatus(userID int32, params map[string]any) common.TResponse {
-	ptc, _, err := ctl.ParsePullTableControl(&params)
+	ptc, _, err := ctl.ParsePullTableControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}

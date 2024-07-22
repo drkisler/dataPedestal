@@ -34,38 +34,6 @@ type TPluginOperate struct {
 	Params      map[string]any `json:"params"`
 }
 
-type TPullJob struct {
-	UserID         int32  `json:"user_id,omitempty"`
-	JobID          int32  `json:"job_id,omitempty"`
-	JobName        string `json:"job_name,omitempty"`
-	SourceDbConn   string `json:"source_db_conn,omitempty"`
-	DestDbConn     string `json:"dest_db_conn,omitempty"`
-	KeepConnect    string `json:"keep_connect,omitempty"`
-	ConnectBuffer  int    `json:"connect_buffer,omitempty"`
-	CronExpression string `json:"cron_expression,omitempty"`
-	SkipHour       string `json:"skip_hour,omitempty"`
-	IsDebug        string `json:"is_debug,omitempty"`
-	Status         string `json:"status,omitempty"` // enabled , disabled
-	LastError      string `json:"last_error,omitempty"`
-	LoadStatus     string `json:"load_status,omitempty"` // loaded, unloaded
-}
-
-type TPullTable struct {
-	JobID     int32  `json:"job_id,omitempty"`
-	TableID   int32  `json:"table_id,omitempty"`
-	TableCode string `json:"table_code,omitempty"`
-	TableName string `json:"table_name,omitempty"`
-	DestTable string `json:"dest_table,omitempty"`
-	SourceDDL string `json:"source_ddl,omitempty"`
-	SelectSql string `json:"select_sql,omitempty"`
-	FilterCol string `json:"filter_col,omitempty"`
-	FilterVal string `json:"filter_val,omitempty"`
-	KeyCol    string `json:"key_col,omitempty"`
-	Buffer    int    `json:"buffer,omitempty"`
-	Status    string `json:"status,omitempty"`
-	LastError string `json:"last_error,omitempty"`
-}
-
 type TableInfo struct {
 	TableCode string `json:"table_code"`
 	TableName string `json:"table_name,omitempty"`

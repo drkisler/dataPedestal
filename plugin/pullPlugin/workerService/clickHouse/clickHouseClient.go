@@ -25,9 +25,11 @@ type IPullWorker interface {
 }
 
 type TClickHouseClient struct {
-	Ctx     context.Context
-	Client  *ch.Client
-	Options ch.Options
+	Ctx          context.Context
+	Client       *ch.Client
+	Options      ch.Options
+	ClusterName  string
+	JobStartTime int64
 }
 
 func NewClickHouseClient(address, database, user, password string) (*TClickHouseClient, error) {
@@ -46,7 +48,14 @@ func NewClickHouseClient(address, database, user, password string) (*TClickHouse
 	if err = client.Ping(ctx); err != nil {
 		return nil, err
 	}
-	return &TClickHouseClient{ctx, client, options}, nil
+	return &TClickHouseClient{Ctx: ctx, Client: client, Options: options}, nil
+}
+
+func (chc *TClickHouseClient) SetJobStartTime(startTime int64) {
+	chc.JobStartTime = startTime
+}
+func (chc *TClickHouseClient) GetJobStartTime() int64 {
+	return chc.JobStartTime
 }
 
 func (chc *TClickHouseClient) CheckTableExists(tableName string) (bool, error) {
@@ -75,7 +84,31 @@ func (chc *TClickHouseClient) ClearTableData(tableName string) error {
 		return err
 	}
 	if err := chc.Client.Do(chc.Ctx, ch.Query{
-		Body: fmt.Sprintf("TRUNCATE TABLE %s", tableName),
+		Body: fmt.Sprintf("TRUNCATE "+
+			"TABLE %s", tableName),
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (chc *TClickHouseClient) ClearDuplicateData(tableName string, keyColumns string) error {
+	if err := chc.Connect(); err != nil {
+		return err
+	}
+	//alter table case_data [ON CLUSTER cluster] delete where (id, pull_time) in (SELECT id,min(pull_time) pull_time from case_data group by id HAVING count(*)>1)
+	var strSQL string
+	if chc.ClusterName != "" {
+		strSQL = fmt.Sprintf("Alter "+
+			"table %s ON CLUSTER %s delete where (%s,%s) in (SELECT %s,min(%s) %s from %s group by %s HAVING count(*)>1)",
+			tableName, chc.ClusterName, keyColumns, common.TimeStampColumn, keyColumns, common.TimeStampColumn, common.TimeStampColumn, tableName, keyColumns)
+	} else {
+		strSQL = fmt.Sprintf("Alter "+
+			"table %s delete where (%s,%s) in (SELECT %s,min(%s) %s from %s group by %s HAVING count(*)>1)",
+			tableName, keyColumns, common.TimeStampColumn, keyColumns, common.TimeStampColumn, common.TimeStampColumn, tableName, keyColumns)
+	}
+	if err := chc.Client.Do(chc.Ctx, ch.Query{
+		Body: strSQL,
 	}); err != nil {
 		return err
 	}

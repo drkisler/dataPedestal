@@ -46,6 +46,12 @@ func (pc *TPullTableControl) RemoveTable() *common.TResponse {
 	}
 	return common.Success(nil)
 }
+
+// fmt.Sprintf("%s:%s", pt.TableCode, pt.TableName)
+func (pc *TPullTableControl) ToString() string {
+	return fmt.Sprintf("pageSize:%d,tableCode:%s,TableName:%s", pc.PageSize, pc.TableCode, pc.TableName)
+}
+
 func (pc *TPullTableControl) QueryTables() *common.TResponse {
 	var result common.TRespDataSet
 	pageBuffer, ok := tablePageID[pc.OperatorID]
@@ -54,7 +60,7 @@ func (pc *TPullTableControl) QueryTables() *common.TResponse {
 		if err != nil {
 			return common.Failure(err.Error())
 		}
-		tablePageID[pc.OperatorID] = common.NewPageBuffer(pc.OperatorID, pc.ToString(), pc.PageSize, ids)
+		tablePageID[pc.OperatorID] = common.NewPageBuffer(pc.OperatorID, pc.ToString(), int64(pc.PageSize), ids)
 		pageBuffer = tablePageID[pc.OperatorID]
 	}
 	if pageBuffer.Total == 0 {
@@ -62,14 +68,14 @@ func (pc *TPullTableControl) QueryTables() *common.TResponse {
 		result.ArrData = nil
 		return common.Success(&result)
 	}
-	ids, err := pageBuffer.GetPageIDs(pc.PageIndex - 1)
+	ids, err := pageBuffer.GetPageIDs(int64(pc.PageIndex - 1))
 	if err != nil {
 		return common.Failure(err.Error())
 	}
 	if result.ArrData, err = pc.TPullTable.GetTables(ids); err != nil {
 		return common.Failure(err.Error())
 	}
-	result.Total = pageBuffer.Total
+	result.Total = int32(pageBuffer.Total)
 
 	return common.Success(&result)
 }
@@ -106,12 +112,12 @@ func (pc *TPullTableControl) GetSourceTableDDL() *common.TResponse {
 	return common.ReturnStr(ddl)
 }
 
-func (pc *TPullTableControl) SetPullResult(errInfo string) error {
+func (pc *TPullTableControl) SetLastRun(iStartTime int64) error {
 	pullTable := pc.TPullTable
-	return pullTable.SetPullResult(errInfo)
+	return pullTable.SetLastRun(iStartTime)
 }
 
-func ParsePullTableControl(data *map[string]any) (*TPullTableControl, *TPullJob, error) {
+func ParsePullTableControl(data map[string]any) (*TPullTableControl, *TPullJob, error) {
 	var err error
 	var result TPullTableControl
 	if result.JobName, err = common.GetStringValueFromMap("job_name", data); err != nil {
@@ -157,7 +163,7 @@ func ParsePullTableControl(data *map[string]any) (*TPullTableControl, *TPullJob,
 	if result.Status, err = common.GetStringValueFromMap("status", data); err != nil {
 		return nil, nil, err
 	}
-	if result.LastError, err = common.GetStringValueFromMap("last_error", data); err != nil {
+	if result.LastRun, err = common.GetInt64ValueFromMap("last_run", data); err != nil {
 		return nil, nil, err
 	}
 	if result.PageIndex, err = common.GetInt32ValueFromMap("page_index", data); err != nil {

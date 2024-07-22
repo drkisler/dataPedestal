@@ -67,7 +67,7 @@ func NewWorkerJob(job *module.TPullJob, logger *logAdmin.TLoggerAdmin) (*TWorker
 		}
 		return arr, nil
 	}(job.SkipHour); err != nil {
-		_ = job.SetError(err.Error())
+		logger.WriteError(fmt.Sprintf("解析静默时间参数%s失败：%s", job.SkipHour, err.Error()))
 		return nil, err
 	}
 
@@ -94,12 +94,32 @@ func (wj *TWorkerJob) Run() {
 	defer func() {
 		wj.isWorking = false
 	}()
+	// 启动任务日志
+	var iStartTime int64
 	var err error
+	var logErr error
+	var jobLog ctl.PullJobLogControl
+	jobLog.JobID = wj.JobID
+	if iStartTime, err = jobLog.StartJobLog(); err != nil {
+		wj.Logger.WriteError(fmt.Sprintf("[%s]启动任务日志失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+		return
+	}
+	// 更新任务启动时间
 	job := &ctl.TPullJob{TPullJob: common.TPullJob{JobID: wj.JobID}}
+	if err = job.SetLastRun(iStartTime); err != nil {
+		wj.Logger.WriteError(fmt.Sprintf("更新任务%s运行时间失败：%s", job.JobName, err.Error()))
+		return
+	}
+	// 将任务开始时间设置到clickhouse客户端中，用于写入数据时标识数据抽取时间，便于数据请求时按照时间提取
+	wj.clickHouseClient.SetJobStartTime(iStartTime)
+
+	// 从这里开始，任务日志已经"启动"，如果有错误，需要记录到日志中
+
 	loc, err := time.LoadLocation("Local")
 	if err != nil {
-		_ = job.SetError(fmt.Sprintf("[%s]加载时区失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-		wj.Logger.WriteError(err.Error())
+		if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("[%s]加载时区失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error())); logErr != nil {
+			wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
+		}
 		return
 	}
 
@@ -111,30 +131,45 @@ func (wj *TWorkerJob) Run() {
 	// 如果是一次性任务，则不需要检查
 	if !wj.KeepConnect {
 		if err = wj.clickHouseClient.Connect(); err != nil {
-			_ = job.SetError(fmt.Sprintf("[%s]连接数据中心失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-			wj.Logger.WriteError(err.Error())
+			if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("连接数据源失败：%s", err.Error())); logErr != nil {
+				wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
+			}
 			return
 		}
 	}
-	_ = job.SetError("运行中...")
-
 	if err = wj.PullTables(); err != nil {
-		_ = job.SetError(fmt.Sprintf("[%s]拉取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-		wj.Logger.WriteError(err.Error())
+		if err = wj.clickHouseClient.Connect(); err != nil {
+			if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
+				wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
+			}
+		}
 		return
 	}
 
 	if !wj.KeepConnect {
 		if err = wj.clickHouseClient.Client.Close(); err != nil {
-			_ = job.SetError(fmt.Sprintf("[%s]关闭连接失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-			wj.Logger.WriteError(err.Error())
+			if err = wj.clickHouseClient.Connect(); err != nil {
+				if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("关闭数据库连接失败：%s", err.Error())); logErr != nil {
+					wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
+				}
+			}
 			return
 		}
 	}
-	_ = job.SetError(fmt.Sprintf("[%s]：%s", time.Now().Format("2006-01-02 15:04:05"), "任务执行成功"))
+
+	// 任务结束
+	var jobCtl ctl.TPullJobControl
+	jobCtl.JobID = wj.JobID
+	if err = jobCtl.SentFinishMsg(); err != nil {
+		wj.Logger.WriteError(fmt.Sprintf("发送任务结束消息失败：%s", err.Error()))
+	}
+
+	if err = jobLog.StopJobLog(iStartTime, ""); err != nil {
+		wj.Logger.WriteError(fmt.Sprintf("记录任务结束信息失败：%s", err.Error()))
+	}
 }
 
-func (wj *TWorkerJob) PullTable(tableID int32) error {
+func (wj *TWorkerJob) PullTable(tableID int32) (int64, error) {
 	var rows interface{}
 	var tbl ctl.TPullTableControl
 	var err error
@@ -143,60 +178,78 @@ func (wj *TWorkerJob) PullTable(tableID int32) error {
 	tbl.TableID = tableID
 	err = tbl.InitTableByID()
 	if err != nil {
-		return err
+		return 0, fmt.Errorf("初始化表ID[%d]失败：%s", tableID, err.Error())
 	}
-	if err = tbl.SetPullResult("运行中..."); err != nil {
-		return err
-	}
+
 	strSQL, strVals := tbl.SelectSql, tbl.FilterVal
 	if rows, err = wj.worker.ReadData(&strSQL, &strVals); err != nil {
-		_ = tbl.SetPullResult(fmt.Sprintf("[%s]读取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-		return err
+		return 0, fmt.Errorf("读取数据失败：%s", err.Error())
 	}
 	// 全量抽取
 	if strVals == "" {
 		if err = wj.clickHouseClient.ClearTableData(tbl.DestTable); err != nil {
-			_ = tbl.SetPullResult(fmt.Sprintf("[%s]清空数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-			return err
+			return 0, fmt.Errorf("清空数据失败：%s", err.Error())
+		}
+	}
+	if total, err = wj.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, wj.clickHouseClient); err != nil {
+		return 0, fmt.Errorf("写入数据失败：%s", err.Error())
+	}
+	// 非全量抽取，清除重复的数据
+	if strVals != "" {
+		if err = wj.clickHouseClient.ClearDuplicateData(tbl.DestTable, tbl.FilterCol); err != nil {
+			return -1, err
 		}
 	}
 
-	if total, err = wj.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, wj.clickHouseClient); err != nil {
-		_ = tbl.SetPullResult(fmt.Sprintf("[%s]写入数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-		return err
-	}
 	if strVals != "" {
 		tbl.FilterVal, err = wj.clickHouseClient.GetMaxFilter(tbl.DestTable, &strVals)
 		if err != nil {
-			_ = tbl.SetPullResult(fmt.Sprintf("[%s]获取过滤值失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-			return err
+			return 0, fmt.Errorf("获取过滤值失败：%s", err.Error())
 		}
 		if err = tbl.SetFilterVal(); err != nil {
-			_ = tbl.SetPullResult(fmt.Sprintf("[%s]更新过滤值失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
-			return err
+			return 0, fmt.Errorf("更新过滤值失败：%s", err.Error())
 		}
 	}
 	// convert current time to string
-	_ = tbl.SetPullResult(fmt.Sprintf("[%s]拉取数据成功，共%d条", time.Now().Format("2006-01-02 15:04:05"), total))
-	return nil
+	//_ = tbl.SetPullResult(fmt.Sprintf("[%s]拉取数据成功，共%d条", time.Now().Format("2006-01-02 15:04:05"), total))
+	return total, nil
 
 }
 
 func (wj *TWorkerJob) PullTables() error {
 	var tblCtl ctl.TPullTableControl
+	var iStartTime int64
+	var err error
 	tblCtl.JobID = wj.JobID
 	tables, cnt, err := tblCtl.GetAllTables()
 	if err != nil {
 		return err
 	}
+
 	if cnt > 0 {
 		for _, tbl := range tables {
+			var tableLog ctl.PullTableLogControl
+			tableLog.JobID = tbl.JobID
+			tableLog.TableID = tbl.TableID
+			if iStartTime, err = tableLog.StartTableLog(); err != nil {
+				return fmt.Errorf("启动表[%d]日志失败：%s", tbl.TableID, err.Error())
+			}
+			if err = tbl.SetLastRun(iStartTime); err != nil {
+				_ = tableLog.StopTableLog(iStartTime, fmt.Sprintf("更新表运行时间失败：%s", err.Error()))
+				return fmt.Errorf("更新表[%d]启动时间失败：%s", tbl.TableID, err.Error())
+			}
+
 			if !wj.IsRunning() {
 				return nil
 			}
-			if err = wj.PullTable(tbl.TableID); err != nil {
-				_ = tbl.SetPullResult(fmt.Sprintf("[%s]拉取数据失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+			if tableLog.RecordCount, err = wj.PullTable(tbl.TableID); err != nil {
+				if logErr := tableLog.StopTableLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
+					wj.Logger.WriteError(fmt.Sprintf("记录表[%d]错误信息%s失败：%s", tbl.TableID, err.Error(), logErr.Error()))
+				}
 				continue
+			}
+			if err = tableLog.StopTableLog(iStartTime, ""); err != nil {
+				wj.Logger.WriteError(fmt.Sprintf("记录表[%d]结束信息%s失败：%s", tbl.TableID, err.Error()))
 			}
 		}
 	}

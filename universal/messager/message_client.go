@@ -52,6 +52,24 @@ func (mc *TMessageClient) Send(url string, messageHead byte, messageBody []byte)
 	}
 	return mc.socket.Recv()
 }
+func (mc *TMessageClient) SendData(url string, data []byte) ([]byte, error) {
+	if url == "" {
+		return nil, fmt.Errorf("url is empty")
+	}
+	var err error
+	if !mc.connected {
+		if err = mc.socket.Dial(url); err != nil {
+			return nil, err
+		}
+		mc.connected = true
+	}
+	if err = mc.socket.Send(data); err != nil {
+		mc.connected = false
+		return nil, err
+	}
+	return mc.socket.Recv()
+}
+
 func (mc *TMessageClient) Close() {
 	_ = mc.socket.Close()
 	mc.connected = false

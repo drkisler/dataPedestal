@@ -1,6 +1,7 @@
 package messager
 
 import (
+	"errors"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"go.nanomsg.org/mangos/v3"
@@ -65,7 +66,7 @@ func (ms *TMessageServer) Receive() {
 		var data []byte
 		var err error
 		if data, err = ms.socket.Recv(); err != nil {
-			if err != protocol.ErrRecvTimeout {
+			if !errors.Is(err, protocol.ErrRecvTimeout) {
 				common.LogServ.Error(err)
 			}
 			time.Sleep(time.Millisecond * 200)
@@ -73,7 +74,7 @@ func (ms *TMessageServer) Receive() {
 		}
 		handleResult := ms.HandleRequest(data)
 		if err = ms.socket.Send(handleResult); err != nil {
-			if err != protocol.ErrSendTimeout {
+			if !errors.Is(err, protocol.ErrSendTimeout) {
 				common.LogServ.Error(err)
 			}
 			continue

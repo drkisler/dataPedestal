@@ -140,14 +140,18 @@ func (mSQL *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 }
 
 func (mSQL *TMySQLWorker) CheckSQLValid(strSQL, strFilterVal *string) ([]common.ColumnInfo, error) {
-	if !common.IsSafeSQL(*strSQL + *strFilterVal) {
+	var strFilter string
+	if strFilterVal != nil {
+		strFilter = *strFilterVal
+	}
+	if !common.IsSafeSQL(*strSQL + strFilter) {
 		return nil, fmt.Errorf("unsafe sql")
 	}
 	var arrValues []interface{}
 	var filters []common.FilterValue
 	var err error
-	if (strFilterVal != nil) && (*strFilterVal != "") {
-		if filters, err = common.JSONToFilterValues(strFilterVal); err != nil {
+	if strFilter != "" {
+		if filters, err = common.JSONToFilterValues(&strFilter); err != nil {
 			return nil, err
 		}
 		for _, item := range filters {
@@ -242,7 +246,6 @@ func (mSQL *TMySQLWorker) GetSourceTableDDL(tableCode string) (*string, error) {
 }
 
 func (mSQL *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
-
 	Cols, err := mSQL.GetColumns(tableName)
 	if err != nil {
 		return nil, err
@@ -386,6 +389,7 @@ func (mSQL *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 		}
 
 	}
+	sb.AppendStr("\n,").AppendStr(common.TimeStampColumn).AppendStr(" Int64")
 	if len(KeyColumns) > 0 {
 		sb.AppendStr(fmt.Sprintf("\n,PRIMARY KEY(%s)", strings.Join(KeyColumns, ",")))
 	}
@@ -406,8 +410,8 @@ func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{
 		return -1, err
 	}
 	iLen := len(colType)
-	var buffer = make([]clickHouse.TBufferData, iLen)
-	var clickHouseValue = make([]proto.InputColumn, iLen)
+	var buffer = make([]clickHouse.TBufferData, iLen+1)
+	var clickHouseValue = make([]proto.InputColumn, iLen+1)
 	//绑定扫描变量
 	var scanValue = make([]interface{}, iLen)
 	var scanArgs = make([]interface{}, iLen)
@@ -584,6 +588,10 @@ func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{
 			}
 		}
 	}
+	// 添加时间戳列
+	if err = buffer[iLen].Initialize(common.TimeStampColumn, proto.ColumnTypeInt64); err != nil {
+		return -1, err
+	}
 	rowCount := 0
 	totalCount := int64(0)
 	isEmpty := true
@@ -643,6 +651,12 @@ func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{
 				return -1, err
 			}
 		}
+		// 添加时间戳
+		if err = buffer[iLen].Append(clickHouseClient.GetJobStartTime()); err != nil {
+			return -1, err
+
+		}
+
 		rowCount++
 		totalCount++
 		isEmpty = false

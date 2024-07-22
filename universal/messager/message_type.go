@@ -18,7 +18,7 @@ const (
 	OperateGetPubError
 	OperateGetPlugins
 	OperateHeartBeat
-	OperateCheckPlugin
+	OperateCheckPlugin // 核对插件配置信息
 	OperateSetLicense
 	OperateGetProductKey
 	//OperatePluginApi

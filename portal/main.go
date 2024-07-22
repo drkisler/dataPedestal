@@ -203,7 +203,7 @@ func main() {
 	msg, err := messager.NewMessageServer(initializers.PortalCfg.SurveyUrl,
 		control.Survey.HandleOperate)
 	if err != nil {
-		fmt.Printf("创建消息服务失败：%s", err.Error())
+		fmt.Printf("创建心跳检测服务失败：%s", err.Error())
 		os.Exit(1)
 	}
 	msg.Start()

@@ -3,10 +3,11 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
-func GetInt32ValueFromMap(key string, data *map[string]interface{}) (int32, error) {
+func GetInt32ValueFromMap(key string, data map[string]interface{}) (int32, error) {
 	iValue, err := GetIntValueFromMap(key, data)
 	if err != nil {
 		return 0, err
@@ -14,11 +15,11 @@ func GetInt32ValueFromMap(key string, data *map[string]interface{}) (int32, erro
 	return int32(iValue), nil
 }
 
-func GetIntValueFromMap(key string, data *map[string]interface{}) (int, error) {
+func GetIntValueFromMap(key string, data map[string]interface{}) (int, error) {
 	if data == nil {
 		return 0, fmt.Errorf("data is nil")
 	}
-	if value, ok := (*data)[key]; ok {
+	if value, ok := data[key]; ok {
 		if intValue, ok := value.(int); ok {
 			return intValue, nil
 		} else if int32Value, ok := value.(int32); ok {
@@ -34,11 +35,11 @@ func GetIntValueFromMap(key string, data *map[string]interface{}) (int, error) {
 	return 0, nil
 }
 
-func GetInt64ValueFromMap(key string, data *map[string]interface{}) (int64, error) {
+func GetInt64ValueFromMap(key string, data map[string]interface{}) (int64, error) {
 	if data == nil {
 		return 0, fmt.Errorf("data is nil")
 	}
-	if value, ok := (*data)[key]; ok {
+	if value, ok := data[key]; ok {
 		if int64Value, ok := value.(int64); ok {
 			return int64Value, nil
 		} else if int32Value, ok := value.(int32); ok {
@@ -50,11 +51,11 @@ func GetInt64ValueFromMap(key string, data *map[string]interface{}) (int64, erro
 	return 0, nil
 }
 
-func GetFloat64ValueFromMap(key string, data *map[string]interface{}) (float64, error) {
+func GetFloat64ValueFromMap(key string, data map[string]interface{}) (float64, error) {
 	if data == nil {
 		return 0, fmt.Errorf("data is nil")
 	}
-	if value, ok := (*data)[key]; ok {
+	if value, ok := data[key]; ok {
 		if float64Value, ok := value.(float64); ok {
 			return float64Value, nil
 		} else if int32Value, ok := value.(int32); ok {
@@ -66,11 +67,11 @@ func GetFloat64ValueFromMap(key string, data *map[string]interface{}) (float64, 
 	return 0, nil
 }
 
-func GetStringValueFromMap(key string, data *map[string]interface{}) (string, error) {
+func GetStringValueFromMap(key string, data map[string]interface{}) (string, error) {
 	if data == nil {
 		return "", fmt.Errorf("data is nil")
 	}
-	if value, ok := (*data)[key]; ok {
+	if value, ok := data[key]; ok {
 		if stringValue, ok := value.(string); ok {
 			return stringValue, nil
 		} else {
@@ -78,6 +79,31 @@ func GetStringValueFromMap(key string, data *map[string]interface{}) (string, er
 		}
 	}
 	return "", nil
+}
+
+func GetIntArrayFromMap(key string, data map[string]interface{}) ([]int, error) {
+	if data == nil {
+		return nil, fmt.Errorf("data is nil")
+	}
+	var strValue string
+	var err error
+	if value, ok := data[key]; ok {
+		if strValue, ok = value.(string); ok {
+			strTmp := strings.Split(strValue, ",")
+			result := make([]int, len(strTmp))
+			for i, str := range strTmp {
+				result[i], err = strconv.Atoi(str)
+				if err != nil {
+					return nil, fmt.Errorf("value is not int array  by key %s", key)
+				}
+			}
+			return result, nil
+
+		} else {
+			return nil, fmt.Errorf("value is not string  by key %s", key)
+		}
+	}
+	return nil, nil
 }
 
 func MapToString(data *map[string]interface{}) string {

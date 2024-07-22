@@ -6,7 +6,7 @@ import (
 )
 
 func AddJob(userID int32, params map[string]any) common.TResponse {
-	job, err := ctl.ParsePullJobControl(&params)
+	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
@@ -16,7 +16,7 @@ func AddJob(userID int32, params map[string]any) common.TResponse {
 }
 
 func AlterJob(userID int32, params map[string]any) common.TResponse {
-	job, err := ctl.ParsePullJobControl(&params)
+	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
@@ -26,7 +26,7 @@ func AlterJob(userID int32, params map[string]any) common.TResponse {
 }
 
 func DeleteJob(userID int32, params map[string]any) common.TResponse {
-	job, err := ctl.ParsePullJobControl(&params)
+	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
@@ -39,7 +39,7 @@ func GetJobs(userID int32, params map[string]any) common.TResponse {
 	if userID == 0 {
 		return *common.Failure("need UserID")
 	}
-	job, err := ctl.ParsePullJobControl(&params)
+	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
@@ -52,14 +52,54 @@ func GetJobs(userID int32, params map[string]any) common.TResponse {
 	return *job.GetJobs(onlineJobIDs)
 }
 
+func GetJobUUID(userID int32, params map[string]any) common.TResponse {
+	if userID == 0 {
+		return *common.Failure("need UserID")
+	}
+	job, err := ctl.ParsePullJobControl(params)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	job.UserID = userID
+	job.OperatorID = userID
+	return *job.GetPullJobUUID()
+}
+
 func SetJobStatus(userID int32, params map[string]any) common.TResponse {
-	job, err := ctl.ParsePullJobControl(&params)
+	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
 	job.UserID = userID
 	job.OperatorID = userID
 	return *job.SetJobStatus()
+}
+
+func ClearJobLog(userID int32, params map[string]any) common.TResponse {
+	jlc, err := ctl.ParseJobLogControl(params)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	jlc.OperatorID = userID
+	return *jlc.ClearJobLog()
+}
+
+func DeleteJobLog(userID int32, params map[string]any) common.TResponse {
+	jlc, err := ctl.ParseJobLogControl(params)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	jlc.OperatorID = userID
+	return *jlc.DeleteJobLog()
+}
+
+func QueryJobLogs(userID int32, params map[string]any) common.TResponse {
+	jlc, err := ctl.ParseJobLogControl(params)
+	if err != nil {
+		return *common.Failure(err.Error())
+	}
+	jlc.OperatorID = userID
+	return *jlc.QueryJobLogs()
 }
 
 func GetSourceConnOption(_ int32, params map[string]any) common.TResponse {

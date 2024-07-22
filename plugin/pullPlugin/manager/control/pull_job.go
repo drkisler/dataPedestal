@@ -1,12 +1,16 @@
 package control
 
 import (
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	pubService "github.com/drkisler/dataPedestal/plugin/servicePlugin/pub_service/service"
+	"github.com/drkisler/dataPedestal/universal/messager"
 	"slices"
 )
 
 var jobPageID map[int32]common.PageBuffer
+var PublishServiceUrl string
 
 func init() {
 	jobPageID = make(map[int32]common.PageBuffer)
@@ -21,7 +25,7 @@ type TPullJobControl struct {
 	TPullJob
 }
 
-func ParsePullJobControl(data *map[string]any) (*TPullJobControl, error) {
+func ParsePullJobControl(data map[string]any) (*TPullJobControl, error) {
 	var err error
 	var result TPullJobControl
 
@@ -65,7 +69,7 @@ func ParsePullJobControl(data *map[string]any) (*TPullJobControl, error) {
 	if result.Status, err = common.GetStringValueFromMap("status", data); err != nil {
 		return nil, err
 	}
-	if result.LastError, err = common.GetStringValueFromMap("last_error", data); err != nil {
+	if result.LastRun, err = common.GetInt64ValueFromMap("last_run", data); err != nil {
 		return nil, err
 	}
 	if result.PageIndex, err = common.GetInt32ValueFromMap("page_index", data); err != nil {
@@ -82,6 +86,31 @@ func ParsePullJobControl(data *map[string]any) (*TPullJobControl, error) {
 	}
 	return &result, nil
 
+}
+
+func (job *TPullJobControl) SentFinishMsg() error {
+	msgClient, err := messager.NewMessageClient()
+	if err != nil {
+		return err
+	}
+	if err = job.InitJobByID(); err != nil {
+		return err
+	}
+	data, err := pubService.EncodeRequest(pubService.Request_Publish, job.UserID, job.OperatorCode, job.JobUUID, job.JobName)
+	if err != nil {
+		return err
+	}
+	if data, err = msgClient.SendData(PublishServiceUrl, data); err != nil {
+		return err
+	}
+	success, info, err := pubService.DecodeReply(data)
+	if err != nil {
+		return err
+	}
+	if !success {
+		return fmt.Errorf("publish job failed:%s", info)
+	}
+	return nil
 }
 
 func (job *TPullJobControl) AddJob() *common.TResponse {
@@ -110,16 +139,19 @@ func (job *TPullJobControl) DeleteJob() *common.TResponse {
 	}
 	return common.Success(nil)
 }
+func (job *TPullJobControl) ToString() string {
+	return fmt.Sprintf("pageSize:%d, job_name:%s", job.PageSize, job.JobName)
+}
 
 func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
 	var result common.TRespDataSet
 	pageBuffer, ok := jobPageID[job.OperatorID]
-	if (!ok) || (pageBuffer.QueryParam != job.ToString()) || job.PageIndex == 1 {
+	if (!ok) || (pageBuffer.QueryParam != job.ToString()) || job.PageIndex == 1 { // job.PageIndex == 1 means the first page request Data for data has changed
 		ids, err := job.GetPullJobIDs()
 		if err != nil {
 			return common.Failure(err.Error())
 		}
-		jobPageID[job.OperatorID] = common.NewPageBuffer(job.OperatorID, job.ToString(), job.PageSize, ids)
+		jobPageID[job.OperatorID] = common.NewPageBuffer(job.OperatorID, job.ToString(), int64(job.PageSize), ids)
 		pageBuffer = jobPageID[job.OperatorID]
 	}
 	if pageBuffer.Total == 0 {
@@ -128,7 +160,7 @@ func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
 		return common.Success(&result)
 	}
 
-	ids, err := pageBuffer.GetPageIDs(job.PageIndex - 1)
+	ids, err := pageBuffer.GetPageIDs(int64(job.PageIndex - 1))
 	if err != nil {
 		return common.Failure(err.Error())
 	}
@@ -150,7 +182,7 @@ func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
 		}
 	*/
 
-	result.Total = pageBuffer.Total
+	result.Total = int32(pageBuffer.Total)
 	return common.Success(&result)
 }
 
@@ -163,9 +195,17 @@ func (job *TPullJobControl) SetJobStatus() *common.TResponse {
 	return common.Success(nil)
 }
 
-func (job *TPullJobControl) SetError(errInfo string) error {
+func (job *TPullJobControl) GetPullJobUUID() *common.TResponse {
+	uuid, err := job.TPullJob.GetPullJobUUID()
+	if err != nil {
+		return common.Failure(err.Error())
+	}
+	return common.ReturnStr(uuid)
+}
+
+func (job *TPullJobControl) SetLastRun(iStartTime int64) error {
 	pullJob := job.TPullJob
-	return pullJob.SetError(errInfo)
+	return pullJob.SetLastRun(iStartTime)
 }
 
 func GetAllJobs() ([]TPullJob, int, error) {

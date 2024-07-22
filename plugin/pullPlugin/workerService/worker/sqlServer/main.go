@@ -4,10 +4,10 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/service"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker/sqlServer/workimpl"
+	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"github.com/hashicorp/go-plugin"
 	"log"
 	"os"
@@ -38,7 +38,7 @@ func main() {
 	if err = os.MkdirAll(strDataDir, 0755); err != nil {
 		log.Fatal(err)
 	}
-	module.DbFilePath = strDataDir + pathSeparator
+	metaDataBase.SetDbFilePath(strDataDir + pathSeparator + "service.db")
 
 	common.NewLogService(currentPath, pathSeparator, "info", "warn", "err", "debug", false)
 

@@ -16,6 +16,7 @@ const (
 	Datetime  DataType = "datetime"
 	Timestamp DataType = "timestamp"
 )
+const TimeStampColumn = "pull_time"
 
 type FilterValue struct {
 	Column string      `json:"column"`
