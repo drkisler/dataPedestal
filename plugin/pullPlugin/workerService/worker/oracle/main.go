@@ -40,14 +40,11 @@ func main() {
 	}
 	metaDataBase.SetDbFilePath(strDataDir + pathSeparator + "service.db")
 
-	common.NewLogService(currentPath, pathSeparator, "info", "warn", "err", "debug", false)
+	//common.NewLogService(currentPath, pathSeparator, "info", "warn", "err", "debug", false)
 
 	if (len(os.Args) > 1) && (os.Args[1] == "test") {
 		workerService.NewWorker = workimpl.NewOracleWorker
-		if err = service.InitPlugin(); err != nil {
-			fmt.Println(err.Error())
-			return
-		}
+		service.InitPlugin()
 		pl := service.PluginServ
 		cfg := `{"is_debug": false,"server_port": 8904}`
 		if resp := pl.Load(cfg); resp.Code < 0 {
@@ -81,10 +78,7 @@ func main() {
 		wg.Wait()
 		return
 	}
-	if err = service.InitPlugin(); err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	service.InitPlugin()
 	var handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,
 		MagicCookieKey:   "SERIAL_NUMBER",

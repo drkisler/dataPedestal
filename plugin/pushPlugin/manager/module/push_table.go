@@ -1,6 +1,7 @@
 package module
 
 import (
+	"context"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
@@ -12,24 +13,23 @@ type TPushTable struct {
 }
 
 func (pt *TPushTable) AddTable() (int64, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return -1, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strGetID = "with " +
-		"cet_push as(select table_id from PushTable where job_id=?) " +
-		"select " +
-		"min(a.table_id)+1 from (select table_id from cet_push union all select 0) a left join cet_push b on a.table_id+1=b.table_id " +
-		"where b.table_id is null"
-	rows, err := dbs.Query(strGetID, pt.JobID)
+	strSQL := fmt.Sprintf("with "+
+		"cet_push as(select table_id from %s.push_table where job_id=$1),cet_id as( "+
+		"select "+
+		"min(a.table_id)+1 tblid from (select table_id from cet_push union all select 0) a left join cet_push b on a.table_id+1=b.table_id "+
+		"where b.table_id is null )"+
+		"into %s.push_table(job_id,table_id,table_code,source_table,select_sql,source_updated,key_col,buffer,status) "+
+		"select $2,tblid,$3,$4,$5,$6,$7,$8,$9 "+
+		"from cet_id returning table_id", dbs.GetSchema(), dbs.GetSchema())
+	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.JobID, pt.TableCode, pt.SourceTable, pt.SelectSql, pt.SourceUpdated, pt.KeyCol, pt.Buffer, pt.Status)
 	if err != nil {
 		return -1, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var tableID int64
 	for rows.Next() {
 		err = rows.Scan(&tableID)
@@ -37,34 +37,44 @@ func (pt *TPushTable) AddTable() (int64, error) {
 			return -1, err
 		}
 	}
-	pt.TableID = int32(tableID)
-	const strSQL = "insert " +
-		"into PushTable(job_id,table_id,table_code,source_table,select_sql,source_updated,key_col,buffer,status) " +
-		"values(?,?,?,?,?,?,?,?,?)"
-	if err = dbs.ExecuteSQL(strSQL, pt.JobID, pt.TableID, pt.TableCode, pt.SourceTable,
-		pt.SelectSql, pt.SourceUpdated, pt.KeyCol, pt.Buffer, pt.Status); err != nil {
-		return -1, err
-	}
 	return tableID, nil
 }
 
+func (pt *TPushTable) GetSourceTableDDL() (string, error) {
+	dbs, err := metaDataBase.GetPgServ()
+	if err != nil {
+		return "", err
+	}
+	strSQL := fmt.Sprintf("select source_ddl "+
+		"from %s.pull_table where dest_table=$1 limit 1", dbs.GetSchema())
+	rows, err := dbs.QuerySQL(strSQL, pt.SourceTable)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var sourceTable string
+	for rows.Next() {
+		err = rows.Scan(&sourceTable)
+		if err != nil {
+			return "", err
+		}
+	}
+	return sourceTable, nil
+}
+
 func (pt *TPushTable) InitTableByID() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strSQL = "select " +
-		"job_id,table_id,table_code,source_table,select_sql,source_updated,key_col,buffer,status,last_run " +
-		"from PushTable where job_id = ? and table_id = ?"
+	strSQL := fmt.Sprintf("select "+
+		"job_id,table_id,table_code,source_table,select_sql,source_updated,key_col,buffer,status,last_run "+
+		"from %s.push_table where job_id = $1 and table_id = $2", dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.TableID)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var cnt = 0
 	for rows.Next() {
 		err = rows.Scan(&pt.JobID, &pt.TableID, &pt.TableCode, &pt.SourceTable, &pt.SelectSql, &pt.SourceUpdated, &pt.KeyCol, &pt.Buffer, &pt.Status, &pt.LastRun)
@@ -80,27 +90,23 @@ func (pt *TPushTable) InitTableByID() error {
 }
 
 func (pt *TPushTable) GetTableIDs() ([]int64, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
 	var strSQLFilter string
 	if pt.TableCode != "" {
-		strSQLFilter = "where job_id= ? and table_code like '%" + pt.TableCode + "%' "
+		strSQLFilter = "where job_id= $1 and table_code like '%" + pt.TableCode + "%' "
 	} else {
-		strSQLFilter = "where job_id= ? "
+		strSQLFilter = "where job_id= $1 "
 	}
 	rows, err := dbs.QuerySQL(fmt.Sprintf("select "+
-		"table_id from PushTable %s", strSQLFilter), pt.JobID)
+		"table_id from %s.push_table %s", dbs.GetSchema(), strSQLFilter), pt.JobID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var result []int64
 	for rows.Next() {
 		var tableId int32
@@ -113,36 +119,23 @@ func (pt *TPushTable) GetTableIDs() ([]int64, error) {
 }
 
 func (pt *TPushTable) GetTables(ids *string) ([]common.TPushTable, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	strSQL := fmt.Sprintf("WITH RECURSIVE cte(id, val) AS ("+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER), "+
-		"SUBSTR(val, INSTR(val, ',')+1) "+
-		"FROM (SELECT '%s' AS val)"+
-		" UNION ALL "+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER),"+
-		"       SUBSTR(val, INSTR(val, ',')+1) "+
-		" FROM cte"+
-		" WHERE INSTR(val, ',')>0"+
-		")"+
+	strSQL := fmt.Sprintf(
 		"SELECT a.job_id,a.table_id,a.table_code,a.source_table,a.select_sql,a.source_updated,a.key_col,a.buffer,a.status,"+
-		"a.last_run,COALESCE(c.status,''),COALESCE(c.ErrorInfo,'') "+
-		"from PushTable a "+
-		"inner join cte b on a.table_id=b.id left join PushTableLog c on a.job_id=c.job_id and a.table_id =c.table_id and a.last_run=c.start_time"+
-		" where a.job_id=? order by a.table_id", *ids)
+			"a.last_run,COALESCE(c.status,''),COALESCE(c.error_info,'') "+
+			"from (select * from %s.push_table where job_id=$1 and table_id =any(array(SELECT unnest(string_to_array('%s', ','))::bigint)) a "+
+			"left join %s.push_table_log c on a.job_id=c.job_id and a.table_id =c.table_id and a.last_run=c.start_time "+
+			"order by a.table_id", dbs.GetSchema(), *ids, dbs.GetSchema())
 
 	rows, err := dbs.QuerySQL(strSQL, pt.JobID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var result []common.TPushTable
 	for rows.Next() {
 		var p common.TPushTable
@@ -167,77 +160,66 @@ func (pt *TPushTable) GetTables(ids *string) ([]common.TPushTable, error) {
 }
 
 func (pt *TPushTable) AlterTable() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "update " +
-		"PushTable set table_code=?,source_table=?,select_sql=?,source_updated=?,key_col=?,buffer=?,status=?  " +
-		"where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.TableCode, pt.SourceTable, pt.SelectSql, pt.SourceUpdated, pt.KeyCol, pt.Buffer, pt.Status, pt.JobID, pt.TableID)
+	strSQL := fmt.Sprintf("update "+
+		"%s.push_table set table_code=$1,source_table=$2,select_sql=$3,source_updated=$4,key_col=$5,buffer=$6,status=$7  "+
+		"where job_id=$8 and table_id= $9 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.TableCode, pt.SourceTable, pt.SelectSql, pt.SourceUpdated, pt.KeyCol, pt.Buffer, pt.Status, pt.JobID, pt.TableID)
 }
 
 func (pt *TPushTable) DeleteTable() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "delete " +
-		"from PushTable where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.JobID, pt.TableID)
+	strSQL := fmt.Sprintf("delete "+
+		"from %s.push_table where job_id=$1 and table_id= $2 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.JobID, pt.TableID)
 }
 
 func (pt *TPushTable) SetTableStatus() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strSQL = "update " +
-		"PushTable set status=? where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.Status, pt.JobID, pt.TableID)
+
+	strSQL := fmt.Sprintf("update "+
+		"%s.push_table set status=$1 where job_id=$2 and table_id= $3 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.Status, pt.JobID, pt.TableID)
 }
 
 func (pt *TPushTable) SetSourceUpdateTime() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "update " +
-		"PushTable set source_updated =? where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.SourceUpdated, pt.JobID, pt.TableID)
+	strSQL := fmt.Sprintf("update "+
+		"%s.push_table set source_updated =$1 where job_id=$2 and table_id= $3 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.SourceUpdated, pt.JobID, pt.TableID)
 
 }
 
 func (pt *TPushTable) GetAllTables() ([]TPushTable, int, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, -1, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "select " +
-		"job_id,table_id,table_code,source_table,select_sql,source_updated,key_col,buffer,status,last_run " +
-		"from PushTable where job_id= ? and status=?"
-	rows, err := dbs.Queryx(strSQL, pt.JobID, common.STENABLED)
+	strSQL := fmt.Sprintf("select "+
+		"job_id,table_id,table_code,source_table,select_sql,source_updated,key_col,buffer,status,last_run "+
+		"from %s.push_table where job_id= $1 and status=$2", dbs.GetSchema())
+	rows, err := dbs.QuerySQL(strSQL, pt.JobID, common.STENABLED)
 
 	if err != nil {
 		return nil, -1, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var cnt = 0
 	var result []TPushTable
 	for rows.Next() {
@@ -253,44 +235,12 @@ func (pt *TPushTable) GetAllTables() ([]TPushTable, int, error) {
 }
 
 func (pt *TPushTable) SetLastRun(iStartTime int64) error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "update " +
-		"PushTable set last_run =? where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, iStartTime, pt.JobID, pt.TableID)
+	strSQL := fmt.Sprintf("update "+
+		"%s.push_table set last_run =$1 where job_id=$2 and table_id= $3", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, iStartTime, pt.JobID, pt.TableID)
 }
-
-/*
-func (pt *TPushTable) GetSourceTableDDL() (string, error) {
-	dbs, err := metaDataBase.GetDbServ()
-	if err != nil {
-		return "", err
-	}
-	dbs.Lock()
-	defer dbs.Unlock()
-
-	const strSQL = "select " +
-		"source_ddl from PushTable where job_id= ? and table_id= ? "
-
-	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.TableID)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var ddl string
-	for rows.Next() {
-		if err = rows.Scan(&ddl); err != nil {
-			return "", err
-		}
-	}
-	return ddl, nil
-}
-
-*/

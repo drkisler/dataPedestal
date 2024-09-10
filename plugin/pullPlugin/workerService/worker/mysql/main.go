@@ -7,7 +7,8 @@ import (
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/service"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker/mysql/workimpl"
-	"github.com/drkisler/dataPedestal/universal/metaDataBase"
+	"path/filepath"
+
 	"github.com/hashicorp/go-plugin"
 	"log"
 	"os"
@@ -23,6 +24,8 @@ func main() {
 	gob.Register([]common.ColumnInfo{})
 	gob.Register([]common.TableInfo{})
 
+	//logService.LogWriter = logService.NewLogWriter(fmt.Sprintf("%s(%s)", initializers.HostConfig.SelfName, initializers.HostConfig.SelfIP))
+
 	file, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
@@ -30,19 +33,11 @@ func main() {
 	if service.SerialNumber, err = common.FileHash(file); err != nil {
 		log.Fatal(err)
 	}
-	currentPath, err := common.GetCurrentPath()
-	if err != nil {
-		fmt.Println(err.Error())
-		log.Fatal(err)
-	}
-	pathSeparator := string(os.PathSeparator)
-	strDataDir := currentPath + pathSeparator + "data"
-	if err = os.MkdirAll(strDataDir, 0755); err != nil {
-		log.Fatal(err)
-	}
-	metaDataBase.SetDbFilePath(strDataDir + pathSeparator + "service.db")
 
-	common.NewLogService(currentPath, pathSeparator, "info", "warn", "err", "debug", false)
+	_ = os.Setenv("FilePath", filepath.Dir(file))
+	_ = os.Setenv("Separator", string(filepath.Separator))
+
+	//common.NewLogService(currentPath, pathSeparator, "info", "warn", "err", "debug", false)
 
 	/*
 		// 向host发送消息的客户端，用于调试
@@ -62,10 +57,7 @@ func main() {
 
 		if os.Args[1] == "test" {
 			workerService.NewWorker = workimpl.NewMySQLWorker
-			if err = service.InitPlugin(); err != nil {
-				fmt.Println(err.Error())
-				return
-			}
+			service.InitPlugin()
 			pl := service.PluginServ
 
 			// */5 * * * * 每5分钟执行一次
@@ -75,7 +67,7 @@ func main() {
 			// 1 * * * * 每小时第一分钟执行一次
 			//cfg0 := `{"is_debug": false,"connect_string": "sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true","dest_database": "Address=192.168.110.129:9000,Database=default,User=default,Password=Enjoy0r","keep_connect": false,"connect_buffer": 20,"data_buffer": 2000,"skip_hour": [0,1,2,3],"cron_expression": "0/1 * * * * ?","server_port": 8904}`
 			//replyUrl := "tcp://192.168.93.150:8902"
-			cfg := `{"is_debug": false,"server_port": 8904}`
+			cfg := `{"is_debug": false,"server_port": 8904,"plugin_name":"pullMySQL","db_connection":"user=postgres password=InfoC0re host=192.168.110.130 port=5432 dbname=postgres sslmode=disable pool_max_conns=10 schema=enjoyor","host_reply_url":"ipc:///tmp/ReqRep.ipc","plugin_uuid":"23eb248c-70bb-4b56-870a-738bf92ac0b3","plugin_name":"pullMySQL"}`
 			if resp := pl.Load(cfg); resp.Code < 0 {
 				fmt.Println(resp.Info)
 				return
@@ -88,13 +80,14 @@ func main() {
 				defer wg.Done()
 				pl.Run()
 			}(&wg)
-			var operate common.TPluginOperate
-			operate.UserID = 1
-			operate.OperateName = "checkJobTable" //"offLineJob"
-			operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
-			operate.Params = map[string]any{"job_name": "test", "table_name": "`case`", "table_id": float64(1)}
-			rest := pl.CustomInterface(operate)
-			fmt.Println(fmt.Sprintf("checkJobTable %v", rest.Info), rest.Code)
+			//var operate common.TPluginOperate
+			//operate.UserID = 1
+			//operate.OperateName = "checkJobTable" //"offLineJob"
+			//operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
+			//operate.Params = map[string]any{"job_name": "test", "table_name": "`case`", "table_id": float64(1)}
+			rest := pl.GetSystemUsage() //pl.CustomInterface(operate)
+			//fmt.Println(fmt.Sprintf("checkJobTable %v", rest.Info), rest.Code)
+			fmt.Println(fmt.Sprintf("getSystemUsage %s", rest))
 
 			/*
 				func (mp *TMyPlugin) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
@@ -138,10 +131,7 @@ func main() {
 
 		}
 	}
-	if err = service.InitPlugin(); err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	service.InitPlugin()
 	var handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,
 		MagicCookieKey:   "SERIAL_NUMBER",

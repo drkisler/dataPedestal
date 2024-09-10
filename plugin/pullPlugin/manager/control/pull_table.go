@@ -4,13 +4,10 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	"sync"
 )
 
-var tablePageID map[int32]common.PageBuffer
-
-func init() {
-	tablePageID = make(map[int32]common.PageBuffer)
-}
+var tablePageBuffer sync.Map
 
 type TPullTable = module.TPullTable
 
@@ -30,7 +27,7 @@ func (pc *TPullTableControl) AppendTable() *common.TResponse {
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	return common.ReturnInt(int(id))
+	return common.ReturnInt(id)
 }
 func (pc *TPullTableControl) ModifyTable() *common.TResponse {
 	pullTable := pc.TPullTable
@@ -54,15 +51,17 @@ func (pc *TPullTableControl) ToString() string {
 
 func (pc *TPullTableControl) QueryTables() *common.TResponse {
 	var result common.TRespDataSet
-	pageBuffer, ok := tablePageID[pc.OperatorID]
-	if (!ok) || (pageBuffer.QueryParam != pc.ToString()) || (pc.PageIndex == 1) {
+	value, ok := tablePageBuffer.Load(pc.OperatorID)
+
+	if (!ok) || (value.(common.PageBuffer).QueryParam != pc.ToString()) || pc.PageIndex == 1 {
 		ids, err := pc.TPullTable.GetTableIDs()
 		if err != nil {
 			return common.Failure(err.Error())
 		}
-		tablePageID[pc.OperatorID] = common.NewPageBuffer(pc.OperatorID, pc.ToString(), int64(pc.PageSize), ids)
-		pageBuffer = tablePageID[pc.OperatorID]
+		tablePageBuffer.Store(pc.OperatorID, common.NewPageBuffer(pc.OperatorID, pc.ToString(), int64(pc.PageSize), ids))
 	}
+	value, _ = tablePageBuffer.Load(pc.OperatorID)
+	pageBuffer := value.(common.PageBuffer)
 	if pageBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
@@ -75,8 +74,7 @@ func (pc *TPullTableControl) QueryTables() *common.TResponse {
 	if result.ArrData, err = pc.TPullTable.GetTables(ids); err != nil {
 		return common.Failure(err.Error())
 	}
-	result.Total = int32(pageBuffer.Total)
-
+	result.Total = pageBuffer.Total
 	return common.Success(&result)
 }
 func (pc *TPullTableControl) SetFilterValue() *common.TResponse {

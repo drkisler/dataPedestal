@@ -4,14 +4,11 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	"sync"
 	"time"
 )
 
-var jobLogPageID map[int32]common.PageBuffer
-
-func init() {
-	jobLogPageID = make(map[int32]common.PageBuffer)
-}
+var jobLogPageBuffer sync.Map
 
 type TPullJobLog = common.TPullJobLog
 type PullJobLogControl struct {
@@ -101,15 +98,16 @@ func (p *PullJobLogControl) ToString() string {
 }
 func (p *PullJobLogControl) QueryJobLogs() *common.TResponse {
 	var result common.TRespDataSet
-	pageBuffer, ok := jobLogPageID[p.OperatorID]
-	if (!ok) || (pageBuffer.QueryParam != p.ToString()) || (p.PageIndex == 1) {
+	value, ok := jobLogPageBuffer.Load(p.OperatorID)
+	if (!ok) || (value.(common.PageBuffer).QueryParam != p.ToString()) || (p.PageIndex == 1) {
 		ids, err := p.ToModulePullJobLog().GetLogIDs()
 		if err != nil {
 			return common.Failure(err.Error())
 		}
-		jobLogPageID[p.OperatorID] = common.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids)
-		pageBuffer = jobLogPageID[p.OperatorID]
+		jobLogPageBuffer.Store(p.OperatorID, common.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids))
 	}
+	value, _ = jobLogPageBuffer.Load(p.OperatorID)
+	pageBuffer := value.(common.PageBuffer)
 	if pageBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
@@ -128,7 +126,7 @@ func (p *PullJobLogControl) QueryJobLogs() *common.TResponse {
 		resultData = append(resultData, *ToCommonPullJobLog(&log))
 	}
 	result.ArrData = resultData
-	result.Total = int32(pageBuffer.Total)
+	result.Total = pageBuffer.Total
 
 	return common.Success(&result)
 }

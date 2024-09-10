@@ -21,11 +21,14 @@ type TPluginControl struct {
 	PageSize     int32  `json:"page_size,omitempty"`
 	PageIndex    int32  `json:"page_index,omitempty"`
 	module.TPlugin
-	Status string `json:"status,omitempty"` //待上传、待加载、待运行、运行中,已失联
+	Status      string  `json:"status,omitempty"` //待上传、待加载、待运行、运行中,已失联
+	CPUUsage    string  `json:"cpu_usage"`
+	MemoryUsage float64 `json:"memory_usage"`
+	//NetUsage    string  `json:"net_usage"`
 }
 
 func signPluginControl(tmp module.TPlugin, status string) *TPluginControl {
-	return &TPluginControl{0, "", 50, 1, tmp, status}
+	return &TPluginControl{PageSize: 50, PageIndex: 1, TPlugin: tmp, Status: status}
 }
 func (c *TPluginControl) InsertPlugin() *common.TResponse {
 	var strUUID string
@@ -74,7 +77,7 @@ func (c *TPluginControl) PublishPlugin(hostUUID string) *common.TResponse {
 	}
 
 	filePath := common.GenFilePath(initializers.PortalCfg.PluginDir,
-		c.PluginUUID, c.PluginFile)
+		c.PluginUUID, c.PluginFileName)
 	// 获取插件序列号
 	if c.SerialNumber, err = common.FileHash(filePath); err != nil {
 		return common.Failure(err.Error())
@@ -143,10 +146,10 @@ func (c *TPluginControl) GetProductKey() *common.TResponse {
 }
 
 func (c *TPluginControl) SetLicenseCode(productSN, licenseCode string) *common.TResponse {
-	var err error
-	if err = c.InitByUUID(); err != nil {
+	if err := c.TPlugin.SetLicenseCode(productSN, licenseCode); err != nil {
 		return common.Failure(err.Error())
 	}
+	// 向host发送设置license请求
 	reqData := []byte(c.PluginUUID)
 	reqData = append(reqData, []byte(productSN)...)
 	reqData = append(reqData, []byte(licenseCode)...)
@@ -162,8 +165,8 @@ func (c *TPluginControl) AlterPlugin() *common.TResponse {
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	if c.PluginFile == "" {
-		c.PluginFile = tmpPlugin.PluginFile
+	if c.PluginFileName == "" {
+		c.PluginFileName = tmpPlugin.PluginFileName
 	}
 	if c.RunType != tmpPlugin.RunType || c.PluginConfig != tmpPlugin.PluginConfig {
 		return common.Failure("此接口不支持修改运行方式和配置信息，请调用其它接口")
@@ -174,60 +177,21 @@ func (c *TPluginControl) AlterPlugin() *common.TResponse {
 	return common.Success(nil)
 }
 func (c *TPluginControl) AlterConfig() *common.TResponse {
-	// 检测UUID是否存在
-	var tmpPlugin module.TPlugin
-	tmpPlugin.PluginUUID = c.PluginUUID
-	err := tmpPlugin.InitByUUID()
-	if err != nil {
-		return common.Failure(err.Error())
-	}
-	var reqData []byte
-	reqData = append(reqData, []byte(c.PluginUUID)...)
-	reqData = append(reqData, []byte(c.PluginConfig)...)
-	c.HostUUID = tmpPlugin.HostUUID
-	// 向host发送更新配置文件请求，需要对账
-	result := c.SendRequest(messager.OperateUpdateConfig, false, reqData)
-	if result.Code < 0 {
-		return result
-	}
-	if err = c.ModifyConfig(); err != nil {
+	if err := c.ModifyConfig(); err != nil {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
 }
 
 func (c *TPluginControl) SetRunType() *common.TResponse {
-	// 检测UUID是否存在
-	var tmpPlugin module.TPlugin
-	var err error
-	tmpPlugin.PluginUUID = c.PluginUUID
-	if err = tmpPlugin.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
-	}
-	c.HostUUID = tmpPlugin.HostUUID
-	var reqData []byte
-	reqData = append(reqData, []byte(c.PluginUUID)...)
-	reqData = append(reqData, []byte(c.RunType)...)
-	//向host发送修改运行方式请求，需要对账
-	result := c.SendRequest(messager.OperateSetRunType, false, reqData)
-	if result.Code < 0 {
-		return result
-	}
-
-	if err = c.ModifyRunType(); err != nil {
+	if err := c.ModifyRunType(); err != nil {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
 }
 
 func (c *TPluginControl) SetHostInfo() *common.TResponse {
-	var tmpPlugin module.TPlugin
-	var err error
-	tmpPlugin.PluginUUID = c.PluginUUID
-	if err = tmpPlugin.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
-	}
-	if err = c.ModifyHostInfo(); err != nil {
+	if err := c.ModifyHostInfo(); err != nil {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
@@ -249,8 +213,15 @@ func (c *TPluginControl) GetPlugin() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 
+	var result []TPluginControl
+
 	if Total > 0 {
 		// pluginMap 辅助查找
+		result = make([]TPluginControl, len(pluginList))
+
+		for i, item := range pluginList {
+			result[i] = *signPluginControl(item, "待上传")
+		}
 		var pluginMap = make(map[string]int)
 		for iIndex, item := range pluginList {
 			pluginMap[item.PluginUUID] = iIndex
@@ -285,20 +256,23 @@ func (c *TPluginControl) GetPlugin() *common.TResponse {
 					if _, ok = pluginMap[strUUID]; !ok {
 						return common.Failure(fmt.Sprintf("plugin %s not found", strUUID))
 					}
-					if pluginList[pluginMap[strUUID]].PluginFile == "" {
-						pluginList[pluginMap[strUUID]].Status = "待上传"
+					if result[pluginMap[strUUID]].PluginFileName == "" {
+						result[pluginMap[strUUID]].Status = "待上传"
 					}
-					if pluginList[pluginMap[strUUID]].HostUUID == "" {
-						pluginList[pluginMap[strUUID]].Status = "待部署"
+					if result[pluginMap[strUUID]].HostUUID == "" {
+						result[pluginMap[strUUID]].Status = "待部署"
 					}
-					pluginList[pluginMap[strUUID]].Status = status.(string)
-					pluginList[pluginMap[strUUID]].HostPort = host.HostPort
+					result[pluginMap[strUUID]].Status = status.(string)
+					result[pluginMap[strUUID]].HostPort = host.HostPort
+					result[pluginMap[strUUID]].CPUUsage = item["cpu_usage"].(string)
+					result[pluginMap[strUUID]].MemoryUsage = item["memory_usage"].(float64)
+					//result[pluginMap[strUUID]].NetUsage = item["net_usage"].(string)
 				}
 			}
 
 		}
 	}
-	return common.RespData(int32(Total), pluginList, nil)
+	return common.RespData(int64(Total), result, nil)
 }
 
 // UpdatePlugFileName 更新插件名称
@@ -330,30 +304,28 @@ func (c *TPluginControl) LoadPlugin() *common.TResponse {
 }
 
 func (c *TPluginControl) SendRequest(opType messager.OperateType, checkExpired bool, reqData []byte) *common.TResponse {
-	if c.HostUUID != "" {
-		var err error
-		var host *TActiveHost
-		if host, err = Survey.GetHostInfoByID(c.HostUUID); err != nil {
+	if c.HostUUID == "" {
+		return common.Failure(fmt.Sprintf("%s待部署", c.PluginUUID))
+	}
+	var err error
+	var host *TActiveHost
+	if host, err = Survey.GetHostInfoByID(c.HostUUID); err != nil {
+		return common.Failure(err.Error())
+	}
+	if !host.IsExpired() { //如果已经离线，由对账功能实现同步
+		var data []byte
+		url := fmt.Sprintf("tcp://%s:%d", host.ActiveHost.HostIP, host.ActiveHost.MessagePort)
+		//向Host发送更新配置信息请求
+		var result common.TResponse
+		if data, err = MsgClient.Send(url, opType, reqData); err != nil {
 			return common.Failure(err.Error())
 		}
-		if !host.IsExpired() { //如果已经离线，由对账功能实现同步
-			var data []byte
-			url := fmt.Sprintf("tcp://%s:%d", host.ActiveHost.HostIP, host.ActiveHost.MessagePort)
-			//向Host发送更新配置信息请求
-			var result common.TResponse
-			if data, err = MsgClient.Send(url, opType, reqData); err != nil {
-				return common.Failure(err.Error())
-			}
-			_ = json.Unmarshal(data, &result)
-			return &result
-		} else {
-			if checkExpired {
-				return common.Failure(fmt.Sprintf("%s已经离线", host.ActiveHost.HostUUID))
-			}
-
-		}
+		_ = json.Unmarshal(data, &result)
+		return &result
 	} else {
-		return common.Failure(fmt.Sprintf("%s待部署", c.PluginUUID))
+		if checkExpired {
+			return common.Failure(fmt.Sprintf("%s已经离线", host.ActiveHost.HostUUID))
+		}
 	}
 	return common.Success(nil)
 }
@@ -401,7 +373,7 @@ func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
 	if err = c.InitByUUID(); err != nil {
 		return common.Failure(err.Error())
 	}
-	if c.PluginFile == "" {
+	if c.PluginFileName == "" {
 		return common.Failure(fmt.Sprintf("%s待上传", c.PluginUUID))
 	}
 	return c.SendRequest(messager.OperateGetTempConfig, true, []byte(c.PluginUUID))
@@ -419,10 +391,11 @@ func (c *TPluginControl) GetPluginNameList() *common.TResponse {
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	return common.RespData(int32(len(plugins)), plugins, nil)
+	return common.RespData(int64(len(plugins)), plugins, nil)
 }
 
 func (c *TPluginControl) GetHostList() *common.TResponse {
 	hosts := Survey.GetHostInfo()
-	return common.RespData(int32(len(hosts)), hosts, nil)
+
+	return common.RespData(int64(len(hosts)), hosts, nil)
 }

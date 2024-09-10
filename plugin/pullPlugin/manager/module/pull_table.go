@@ -1,6 +1,7 @@
 package module
 
 import (
+	"context"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
@@ -12,24 +13,21 @@ type TPullTable struct {
 }
 
 func (pt *TPullTable) AddTable() (int64, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return -1, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strGetID = "with " +
-		"cet_pull as(select table_id from PullTable where job_id=?) " +
-		"select " +
-		"min(a.table_id)+1 from (select table_id from cet_pull union all select 0) a left join cet_pull b on a.table_id+1=b.table_id " +
-		"where b.table_id is null"
-	rows, err := dbs.Query(strGetID, pt.JobID)
+	strSQL := fmt.Sprintf("with cet_table as(select table_id from %s.pull_table where job_id=$1), cet_id as"+
+		"(select min(a.table_id)+1 id from (select table_id from cet_table union all select 0) a left join cet_table b on a.table_id+1=b.table_id"+
+		"where b.table_id is null)insert "+
+		"into %s.pull_table(job_id,table_id,table_code,table_name,dest_table,source_ddl,select_sql,filter_col,filter_val,key_col,buffer,status) "+
+		"select $2,id,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12 "+
+		"from cet_id returning table_id", dbs.GetSchema(), dbs.GetSchema())
+	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.JobID, pt.TableCode, pt.TableName, pt.DestTable, pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
 	if err != nil {
 		return -1, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var tableID int64
 	for rows.Next() {
 		err = rows.Scan(&tableID)
@@ -37,34 +35,23 @@ func (pt *TPullTable) AddTable() (int64, error) {
 			return -1, err
 		}
 	}
-	pt.TableID = int32(tableID)
-	const strSQL = "insert " +
-		"into PullTable(job_id,table_id,table_code,table_name,dest_table,source_ddl,select_sql,filter_col,filter_val,key_col,buffer,status) " +
-		"values(?,?,?,?,?,?,?,?,?,?,?,?)"
-	if err = dbs.ExecuteSQL(strSQL, pt.JobID, pt.TableID, pt.TableCode, pt.TableName,
-		pt.DestTable, pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status); err != nil {
-		return -1, err
-	}
 	return tableID, nil
 }
 
 func (pt *TPullTable) InitTableByID() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strSQL = "select " +
-		"job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status,last_run " +
-		"from PullTable where job_id = ? and table_id = ?"
+
+	strSQL := fmt.Sprintf("select "+
+		"job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status,last_run "+
+		"from %s.pull_table where job_id = $1 and table_id = $2", dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.TableID)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var cnt = 0
 	for rows.Next() {
 		err = rows.Scan(&pt.JobID, &pt.TableID, &pt.TableCode, &pt.TableName, &pt.DestTable, &pt.SelectSql, &pt.FilterCol, &pt.FilterVal, &pt.KeyCol, &pt.Buffer, &pt.Status, &pt.LastRun)
@@ -80,27 +67,23 @@ func (pt *TPullTable) InitTableByID() error {
 }
 
 func (pt *TPullTable) GetTableIDs() ([]int64, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
 	var strSQLFilter string
 	if (pt.TableName != "") || (pt.TableCode != "") {
-		strSQLFilter = "where job_id= ? and (table_name like '%" + pt.TableName + "%' or table_code like '%" + pt.TableCode + "%') "
+		strSQLFilter = "where job_id= $1 and (table_name like '%" + pt.TableName + "%' or table_code like '%" + pt.TableCode + "%') "
 	} else {
-		strSQLFilter = "where job_id= ? "
+		strSQLFilter = "where job_id= $1 "
 	}
 	rows, err := dbs.QuerySQL(fmt.Sprintf("select "+
-		"table_id from PullTable %s", strSQLFilter), pt.JobID)
+		"table_id from %s.pull_table %s", dbs.GetSchema(), strSQLFilter), pt.JobID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var result []int64
 	for rows.Next() {
 		var tableId int32
@@ -113,36 +96,22 @@ func (pt *TPullTable) GetTableIDs() ([]int64, error) {
 }
 
 func (pt *TPullTable) GetTables(ids *string) ([]common.TPullTable, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	strSQL := fmt.Sprintf("WITH RECURSIVE cte(id, val) AS ("+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER), "+
-		"SUBSTR(val, INSTR(val, ',')+1) "+
-		"FROM (SELECT '%s' AS val)"+
-		" UNION ALL "+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER),"+
-		"       SUBSTR(val, INSTR(val, ',')+1) "+
-		" FROM cte"+
-		" WHERE INSTR(val, ',')>0"+
-		")"+
-		"SELECT a.job_id,a.table_id,a.table_code,a.table_name,a.dest_table,a.select_sql,"+
-		"a.filter_col,a.filter_val,a.key_col,a.buffer,a.status,a.last_run,c.status,c.ErrorInfo "+
-		"from PullTable a "+
-		"inner join cte b on a.table_id=b.id left join PullTableLog c on a.job_id=c.job_id and a.table_id =c.table_id and a.last_run=c.start_time"+
-		" where a.job_id=? order by a.table_id", *ids)
+	strSQL := fmt.Sprintf("SELECT a.job_id,a.table_id,a.table_code,a.table_name,a.dest_table,a.select_sql,"+
+		"a.filter_col,a.filter_val,a.key_col,a.buffer,a.status,a.last_run,c.status,c.error_info "+
+		"from (select * from %s.pull_table where job_id=$1 and table_id = any(array(SELECT unnest(string_to_array('%s', ','))::bigint) ) a "+
+		"left join %s.pull_table_log c on a.job_id=c.job_id and a.table_id =c.table_id and a.last_run=c.start_time"+
+		" order by a.table_id", dbs.GetSchema(), *ids, dbs.GetSchema())
 
 	rows, err := dbs.QuerySQL(strSQL, pt.JobID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var result []common.TPullTable
 	for rows.Next() {
 		var p common.TPullTable
@@ -167,78 +136,66 @@ func (pt *TPullTable) GetTables(ids *string) ([]common.TPullTable, error) {
 }
 
 func (pt *TPullTable) AlterTable() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-
-	const strSQL = "update " +
-		"PullTable set table_code=?,table_name=?,dest_table=?,source_ddl=?,select_sql=?,filter_col=?,filter_val=?,key_col=?,buffer=?,status=?  " +
-		"where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.TableCode, pt.TableName, pt.DestTable, pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol,
+	strSQL := fmt.Sprintf("update"+
+		" %s.pull_table set table_code=$1,table_name=$2,dest_table=$3,source_ddl=$4,select_sql=$5,filter_col=$6,filter_val=$7,key_col=$8,buffer=$9,status=$10 "+
+		"where job_id=$11 and table_id= $12 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.TableCode, pt.TableName, pt.DestTable, pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol,
 		pt.Buffer, pt.Status, pt.JobID, pt.TableID)
 }
 
 func (pt *TPullTable) DeleteTable() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "delete " +
-		"from PullTable where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.JobID, pt.TableID)
+	strSQL := fmt.Sprintf("delete "+
+		"from %s.pull_table where job_id=$1 and table_id= $2 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.JobID, pt.TableID)
 }
 
 func (pt *TPullTable) SetTableStatus() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strSQL = "update " +
-		"PullTable set status=? where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.Status, pt.JobID, pt.TableID)
+
+	strSQL := fmt.Sprintf("update "+
+		"%s.pull_table set status=$1 where job_id=$2 and table_id= $3 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.Status, pt.JobID, pt.TableID)
 }
 
 func (pt *TPullTable) SetFilterVal() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "update " +
-		"PullTable set filter_val =? where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, pt.FilterVal, pt.JobID, pt.TableID)
+	strSQL := fmt.Sprintf("update "+
+		"%s.pull_table set filter_val =$1 where job_id=$2 and table_id= $3 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.FilterVal, pt.JobID, pt.TableID)
 
 }
 
 func (pt *TPullTable) GetAllTables() ([]TPullTable, int, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, -1, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "select " +
-		"job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status " +
-		"from PullTable where job_id= ? and status=?"
-	rows, err := dbs.Queryx(strSQL, pt.JobID, common.STENABLED)
+	strSQL := fmt.Sprintf("select "+
+		"job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status "+
+		"from %s.pull_table where job_id= $1 and status=$2", dbs.GetSchema())
+	rows, err := dbs.QuerySQL(strSQL, pt.JobID, common.STENABLED)
 
 	if err != nil {
 		return nil, -1, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var cnt = 0
 	var result []TPullTable
 	for rows.Next() {
@@ -254,36 +211,30 @@ func (pt *TPullTable) GetAllTables() ([]TPullTable, int, error) {
 }
 
 func (pt *TPullTable) SetLastRun(iStartTime int64) error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "update " +
-		"PullTable set last_run =? where job_id=? and table_id= ? "
-	return dbs.ExecuteSQL(strSQL, iStartTime, pt.JobID, pt.TableID)
+	strSQL := fmt.Sprintf("update "+
+		"%s.pull_table set last_run =$1 where job_id=$2 and table_id= $3 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, iStartTime, pt.JobID, pt.TableID)
 }
 
 func (pt *TPullTable) GetSourceTableDDL() (string, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return "", err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "select " +
-		"source_ddl from PullTable where job_id= ? and table_id= ? "
+	strSQL := fmt.Sprintf("select "+
+		"source_ddl from %s.pull_table where job_id= $1 and table_id= $2 ", dbs.GetSchema())
 
 	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.TableID)
 	if err != nil {
 		return "", err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var ddl string
 	for rows.Next() {
 		if err = rows.Scan(&ddl); err != nil {

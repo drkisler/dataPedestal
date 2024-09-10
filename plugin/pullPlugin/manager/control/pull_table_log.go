@@ -4,14 +4,11 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	"sync"
 	"time"
 )
 
-var tblLogPageID map[int32]common.PageBuffer
-
-func init() {
-	tblLogPageID = make(map[int32]common.PageBuffer)
-}
+var tblLogPageBuffer sync.Map
 
 type TPullTableLog = common.TPullTableLog
 type PullTableLogControl struct {
@@ -111,15 +108,18 @@ func (p *PullTableLogControl) ToString() string {
 }
 func (p *PullTableLogControl) QueryTableLogs() *common.TResponse {
 	var result common.TRespDataSet
-	pageBuffer, ok := tblLogPageID[p.OperatorID]
-	if (!ok) || (pageBuffer.QueryParam != p.ToString()) || (p.PageIndex == 1) {
+
+	value, ok := tblLogPageBuffer.Load(p.OperatorID)
+
+	if (!ok) || (value.(common.PageBuffer).QueryParam != p.ToString()) || (p.PageIndex == 1) {
 		ids, err := p.ToModulePullTableLog().GetLogIDs()
 		if err != nil {
 			return common.Failure(err.Error())
 		}
-		tblLogPageID[p.OperatorID] = common.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids)
-		pageBuffer = tblLogPageID[p.OperatorID]
+		tblLogPageBuffer.Store(p.OperatorID, common.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids))
 	}
+	value, _ = tblLogPageBuffer.Load(p.OperatorID)
+	pageBuffer := value.(common.PageBuffer)
 	if pageBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
@@ -138,7 +138,7 @@ func (p *PullTableLogControl) QueryTableLogs() *common.TResponse {
 		resultData = append(resultData, *ToCommonPullTableLog(&log))
 	}
 	result.ArrData = resultData
-	result.Total = int32(pageBuffer.Total)
+	result.Total = pageBuffer.Total
 
 	return common.Success(&result)
 }

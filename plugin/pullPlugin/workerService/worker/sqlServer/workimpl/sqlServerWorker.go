@@ -1,6 +1,7 @@
 package workimpl
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"github.com/ClickHouse/ch-go/proto"
@@ -22,7 +23,7 @@ type TMSSQLWorker struct {
 
 var rowTypes = []string{"DECIMAL", "MONEY", "BINARY", "VARBINARY", "IMAGE", "UNIQUEIDENTIFIER", "XML"}
 
-func NewMSSQLWorker(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error) {
+func NewMSSQLWorker(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error) {
 	if connectOption == nil {
 		return &TMSSQLWorker{}, nil
 	}
@@ -56,7 +57,7 @@ func NewMSSQLWorker(connectOption map[string]string, connectBuffer int, keepConn
 	if len(arrParam) > 0 {
 		strConnect = strings.Join(arrParam, ";")
 	}
-	dbw, err := worker.NewWorker("mssql", strConnect, connectBuffer, keepConnect)
+	dbw, err := worker.NewWorker("mssql", strConnect, connectBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +433,7 @@ func (msSQL *TMSSQLWorker) GenTableScript(tableName string) (*string, error) {
 	result := sb.String()
 	return &result, nil
 }
-func (msSQL *TMSSQLWorker) WriteData(tableName string, batch int, data interface{}, clickHouseClient *clickHouse.TClickHouseClient) (int64, error) {
+func (msSQL *TMSSQLWorker) WriteData(tableName string, batch int, data interface{}, iTimestamp int64) (int64, error) {
 	rows, ok := data.(*sql.Rows)
 	if !ok {
 		return -1, fmt.Errorf("data is not *sql.Rows")
@@ -605,7 +606,7 @@ func (msSQL *TMSSQLWorker) WriteData(tableName string, batch int, data interface
 			}
 		}
 		// 添加时间戳
-		if err = buffer[iLen].Append(clickHouseClient.GetJobStartTime()); err != nil {
+		if err = buffer[iLen].Append(iTimestamp); err != nil {
 			return -1, err
 
 		}
@@ -616,7 +617,9 @@ func (msSQL *TMSSQLWorker) WriteData(tableName string, batch int, data interface
 			for i, val := range buffer {
 				clickHouseValue[i] = val.InPutData()
 			}
-			if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+			clickHouseClient, _ := common.GetClickHouseDriver(nil)
+			ctx := context.Background()
+			if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 				return -1, err
 			}
 			for _, val := range buffer {
@@ -633,7 +636,9 @@ func (msSQL *TMSSQLWorker) WriteData(tableName string, batch int, data interface
 		for i, val := range buffer {
 			clickHouseValue[i] = val.InPutData()
 		}
-		if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+		clickHouseClient, _ := common.GetClickHouseDriver(nil)
+		ctx := context.Background()
+		if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 			return -1, err
 		}
 		for _, val := range buffer {

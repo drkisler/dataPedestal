@@ -1,10 +1,8 @@
 package control
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/portal/module"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"time"
 )
@@ -36,7 +34,7 @@ func (s *TSurvey) HandleOperate(msg []byte) []byte {
 	switch msg[0] {
 	case messager.OperateHeartBeat:
 		if err = host.FromByte(msg[1:]); err != nil {
-			common.LogServ.Error(err)
+			//common.LogServ.Error(err)
 			return []byte("-1")
 		}
 		activeHost, ok := s.hostInfo[host.HostUUID]
@@ -46,39 +44,40 @@ func (s *TSurvey) HandleOperate(msg []byte) []byte {
 			s.hostInfo[host.HostUUID] = &TActiveHost{host, time.Now()}
 		}
 		return []byte("0")
-	case messager.OperateCheckPlugin:
-		var strHostID string
-		var data []byte
-		strHostID = string(msg[1:])
-		if len(strHostID) != 36 {
-			common.LogServ.Error(err)
-			resp := common.Failure(fmt.Sprintf("%s不是UUID", strHostID))
-			data, _ = json.Marshal(resp)
-			return data
-		}
-		var pc TPluginControl
-		var plugins []module.TPlugin
-		pc.HostUUID = strHostID
-		if plugins, err = pc.GetPluginByHostID(); err != nil {
-			resp := common.Failure(err.Error())
-			data, _ = json.Marshal(resp)
-			return data
-		}
-		result := common.Success(&common.TRespDataSet{
-			Total:   int32(len(plugins)),
-			ArrData: plugins,
-		})
 
-		data, _ = json.Marshal(&result)
-		return data
+	case messager.OperatePublishMsg:
+		// host 发来的发布消息，对此消息进行转发给其它host，发来消息的host 需要提供自己的HostUUID
+		// HostUUID+Message
+		var strHostUUID string
+		var data []byte
+		strHostUUID = string(msg[1:37])
+		if len(strHostUUID) != 36 {
+			//common.LogServ.Error(err)
+			return []byte(fmt.Sprintf("%s不是UUID", strHostUUID))
+		}
+		data = msg[37:]
+		for _, v := range s.hostInfo {
+			if v.ActiveHost.HostUUID != strHostUUID {
+				//向其它Host发送转发
+				url := fmt.Sprintf("tcp://%s:%d", v.ActiveHost.HostIP, v.ActiveHost.MessagePort)
+				if _, err = MsgClient.Send(url, messager.OperateForwardMsg, data); err != nil {
+					// 记录错误日志，不返回错误信息给客户端
+					//common.LogServ.Error(fmt.Errorf("向%s转发消息失败:%s", url, err.Error()))
+					continue
+				}
+			}
+		}
+		return []byte("ok")
+	default:
+		return []byte("消息类型错误")
 	}
-	return []byte("消息类型错误")
+
 }
 
 func (s *TSurvey) GetHostInfoByID(hostUUID string) (*TActiveHost, error) {
 	result, ok := s.hostInfo[hostUUID]
 	if !ok {
-		return nil, fmt.Errorf("%s不存在", hostUUID)
+		return nil, fmt.Errorf("%s不存在或已经离线", hostUUID)
 	}
 	return result, nil
 }

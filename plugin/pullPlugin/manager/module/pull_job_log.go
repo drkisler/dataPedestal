@@ -1,10 +1,11 @@
 package module
 
 import (
+	"context"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
-	"github.com/jmoiron/sqlx"
+	"github.com/jackc/pgx/v5"
 	"time"
 )
 
@@ -19,17 +20,15 @@ type TPullJobLog struct {
 
 func (jobLog *TPullJobLog) StartJobLog() (int64, error) {
 	jobLog.StartTime = time.Now().Unix() //time.Unix(timestamp, 0)
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return 0, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
 	jobLog.StartTime = time.Now().Unix()
-	const InsertSQL = "INSERT " +
-		"INTO PullJobLog (job_id, start_time) VALUES (?, ?)"
-	if err = dbs.ExecuteSQL(InsertSQL, jobLog.JobID, jobLog.StartTime); err != nil {
+	strSQL := fmt.Sprintf("INSERT "+
+		"INTO %s.pull_job_log (job_id, start_time) VALUES ($1, $2)", dbs.GetSchema())
+	if err = dbs.ExecuteSQL(context.Background(), strSQL, jobLog.JobID, jobLog.StartTime); err != nil {
 		return 0, err
 	}
 
@@ -37,44 +36,42 @@ func (jobLog *TPullJobLog) StartJobLog() (int64, error) {
 }
 func (jobLog *TPullJobLog) StopJobLog(errInfo string) error {
 	stopTime := time.Now().Unix()
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
+
 	status := "failed"
 	if errInfo == "" {
 		status = "completed"
 	}
-	const UpdateSQL = "UPDATE " +
-		"PullJobLog SET stop_time =?, status =?, error_info =? WHERE job_id =? and start_time =?"
-	return dbs.ExecuteSQL(UpdateSQL, stopTime, status, errInfo, jobLog.JobID, jobLog.StartTime)
+
+	strSQL := fmt.Sprintf("UPDATE "+
+		"%s.pull_job_log SET stop_time = $1, status = $2, error_info = $3 WHERE job_id = $4 and start_time = $5", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, stopTime, status, errInfo, jobLog.JobID, jobLog.StartTime)
 }
 
 func (jobLog *TPullJobLog) GetLogIDs() ([]int64, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	var rows *sqlx.Rows
-	const SelectALLSQL = "SELECT " +
-		"start_time FROM PullJobLog WHERE job_id =? order by start_time DESC"
-	const selectSQL = "SELECT " +
-		"start_time FROM PullJobLog WHERE job_id =? and status=? order by start_time DESC"
+
+	var rows pgx.Rows
+	var strSQL string
 	if jobLog.Status == "" {
-		rows, err = dbs.QuerySQL(SelectALLSQL, jobLog.JobID)
+		strSQL = fmt.Sprintf("SELECT "+
+			"start_time from %s.pull_job_log WHERE job_id =$1 order by start_time DESC", dbs.GetSchema())
+		rows, err = dbs.QuerySQL(strSQL, jobLog.JobID)
 	} else {
-		rows, err = dbs.QuerySQL(SelectALLSQL, jobLog.JobID, jobLog.Status)
+		strSQL = fmt.Sprintf("SELECT "+
+			"start_time from %s.pull_job_log WHERE job_id =$1 and status=$2 order by start_time DESC", dbs.GetSchema())
+		rows, err = dbs.QuerySQL(strSQL, jobLog.JobID, jobLog.Status)
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var logIDs []int64
 	for rows.Next() {
 		var logID int64
@@ -88,32 +85,20 @@ func (jobLog *TPullJobLog) GetLogIDs() ([]int64, error) {
 }
 
 func (jobLog *TPullJobLog) GetLogs(ids *string) ([]TPullJobLog, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	strSQL := fmt.Sprintf("WITH RECURSIVE cte(id, val) AS ("+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER), "+
-		"SUBSTR(val, INSTR(val, ',')+1) "+
-		"FROM (SELECT '%s' AS val)"+
-		" UNION ALL "+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER),"+
-		"       SUBSTR(val, INSTR(val, ',')+1) "+
-		" FROM cte"+
-		" WHERE INSTR(val, ',')>0"+
-		")"+
-		"SELECT a.job_id,a.start_time,a.stop_time,a.status,a.error_info "+
-		"from PullJobLog a inner join cte b on a.start_time=b.id where a.job_id=? order by a.start_time DESC", *ids)
+
+	strSQL := fmt.Sprintf("SELECT a.job_id,a.start_time,a.stop_time,a.status,a.error_info "+
+		"from %s.pull_job_log a where a.job_id=$1 and a.start_time = any(array(SELECT unnest(string_to_array('%s', ','))::bigint) "+
+		"order by a.start_time DESC", dbs.GetSchema(), *ids)
 	rows, err := dbs.QuerySQL(strSQL, jobLog.JobID)
 	if err != nil {
 		return nil, err
 	}
 
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var result []TPullJobLog
 	for rows.Next() {
 		var p TPullJobLog
@@ -127,44 +112,23 @@ func (jobLog *TPullJobLog) GetLogs(ids *string) ([]TPullJobLog, error) {
 }
 
 func (jobLog *TPullJobLog) ClearJobLog() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const MaxTimeSQL = "SELECT " +
-		"COALESCE(MAX(start_time),0) FROM PullJobLog WHERE job_id =?"
-	rows, err := dbs.QuerySQL(MaxTimeSQL, jobLog.JobID)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var maxTime int64
-	for rows.Next() {
-		if err = rows.Scan(&maxTime); err != nil {
-			return err
-		}
-	}
-	if maxTime == 0 {
-		return nil
-	}
-	const DeleteSQL = "DELETE " +
-		"FROM PullJobLog WHERE job_id =? and start_time <?"
-	return dbs.ExecuteSQL(DeleteSQL, jobLog.JobID, maxTime)
+	strSQL := fmt.Sprintf("DELETE "+
+		"FROM %s.pull_job_log WHERE job_id = $1 and start_time<"+
+		"(select COALESCE(MAX(start_time),0) FROM %s.pull_job_log WHERE job_id = $2)", dbs.GetSchema(), dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, jobLog.JobID, jobLog.JobID)
 }
 
 func (jobLog *TPullJobLog) DeleteJobLog() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const DeleteSQL = "DELETE " +
-		"FROM PullJobLog WHERE job_id =? and start_time =?"
-	return dbs.ExecuteSQL(DeleteSQL, jobLog.JobID, jobLog.StartTime)
+	strSQL := fmt.Sprintf("DELETE "+
+		"FROM %s.pull_job_log WHERE job_id =$1 and start_time =$2", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, jobLog.JobID, jobLog.StartTime)
 }

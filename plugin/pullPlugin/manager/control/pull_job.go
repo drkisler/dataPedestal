@@ -4,17 +4,11 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
-	pubService "github.com/drkisler/dataPedestal/plugin/servicePlugin/pub_service/service"
-	"github.com/drkisler/dataPedestal/universal/messager"
 	"slices"
+	"sync"
 )
 
-var jobPageID map[int32]common.PageBuffer
-var PublishServiceUrl string
-
-func init() {
-	jobPageID = make(map[int32]common.PageBuffer)
-}
+var jobPageBuffer sync.Map //map[int32]common.PageBuffer
 
 type TPullJob = module.TPullJob
 type TPullJobControl struct {
@@ -88,38 +82,13 @@ func ParsePullJobControl(data map[string]any) (*TPullJobControl, error) {
 
 }
 
-func (job *TPullJobControl) SentFinishMsg() error {
-	msgClient, err := messager.NewMessageClient()
-	if err != nil {
-		return err
-	}
-	if err = job.InitJobByID(); err != nil {
-		return err
-	}
-	data, err := pubService.EncodeRequest(pubService.Request_Publish, job.UserID, job.OperatorCode, job.JobUUID, job.JobName)
-	if err != nil {
-		return err
-	}
-	if data, err = msgClient.SendData(PublishServiceUrl, data); err != nil {
-		return err
-	}
-	success, info, err := pubService.DecodeReply(data)
-	if err != nil {
-		return err
-	}
-	if !success {
-		return fmt.Errorf("publish job failed:%s", info)
-	}
-	return nil
-}
-
 func (job *TPullJobControl) AddJob() *common.TResponse {
 	pullJob := job.TPullJob
 	id, err := pullJob.AddJob()
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	return common.ReturnInt(int(id))
+	return common.ReturnInt(id)
 }
 
 func (job *TPullJobControl) AlterJob() *common.TResponse {
@@ -145,15 +114,16 @@ func (job *TPullJobControl) ToString() string {
 
 func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
 	var result common.TRespDataSet
-	pageBuffer, ok := jobPageID[job.OperatorID]
-	if (!ok) || (pageBuffer.QueryParam != job.ToString()) || job.PageIndex == 1 { // job.PageIndex == 1 means the first page request Data for data has changed
+	value, ok := jobPageBuffer.Load(job.OperatorID)
+	if (!ok) || (value.(common.PageBuffer).QueryParam != job.ToString()) || job.PageIndex == 1 {
 		ids, err := job.GetPullJobIDs()
 		if err != nil {
 			return common.Failure(err.Error())
 		}
-		jobPageID[job.OperatorID] = common.NewPageBuffer(job.OperatorID, job.ToString(), int64(job.PageSize), ids)
-		pageBuffer = jobPageID[job.OperatorID]
+		jobPageBuffer.Store(job.OperatorID, common.NewPageBuffer(job.OperatorID, job.ToString(), int64(job.PageSize), ids))
 	}
+	value, _ = jobPageBuffer.Load(job.OperatorID)
+	pageBuffer := value.(common.PageBuffer)
 	if pageBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
@@ -176,13 +146,8 @@ func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
 		}
 	}
 	result.ArrData = jobs
-	/*
-		if result.ArrData, err = job.TPullJob.GetJobs(ids); err != nil {
-			return common.Failure(err.Error())
-		}
-	*/
 
-	result.Total = int32(pageBuffer.Total)
+	result.Total = pageBuffer.Total
 	return common.Success(&result)
 }
 
@@ -193,14 +158,6 @@ func (job *TPullJobControl) SetJobStatus() *common.TResponse {
 		return common.Failure(err.Error())
 	}
 	return common.Success(nil)
-}
-
-func (job *TPullJobControl) GetPullJobUUID() *common.TResponse {
-	uuid, err := job.TPullJob.GetPullJobUUID()
-	if err != nil {
-		return common.Failure(err.Error())
-	}
-	return common.ReturnStr(uuid)
 }
 
 func (job *TPullJobControl) SetLastRun(iStartTime int64) error {

@@ -37,7 +37,7 @@ type TOracleWorker struct {
 
 var arrUint8Types = []string{"LongRaw", "RAW"}
 
-func NewOracleWorker(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error) {
+func NewOracleWorker(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error) {
 	if connectOption == nil {
 		return &TOracleWorker{}, nil
 	}
@@ -88,7 +88,7 @@ func NewOracleWorker(connectOption map[string]string, connectBuffer int, keepCon
 		return nil, fmt.Errorf("can not open oracle connection: %w", err)
 	}
 	// 下面的代码是为了兼容原来的代码，但是不建议使用，因为go-ora的连接方式和原来的不一致，导致很多地方需要修改
-	dbw, err := worker.NewWorker("oracle", connStr, connectBuffer, keepConnect)
+	dbw, err := worker.NewWorker("oracle", connStr, connectBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -98,14 +98,7 @@ func NewOracleWorker(connectOption map[string]string, connectBuffer int, keepCon
 }
 
 func (orc *TOracleWorker) OpenConnect() error {
-	if orc.KeepConnect {
-		return orc.oraConn.Open()
-	}
 	var err error
-	if orc.KeepConnect {
-		_ = orc.oraConn.Close()
-		orc.oraConn = nil
-	}
 	if orc.oraConn, err = go_ora.NewConnection(orc.ConnectStr, nil); err != nil {
 		return err
 	}
@@ -269,7 +262,7 @@ func (orc *TOracleWorker) GetColumns(tableName string) ([]common.ColumnInfo, err
 }
 func (orc *TOracleWorker) GetTables() ([]common.TableInfo, error) {
 	strSQL := "select TABLE_NAME,NVL(COMMENTS,TABLE_NAME)COMMENTS " +
-		"from ALL_TAB_COMMENTS where OWNER=?"
+		"from ALL_TAB_COMMENTS where OWNER=$1"
 	queryResult, err := orc.Query(strSQL, orc.schema)
 	if err != nil {
 		return nil, err
@@ -419,7 +412,7 @@ func (orc *TOracleWorker) GenTableScript(tableName string) (*string, error) {
 	result := sb.String()
 	return &result, nil
 }
-func (orc *TOracleWorker) WriteData(tableName string, batch int, data interface{}, clickHouseClient *clickHouse.TClickHouseClient) (int64, error) {
+func (orc *TOracleWorker) WriteData(tableName string, batch int, data interface{}, iTimestamp int64) (int64, error) {
 	rows, ok := data.(*go_ora.DataSet)
 	if !ok {
 		return -1, fmt.Errorf("data is not *go_ora.DataSet")
@@ -612,7 +605,7 @@ func (orc *TOracleWorker) WriteData(tableName string, batch int, data interface{
 			}
 		}
 		// 添加时间戳
-		if err = buffer[iLen].Append(clickHouseClient.GetJobStartTime()); err != nil {
+		if err = buffer[iLen].Append(iTimestamp); err != nil {
 			return -1, err
 
 		}
@@ -622,7 +615,9 @@ func (orc *TOracleWorker) WriteData(tableName string, batch int, data interface{
 			for i, val := range buffer {
 				clickHouseValue[i] = val.InPutData()
 			}
-			if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+			clickHouseClient, _ := common.GetClickHouseDriver(nil)
+			ctx := context.Background()
+			if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 				return -1, err
 			}
 			for _, val := range buffer {
@@ -639,7 +634,9 @@ func (orc *TOracleWorker) WriteData(tableName string, batch int, data interface{
 		for i, val := range buffer {
 			clickHouseValue[i] = val.InPutData()
 		}
-		if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+		clickHouseClient, _ := common.GetClickHouseDriver(nil)
+		ctx := context.Background()
+		if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 			return -1, err
 		}
 		for _, val := range buffer {

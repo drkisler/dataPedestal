@@ -3,7 +3,6 @@ package common
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"os"
 	"strings"
@@ -18,13 +17,14 @@ func NewGinContext(ctx *gin.Context) *GinContext {
 }
 
 func GenFilePath(paths ...string) string {
-	currentPath := os.Getenv("MY_PATH")
-	currentDir := os.Getenv("MY_DIR")
-	arrDir := strings.Split(currentPath, currentDir)
+	currentPath := os.Getenv("FilePath")
+	DirSeparator := os.Getenv("Separator")
+	arrDir := strings.Split(currentPath, DirSeparator)
 	for _, path := range paths {
 		arrDir = append(arrDir, path)
 	}
-	return strings.Join(arrDir, currentDir)
+
+	return strings.Join(arrDir, DirSeparator)
 }
 
 func GetCurrentPath() (string, error) {
@@ -39,16 +39,15 @@ func GetCurrentPath() (string, error) {
 	return currentPath, nil
 }
 
-func (g *GinContext) CheckRequest(target any) error {
+func (g *GinContext) CheckRequest(target any) (int32, string, error) {
 	if err := g.ctx.ShouldBind(target); err != nil {
-		return err
+		return -1, "", err
 	}
-	data, err := json.Marshal(target)
+	_, err := json.Marshal(target)
 	if err != nil {
-		return err
+		return -1, "", err
 	}
-	LogServ.Debug(string(data))
-	return nil
+	return g.GetOperator()
 }
 
 func (g *GinContext) GetOperator() (int32, string, error) {
@@ -86,22 +85,11 @@ func (g *GinContext) GetHeader(key string) string {
 	return g.ctx.GetHeader(key)
 }
 
-func (g *GinContext) Reply(isDebug bool, value any) {
-	if isDebug {
-		strJson, _ := json.Marshal(value)
-		LogServ.Debug(string(strJson))
-	}
+func (g *GinContext) Reply(value any) {
 	g.ctx.JSON(200, value)
 }
-func (g *GinContext) ReplyBadRequest(isDebug bool, value any) {
-	if isDebug {
-		strJson, _ := json.Marshal(value)
-		if isDebug {
-			fmt.Println(string(strJson))
-			LogServ.Debug(string(strJson))
-		}
+func (g *GinContext) ReplyBadRequest(value any) {
 
-	}
 	g.ctx.JSON(400, value)
 }
 
@@ -123,7 +111,7 @@ func CheckRequest(ctx *gin.Context, target interface{}) error {
 	if err != nil {
 		return err
 	}
-	LogServ.Debug(target)
+	//LogServ.Debug(target)
 	return nil
 }
 func GetOperater(ctx *gin.Context) (int32, string, error) {
@@ -171,7 +159,7 @@ func IsSafeSQL(sql string) bool {
 	dangerousKeywords := []string{
 		" drop ", " delete ", " truncate ", " alter ", " create ", " insert ",
 		" update ", " replace ", " grant ", " revoke ", " shutdown ", " backup ",
-		" restore ", " lock ", " unlock ", " rename ",
+		" restore ", " lock ", " unlock ", " rename ", "/*", "*/", "--",
 	}
 
 	// 遍历所有危险关键词

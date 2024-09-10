@@ -2,17 +2,23 @@ package pluginBase
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/initializers"
-	"github.com/drkisler/dataPedestal/universal/logAdmin"
+	"github.com/shirou/gopsutil/cpu"
+	"math"
+	"runtime"
 	"strconv"
+	"strings"
+	"time"
 )
 
 type TBasePlugin struct {
-	*common.TStatus
-	IsDebug bool
-	Logger  *logAdmin.TLoggerAdmin
-	//LicenseCode string
+	*common.TStatus `json:"-"`
+	IsDebug         bool   `json:"is_debug"`
+	PluginUUID      string `json:"plugin_uuid"`
+	PluginName      string `json:"plugin_name"`
+	DBConnection    string `json:"db_connection"`
 }
 
 // GetConfigTemplate 系统配置模板
@@ -29,19 +35,17 @@ func (bp *TBasePlugin) GetConfigTemplate() common.TResponse {
 	return result
 }
 
+/*
 func (bp *TBasePlugin) Load(config string) common.TResponse {
 	var cfg initializers.TConfigure
 	err := json.Unmarshal([]byte(config), &cfg)
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-
 	bp.IsDebug = cfg.IsDebug
-	if bp.Logger, err = logAdmin.GetLogger(); err != nil {
-		return *common.Failure(err.Error())
-	}
 	return *common.Success(nil)
 }
+*/
 
 func (bp *TBasePlugin) Running() common.TResponse {
 	return common.TResponse{Info: strconv.FormatBool(bp.IsRunning())}
@@ -51,41 +55,51 @@ func (bp *TBasePlugin) Stop() common.TResponse {
 	bp.SetRunning(false)
 	return *common.Success(nil)
 }
-func (bp *TBasePlugin) GetErrLog(params string) common.TResponse {
-	return bp.Logger.GetErrLog(params)
+func (bp *TBasePlugin) SetConnection(source string) {
+	bp.DBConnection = source
 }
-func (bp *TBasePlugin) GetErrLogDate() common.TResponse {
-	return bp.Logger.GetErrLogDate()
+func (bp *TBasePlugin) GetConnectOption() map[string]string {
+	result := make(map[string]string)
+
+	// 将输入字符串按空白字符（包括空格、制表符、换行符）分割
+	parts := strings.Fields(bp.DBConnection)
+
+	for _, part := range parts {
+		// 查找第一个"="的位置
+		equalIndex := strings.Index(part, "=")
+		if equalIndex == -1 {
+			continue // 跳过不包含"="的部分
+		}
+
+		// 提取键和值
+		key := strings.TrimSpace(part[:equalIndex])
+		value := strings.TrimSpace(part[equalIndex+1:])
+
+		// 将键值对添加到map中
+		if key != "" {
+			result[key] = value
+		}
+	}
+	return result
 }
-func (bp *TBasePlugin) DelErrOldLog(data string) common.TResponse {
-	return bp.Logger.DelErrOldLog(data)
-}
-func (bp *TBasePlugin) DelErrLog(params string) common.TResponse {
-	return bp.Logger.DelErrLog(params)
+func (bp *TBasePlugin) GetSystemUsage() string {
+	var result struct {
+		CPUUsage    string  `json:"cpu_usage"`
+		MemoryUsage float64 `json:"memory_usage"`
+	}
+	percent, _ := cpu.Percent(time.Second, false)
+	result.CPUUsage = fmt.Sprintf("%.4f%%", percent[0]) //   truncateWithMath(percent[0], 4)
+
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	result.MemoryUsage = truncateWithMath(float64(m.Sys)/1024/1024, 4)
+	//ioCounters, _ := net.IOCounters(false)
+	data, _ := json.Marshal(&result)
+	return string(data)
 }
 
-func (bp *TBasePlugin) GetInfoLog(params string) common.TResponse {
-	return bp.Logger.GetInfoLog(params)
-}
-func (bp *TBasePlugin) GetInfoLogDate() common.TResponse {
-	return bp.Logger.GetInfoLogDate()
-}
-func (bp *TBasePlugin) DelInfoOldLog(data string) common.TResponse {
-	return bp.Logger.DelInfoOldLog(data)
-}
-func (bp *TBasePlugin) DelInfoLog(params string) common.TResponse {
-	return bp.Logger.DelInfoLog(params)
-}
-
-func (bp *TBasePlugin) GetDebugLog(params string) common.TResponse {
-	return bp.Logger.GetDebugLog(params)
-}
-func (bp *TBasePlugin) GetDebugLogDate() common.TResponse {
-	return bp.Logger.GetDebugLogDate()
-}
-func (bp *TBasePlugin) DelDebugOldLog(data string) common.TResponse {
-	return bp.Logger.DelDebugOldLog(data)
-}
-func (bp *TBasePlugin) DelDebugLog(params string) common.TResponse {
-	return bp.Logger.DelDebugLog(params)
+func truncateWithMath(num float64, width int8) float64 {
+	factor := math.Pow(10, float64(width))
+	return math.Trunc(num*factor) / factor
 }

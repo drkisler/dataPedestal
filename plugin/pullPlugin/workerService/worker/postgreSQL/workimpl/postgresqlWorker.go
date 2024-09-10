@@ -1,6 +1,7 @@
 package workimpl
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"github.com/ClickHouse/ch-go/proto"
@@ -24,7 +25,7 @@ var StringTypes = []string{"NUMERIC", "BPCHAR", "INTERVAL", "BYTEA", "MONEY", "P
 	"LINE", "LSEG", "BOX", "PATH", "POLYGON", "CIRCLE", "CIDR", "INET", "MACADDR", "BIT", "VARBIT",
 	"UUID", "XML", "JSON", "JSONB", "_INT4", "_TEXT", "INT4RANGE", "TSRANGE", "TSVECTOR", "TSQUERY"}
 
-func NewPGSQLWorker(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error) {
+func NewPGSQLWorker(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error) {
 	if connectOption == nil {
 		return &TPGSQLWorker{}, nil
 	}
@@ -60,7 +61,7 @@ func NewPGSQLWorker(connectOption map[string]string, connectBuffer int, keepConn
 	if len(arrParam) > 0 {
 		strConnect = strings.Join(arrParam, " ")
 	}
-	dbw, err := worker.NewWorker("postgres", strConnect, connectBuffer, keepConnect)
+	dbw, err := worker.NewWorker("postgres", strConnect, connectBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -86,9 +87,9 @@ func (pgSQL *TPGSQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, er
 		" and a.table_schema =b.table_schema " +
 		"and a.table_name=b.table_name " +
 		"and a.constraint_name=b.constraint_name " +
-		"where a.table_catalog = ? " +
-		"and a.table_schema = ? " +
-		"and a.table_name = ? " +
+		"where a.table_catalog = $1 " +
+		"and a.table_schema = $2 " +
+		"and a.table_name = $3 " +
 		"and b.constraint_type='PRIMARY KEY'"
 	Keys, err := func() ([]string, error) {
 		rows, err := pgSQL.DataBase.Query(keySQL, pgSQL.dbName, schema, tableName)
@@ -121,7 +122,7 @@ func (pgSQL *TPGSQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, er
 		"when cols.data_type in('real','double precision','money') then 'float' when data_type='numeric' and cols.numeric_scale>0 then 'float' " +
 		"when cols.data_type='date' then 'date' when cols.data_type='timestamp without time zone' then 'timestamp' else 'string' end data_type " +
 		"FROM information_schema.columns cols " +
-		"WHERE cols.table_catalog = ? AND cols.table_schema = ? AND cols.table_name = ?"
+		"WHERE cols.table_catalog = $1 AND cols.table_schema = $2 AND cols.table_name = $3"
 	return func() ([]common.ColumnInfo, error) {
 		rows, qerr := pgSQL.DataBase.Query(colSQL, pgSQL.dbName, schema, tableName)
 		if qerr != nil {
@@ -158,7 +159,7 @@ func (pgSQL *TPGSQLWorker) GetTables() ([]common.TableInfo, error) {
 		"FROM information_schema.tables t " +
 		"JOIN pg_catalog.pg_class pgc ON t.table_name = pgc.relname " +
 		"WHERE  t.table_schema NOT IN ('pg_catalog', 'information_schema') " +
-		" AND t.table_type = 'BASE TABLE' AND t.table_schema = ? " +
+		" AND t.table_type = 'BASE TABLE' AND t.table_schema = $1 " +
 		"ORDER BY t.table_schema, t.table_name"
 	rows, err := pgSQL.DataBase.Query(strSQL, pgSQL.schema)
 	if err != nil {
@@ -413,7 +414,7 @@ func (pgSQL *TPGSQLWorker) GenTableScript(tableName string) (*string, error) {
 	result := sb.String()
 	return &result, nil
 }
-func (pgSQL *TPGSQLWorker) WriteData(tableName string, batch int, data interface{}, clickHouseClient *clickHouse.TClickHouseClient) (int64, error) {
+func (pgSQL *TPGSQLWorker) WriteData(tableName string, batch int, data interface{}, iTimestamp int64) (int64, error) {
 	rows, ok := data.(*sql.Rows)
 	if !ok {
 		return -1, fmt.Errorf("data is not *sql.Rows")
@@ -565,7 +566,7 @@ func (pgSQL *TPGSQLWorker) WriteData(tableName string, batch int, data interface
 			}
 		}
 		// 添加时间戳
-		if err = buffer[iLen].Append(clickHouseClient.GetJobStartTime()); err != nil {
+		if err = buffer[iLen].Append(iTimestamp); err != nil {
 			return -1, err
 
 		}
@@ -576,7 +577,9 @@ func (pgSQL *TPGSQLWorker) WriteData(tableName string, batch int, data interface
 			for i, val := range buffer {
 				clickHouseValue[i] = val.InPutData()
 			}
-			if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+			clickHouseClient, _ := common.GetClickHouseDriver(nil)
+			ctx := context.Background()
+			if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 				return -1, err
 			}
 			for _, val := range buffer {
@@ -593,7 +596,9 @@ func (pgSQL *TPGSQLWorker) WriteData(tableName string, batch int, data interface
 		for i, val := range buffer {
 			clickHouseValue[i] = val.InPutData()
 		}
-		if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+		clickHouseClient, _ := common.GetClickHouseDriver(nil)
+		ctx := context.Background()
+		if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 			return -1, err
 		}
 		for _, val := range buffer {

@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
-	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
-	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
-	"github.com/drkisler/dataPedestal/universal/logAdmin"
+	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
+
+	//logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"os"
 	"os/signal"
@@ -23,17 +23,13 @@ type TPluginFunc func(userID int32, params map[string]any) common.TResponse
 
 type TMyPlugin struct {
 	TBasePlugin
-	//ServerPort  int32
-	workerProxy *workerService.TWorkerProxy
+	HostReplyUrl string `json:"host_reply_url,omitempty"`
+	workerProxy  *workerService.TWorkerProxy
 }
 
-func InitPlugin() error {
-	var err error
-	PluginServ, err = CreateMyPullPlugin()
-	if err != nil {
-		return err
-	}
+func InitPlugin() {
 
+	PluginServ = CreateMyPullPlugin()
 	operateMap = make(map[string]TPluginFunc)
 	operateMap["deleteTable"] = DeleteTable
 	operateMap["addTable"] = AddTable
@@ -54,7 +50,7 @@ func InitPlugin() error {
 	operateMap["alterJob"] = AlterJob
 	operateMap["deleteJob"] = DeleteJob
 	operateMap["getJobs"] = GetJobs
-	operateMap["getJobUUID"] = GetJobUUID
+	//operateMap["getJobUUID"] = GetJobUUID
 	operateMap["setJobStatus"] = SetJobStatus
 	operateMap["onLineJob"] = OnLineJob
 	operateMap["offLineJob"] = OffLineJob
@@ -65,21 +61,16 @@ func InitPlugin() error {
 	operateMap["queryTableLogs"] = QueryTableLogs
 
 	operateMap["checkSourceConnection"] = CheckSourceConnect
-	operateMap["checkDestConnection"] = CheckDestConnect
 	operateMap["getSourceConnOption"] = GetSourceConnOption
 	operateMap["getSourceQuoteFlag"] = GetSourceQuoteFlag
 	operateMap["getSourceDatabaseType"] = GetDatabaseType
-	operateMap["getDestConnOption"] = GetDestConnOption
+	//operateMap["getDestConnOption"] = GetDestConnOption
 	//operateMap["getSourceTableDDL"] = GetSourceTableDDLSQL //GetSourceTableDDLSQL   GetSourceTableDDL
-	return nil
+
 }
 
-func CreateMyPullPlugin() (common.IPlugin, error) {
-	logger, err := logAdmin.GetLogger()
-	if err != nil {
-		return nil, err
-	}
-	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus(), Logger: logger}}, nil
+func CreateMyPullPlugin() common.IPlugin {
+	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus()}}
 }
 
 // Load 根据配置信息设置属性，创建必要的变量
@@ -88,31 +79,46 @@ func (mp *TMyPlugin) Load(config string) common.TResponse {
 		return *common.Failure("plugin 初始化失败，不能加载")
 	}
 	var err error
-	if resp := mp.TBasePlugin.Load(config); resp.Code < 0 {
-		mp.Logger.WriteError(resp.Info)
-		return resp
-	}
-	var pubServCfg initializers.TPublishConfig
+	var connOpt map[string]string
+
+	var pubServCfg TMyPlugin
 	if err = json.Unmarshal([]byte(config), &pubServCfg); err != nil {
 		return *common.Failure(fmt.Sprintf("解析配置失败:%s", err.Error()))
 	}
-	if err = pubServCfg.CheckValid(); err != nil {
-		return *common.Failure(fmt.Sprintf("配置信息不正确:%s", err.Error()))
+	if pubServCfg.PluginName == "" {
+		return *common.Failure("插件名称不能为空")
 	}
-	// 任务完成后消息发送的地址
-	ctl.PublishServiceUrl = pubServCfg.ReplyUrl
+	if pubServCfg.PluginUUID == "" {
+		return *common.Failure("插件UUID不能为空")
+	}
+	logService.LogWriter = logService.NewLogWriter(fmt.Sprintf("%s(%s)", pubServCfg.PluginName, pubServCfg.PluginUUID))
 
-	if _, err = metaDataBase.GetDbServ(metaDataBase.PullJobDDL, metaDataBase.PullTableDDL, metaDataBase.PullTableLogDDL, metaDataBase.PullJobLogDDL); err != nil {
-		mp.Logger.WriteError(err.Error())
+	if pubServCfg.DBConnection == "" {
+		logService.LogWriter.WriteError("未能获取到数据库连接信息，请确认配置是否正确", false)
+		return *common.Failure("未能获取到数据库连接信息，请确认配置是否正确")
+	}
+
+	if pubServCfg.HostReplyUrl == "" {
+		logService.LogWriter.WriteError("未能获取到应答服务地址，请确认配置是否正确", false)
+		return *common.Failure("未能获取到应答服务地址，请确认配置是否正确")
+	}
+	pubServCfg.SetConnection(pubServCfg.DBConnection)
+
+	connOpt = pubServCfg.GetConnectOption()
+	metaDataBase.SetConnectOption(connOpt)
+	if _, err = metaDataBase.GetPgServ(); err != nil {
+		logService.LogWriter.WriteError(fmt.Sprintf("数据库连接失败:%s", err.Error()), false)
+		return *common.Failure(fmt.Sprintf("数据库连接失败:%s", err.Error()))
+	}
+	mp.PluginName = pubServCfg.PluginName
+	logService.LogWriter = logService.NewLogWriter(mp.PluginUUID)
+
+	if mp.workerProxy, err = workerService.NewWorkerProxy(pubServCfg.HostReplyUrl); err != nil {
+		logService.LogWriter.WriteError(fmt.Sprintf("创建worker代理%s失败:%s", pubServCfg.HostReplyUrl, err.Error()), false)
 		return *common.Failure(err.Error())
 	}
 
-	if mp.workerProxy, err = workerService.NewWorkerProxy(); err != nil {
-		mp.Logger.WriteError(err.Error())
-		return *common.Failure(err.Error())
-	}
-
-	mp.Logger.WriteInfo("插件加载成功")
+	logService.LogWriter.WriteInfo("插件加载成功", false)
 	//需要返回端口号，如果没有则返回1
 	//return *common.ReturnInt(int(cfg.ServerPort))
 	return *common.ReturnInt(1)
@@ -143,8 +149,8 @@ func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 // Run 启动程序，启动前必须先Load
 func (mp *TMyPlugin) Run() common.TResponse {
 	//启动调度器
-	if err := mp.workerProxy.Start(mp.Logger); err != nil {
-		mp.Logger.WriteError(err.Error())
+	if err := mp.workerProxy.Start(); err != nil {
+		logService.LogWriter.WriteError(err.Error(), false)
 		return *common.Failure(err.Error())
 	}
 
@@ -152,14 +158,16 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	defer mp.SetRunning(false)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt) //注册相关信号的接受器
-	mp.Logger.WriteInfo("插件已启动")
+	logService.LogWriter.WriteInfo("插件已启动", false)
+
 	//并发等待信号
 	select {
 	case <-mp.workerProxy.SignChan: //本插件发出停止信号
 	case <-quit: //操作系统发出退出信号
 		mp.workerProxy.StopScheduler()
 	}
-	mp.Logger.WriteInfo("插件已停止")
+
+	logService.LogWriter.WriteInfo("插件已停止", false)
 	return *common.Success(nil)
 }
 
@@ -169,10 +177,8 @@ func (mp *TMyPlugin) Stop() common.TResponse {
 	// 停止长期任务，对于scheduler的停止，需要单独处理
 	mp.workerProxy.StopRun()
 
-	dbs, _ := metaDataBase.GetDbServ()
-	if err := dbs.Close(); err != nil {
-		return common.TResponse{Code: -1, Info: err.Error()}
-	}
+	dbs, _ := metaDataBase.GetPgServ()
+	dbs.Close()
 	return common.TResponse{Code: 0, Info: "success stop plugin"} //*common.Success(nil)
 }
 
@@ -182,7 +188,7 @@ func (mp *TMyPlugin) GetSourceConnOption(_ map[string]any) common.TResponse {
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	return *common.Success(&common.TRespDataSet{ArrData: options, Total: int32(len(options))})
+	return *common.Success(&common.TRespDataSet{ArrData: options, Total: int64(len(options))})
 }
 
 func (mp *TMyPlugin) GetOnlineJobIDs() []int32 {
@@ -203,7 +209,7 @@ func (mp *TMyPlugin) GetSourceTables(connectOption map[string]string) common.TRe
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	return *common.Success(&common.TRespDataSet{ArrData: tables, Total: int32(len(tables))})
+	return *common.Success(&common.TRespDataSet{ArrData: tables, Total: int64(len(tables))})
 }
 
 func (mp *TMyPlugin) OnLineJob(params map[string]any) common.TResponse {
@@ -270,19 +276,11 @@ func (mp *TMyPlugin) GetTableColumns(connectOption map[string]string, tableName 
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	return *common.Success(&common.TRespDataSet{ArrData: cols, Total: int32(len(cols))})
+	return *common.Success(&common.TRespDataSet{ArrData: cols, Total: int64(len(cols))})
 }
 
 func (mp *TMyPlugin) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
 	return mp.workerProxy.GetSourceTableDDL(connectOption, tableName)
-}
-
-func (mp *TMyPlugin) GetDestConnOption(_ map[string]any) common.TResponse {
-	options, err := mp.workerProxy.GetDestConnOption()
-	if err != nil {
-		return *common.Failure(err.Error())
-	}
-	return *common.Success(&common.TRespDataSet{ArrData: options, Total: int32(len(options))})
 }
 
 func (mp *TMyPlugin) GetDestTables(connectOption map[string]string) common.TResponse {
@@ -290,7 +288,7 @@ func (mp *TMyPlugin) GetDestTables(connectOption map[string]string) common.TResp
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	return *common.Success(&common.TRespDataSet{ArrData: tables, Total: int32(len(tables))})
+	return *common.Success(&common.TRespDataSet{ArrData: tables, Total: int64(len(tables))})
 }
 func (mp *TMyPlugin) GetTableScript(connectOption map[string]string, tableName *string) common.TResponse {
 	script, err := mp.workerProxy.GenTableScript(connectOption, tableName)
@@ -305,7 +303,7 @@ func (mp *TMyPlugin) CheckSQLValid(connectOption map[string]string, sql, filterV
 	if err != nil {
 		return *common.Failure(err.Error())
 	}
-	return *common.RespData(int32(len(columns)), columns, nil)
+	return *common.RespData(int64(len(columns)), columns, nil)
 }
 
 func (mp *TMyPlugin) CheckSourceConnect(connectOption map[string]string) common.TResponse {
@@ -314,12 +312,7 @@ func (mp *TMyPlugin) CheckSourceConnect(connectOption map[string]string) common.
 	}
 	return *common.Success(nil)
 }
-func (mp *TMyPlugin) CheckDestConnect(connectOption map[string]string) common.TResponse {
-	if err := mp.workerProxy.CheckDestConnect(connectOption); err != nil {
-		return *common.Failure(err.Error())
-	}
-	return *common.Success(nil)
-}
+
 func (mp *TMyPlugin) CustomInterface(pluginOperate common.TPluginOperate) common.TResponse {
 	operateFunc, ok := operateMap[pluginOperate.OperateName]
 	if !ok {

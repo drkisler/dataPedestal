@@ -21,9 +21,6 @@ type TBufferData struct {
 	ColumnType proto.ColumnType
 	Precision  int64
 	Scale      int64
-	// func Initialize (proto.ColumnType) 初始化数据
-	// func Append(any) 将数据写入缓存
-	// func InPutData() proto.InputColumn  {Name string,Data ColInput}
 }
 
 func UInt128FromBin(val []byte) proto.UInt128 {

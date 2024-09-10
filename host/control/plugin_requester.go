@@ -1,6 +1,7 @@
 package control
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/host/module"
@@ -29,21 +30,18 @@ type TPluginRequester struct {
 // RunPlugins 系统启动时自动运行相关插件,记录相关的错误
 func RunPlugins() {
 	var req *TPluginRequester
-	plugins, err := module.GetAutoRunPlugins()
-	if err != nil {
-		common.LogServ.Error("module.GetAutoRunPlugins()", err.Error())
-		return
-	}
+	var err error
+	plugins := module.GetAutoRunPlugins()
 	for _, item := range plugins {
 		if req, err = NewPlugin(item.SerialNumber,
-			common.GenFilePath(initializers.HostConfig.PluginDir, item.PluginUUID, item.PluginFile)); err != nil {
-			common.LogServ.Error("RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFile, err.Error())
+			common.GenFilePath(initializers.HostConfig.PluginDir, item.PluginUUID, item.PluginFileName)); err != nil {
+			//common.LogServ.Error("RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFileName, err.Error())
 			return
 		}
 		resp := req.ImpPlugin.Load(item.PluginConfig)
 		if resp.Code < 0 {
 			req.Close()
-			common.LogServ.Error("加载插件%s失败:%s", item.PluginUUID, item.PluginFile, resp.Info)
+			//common.LogServ.Error("加载插件%s失败:%s", item.PluginUUID, item.PluginFileName, resp.Info)
 			return
 		}
 		//resp.Code 返回插件运行的端口，如果有的话
@@ -84,14 +82,32 @@ func CheckPluginExists(UUID string) bool {
 	_, ok := pluginList[UUID]
 	return ok
 }
-func LoadPlugin(UUID, serialNumber, pluginFile, config string) (int32, error) {
-	if CheckPluginExists(UUID) {
+func LoadPlugin(pluginUUID, serialNumber, pluginFile, config, pluginName, DBConnection, replyUrl string) (int64, error) {
+	if CheckPluginExists(pluginUUID) {
 		return -1, fmt.Errorf("该插件已经加载")
 	}
 	req, err := NewPlugin(serialNumber, pluginFile)
 	if err != nil {
 		return -1, err
 	}
+	//将config转换为map[string]any类型,并将pluginUUID和DBConnection加入到map中
+	configMap := make(map[string]any)
+	if err = json.Unmarshal([]byte(config), &configMap); err != nil {
+		return -1, err
+	}
+	configMap["plugin_uuid"] = pluginUUID
+	configMap["db_connection"] = DBConnection
+	configMap["plugin_name"] = pluginName
+	configMap["host_reply_url"] = replyUrl
+
+	var data []byte
+	data, err = json.Marshal(&configMap)
+	if err != nil {
+		return -1, err
+	}
+
+	config = string(data)
+
 	//插件加载的时候需要返回插件运行的端口，如果有的话
 	resp := req.ImpPlugin.Load(config)
 	if resp.Code < 0 {
@@ -99,7 +115,7 @@ func LoadPlugin(UUID, serialNumber, pluginFile, config string) (int32, error) {
 		return -1, fmt.Errorf("加载插件失败:%s", resp.Info)
 	}
 	//req.PluginPort = resp.Code
-	pluginList[UUID] = req
+	pluginList[pluginUUID] = req
 	return resp.Code, nil
 }
 func UnloadPlugin(UUID string) error {

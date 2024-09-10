@@ -7,6 +7,7 @@ import (
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol"
 	"go.nanomsg.org/mangos/v3/protocol/rep"
+	"go.nanomsg.org/mangos/v3/transport/all"
 	_ "go.nanomsg.org/mangos/v3/transport/all"
 	"sync"
 	"time"
@@ -21,8 +22,8 @@ type TMessageServer struct {
 	HandleRequest FHandleRequest
 }
 
-func NewMessageServer(url string, handler FHandleRequest) (*TMessageServer, error) {
-	if url == "" {
+func NewMessageServer(url []string, handler FHandleRequest) (*TMessageServer, error) {
+	if len(url) == 0 {
 		return nil, fmt.Errorf("listen url is empty")
 	}
 	var result TMessageServer
@@ -39,21 +40,22 @@ func NewMessageServer(url string, handler FHandleRequest) (*TMessageServer, erro
 	if sock, err = rep.NewSocket(); err != nil {
 		return nil, err
 	}
-
+	all.AddTransports(sock)
 	if err = sock.SetOption(mangos.OptionSendDeadline, time.Second*2); err != nil {
 		return nil, err
 	}
 	if err = sock.SetOption(mangos.OptionRecvDeadline, time.Second*2); err != nil {
 		return nil, err
 	}
-	if err = sock.Listen(url); err != nil {
-		return nil, err
+	for _, strUrl := range url {
+		if err = sock.Listen(strUrl); err != nil {
+			return nil, err
+		}
 	}
 	result.socket = sock
 	result.status = status
 	result.wg = &wg
 	result.HandleRequest = handler
-
 	return &result, nil
 
 }
@@ -67,7 +69,7 @@ func (ms *TMessageServer) Receive() {
 		var err error
 		if data, err = ms.socket.Recv(); err != nil {
 			if !errors.Is(err, protocol.ErrRecvTimeout) {
-				common.LogServ.Error(err)
+				//common.LogServ.Error(err)
 			}
 			time.Sleep(time.Millisecond * 200)
 			continue
@@ -75,7 +77,7 @@ func (ms *TMessageServer) Receive() {
 		handleResult := ms.HandleRequest(data)
 		if err = ms.socket.Send(handleResult); err != nil {
 			if !errors.Is(err, protocol.ErrSendTimeout) {
-				common.LogServ.Error(err)
+				//common.LogServ.Error(err)
 			}
 			continue
 		}

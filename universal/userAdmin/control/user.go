@@ -63,7 +63,7 @@ func (uc *TUserControl) AddUser() *common.TResponse {
 	if err != nil {
 		return common.Failure(err.Error())
 	}
-	return common.ReturnInt(int(userid))
+	return common.ReturnInt(int64(userid))
 }
 func (uc *TUserControl) AlterUser() *common.TResponse {
 	err := uc.checkAdmin()

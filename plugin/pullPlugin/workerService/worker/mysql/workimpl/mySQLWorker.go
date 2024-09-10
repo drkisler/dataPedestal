@@ -1,6 +1,7 @@
 package workimpl
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"github.com/ClickHouse/ch-go/proto"
@@ -22,7 +23,7 @@ type TMySQLWorker struct {
 var notStringTypes = []string{"UNSIGNED TINYINT", "TINYINT", "UNSIGNED SMALLINT", "SMALLINT", "UNSIGNED INT",
 	"UNSIGNED MEDIUMINT", "INT", "MEDIUMINT", "UNSIGNED BIGINT", "BIGINT", "FLOAT", "DOUBLE", "DATE", "DATETIME", "TIMESTAMP"}
 
-func NewMySQLWorker(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error) {
+func NewMySQLWorker(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error) {
 	if connectOption == nil {
 		return &TMySQLWorker{}, nil
 	}
@@ -64,7 +65,7 @@ func NewMySQLWorker(connectOption map[string]string, connectBuffer int, keepConn
 	if len(arrParam) > 0 {
 		strConnect = fmt.Sprintf("%s?%s", strConnect, strings.Join(arrParam, "&"))
 	}
-	dbw, err := worker.NewWorker("mysql", strConnect, connectBuffer, keepConnect)
+	dbw, err := worker.NewWorker("mysql", strConnect, connectBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (mSQL *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, err
 		" when data_type = 'date' then 'date' when data_type = 'datetime' then 'datetime' when data_type = 'timestamp' then 'timestamp' " +
 		" else 'string' " +
 		"end date_type " +
-		"from INFORMATION_SCHEMA.COLUMNS where table_schema=? and table_name=? " +
+		"from INFORMATION_SCHEMA.COLUMNS where table_schema=$1 and table_name=$%2 " +
 		"order by ordinal_position"
 
 	//"select column_name column_code,coalesce(column_comment,'') column_name,if(column_key='PRI','是','否') is_key " +
@@ -118,7 +119,7 @@ func (mSQL *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, err
 }
 func (mSQL *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 	strSQL := "select table_name table_code,coalesce(table_comment,'') table_comment " +
-		"from information_schema.tables where table_schema=?"
+		"from information_schema.tables where table_schema=$1"
 	rows, err := mSQL.DataBase.Query(strSQL, mSQL.schema)
 	if err != nil {
 		return nil, err
@@ -397,7 +398,8 @@ func (mSQL *TMySQLWorker) GenTableScript(tableName string) (*string, error) {
 	result := sb.String()
 	return &result, nil
 }
-func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{}, clickHouseClient *clickHouse.TClickHouseClient) (int64, error) {
+func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{}, iTimestamp int64) (int64, error) {
+	var clickHouseClient *common.TClickHouseDriver
 	rows, ok := data.(*sql.Rows)
 	if !ok {
 		return -1, fmt.Errorf("data is not *sql.Rows")
@@ -652,7 +654,7 @@ func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{
 			}
 		}
 		// 添加时间戳
-		if err = buffer[iLen].Append(clickHouseClient.GetJobStartTime()); err != nil {
+		if err = buffer[iLen].Append(iTimestamp); err != nil {
 			return -1, err
 
 		}
@@ -664,7 +666,11 @@ func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{
 			for i, val := range buffer {
 				clickHouseValue[i] = val.InPutData()
 			}
-			if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+			if clickHouseClient, err = common.GetClickHouseDriver(nil); err != nil {
+				return -1, err
+			}
+			ctx := context.Background()
+			if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 				return -1, err
 			}
 			for _, val := range buffer {
@@ -672,8 +678,8 @@ func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{
 			}
 			rowCount = 0
 		}
-
 	}
+
 	if isEmpty {
 		return 0, nil
 	}
@@ -681,14 +687,14 @@ func (mSQL *TMySQLWorker) WriteData(tableName string, batch int, data interface{
 		for i, val := range buffer {
 			clickHouseValue[i] = val.InPutData()
 		}
-		if err = clickHouseClient.LoadData(tableName, clickHouseValue); err != nil {
+		ctx := context.Background()
+		if err = clickHouseClient.LoadData(ctx, tableName, clickHouseValue); err != nil {
 			return -1, err
 		}
 		for _, val := range buffer {
 			val.Reset()
 		}
 	}
-
 	return totalCount, nil
 }
 func (mSQL *TMySQLWorker) GetConnOptions() []string {

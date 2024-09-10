@@ -61,109 +61,20 @@ func (pRPC *PluginRPC) Running() TResponse {
 	return result
 }
 
-func (pRPC *PluginRPC) GetErrLog(params string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.GetErrLog", params, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) GetErrLogDate() TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.GetErrLogDate", new(interface{}), &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) DelErrOldLog(strDate string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.DelErrOldLog", strDate, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) DelErrLog(params string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.DelErrLog", params, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-
-func (pRPC *PluginRPC) GetInfoLog(params string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.GetInfoLog", params, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) GetInfoLogDate() TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.GetInfoLogDate", new(interface{}), &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) DelInfoOldLog(strDate string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.DelInfoOldLog", strDate, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) DelInfoLog(params string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.DelInfoLog", params, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-
-func (pRPC *PluginRPC) GetDebugLog(params string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.GetDebugLog", params, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) GetDebugLogDate() TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.GetDebugLogDate", new(interface{}), &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) DelDebugOldLog(strDate string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.DelDebugOldLog", strDate, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
-func (pRPC *PluginRPC) DelDebugLog(params string) TResponse {
-	var result TResponse
-	err := pRPC.client.Call("Plugin.DelDebugLog", params, &result)
-	if err != nil {
-		return *Failure(err.Error())
-	}
-	return result
-}
 func (pRPC *PluginRPC) CustomInterface(pluginOperate TPluginOperate) TResponse {
 	var result TResponse
 	err := pRPC.client.Call("Plugin.CustomInterface", pluginOperate, &result)
 	if err != nil {
 		return *Failure(err.Error())
+	}
+	return result
+}
+
+func (pRPC *PluginRPC) GetSystemUsage() string {
+	var result string
+	err := pRPC.client.Call("Plugin.GetSystemUsage", new(interface{}), &result)
+	if err != nil {
+		return `{"cpu_usage":"unknown","memory_usage":0}`
 	}
 	return result
 }

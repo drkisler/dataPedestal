@@ -1,13 +1,14 @@
 package common
 
 type TPullJob struct {
-	UserID         int32  `json:"user_id,omitempty"`
-	JobID          int32  `json:"job_id,omitempty"`
-	JobUUID        string `json:"job_uuid,omitempty"` //任务完成后发布消息用
-	JobName        string `json:"job_name,omitempty"`
-	SourceDbConn   string `json:"source_db_conn,omitempty"`
-	DestDbConn     string `json:"dest_db_conn,omitempty"`
-	KeepConnect    string `json:"keep_connect,omitempty"`
+	UserID int32 `json:"user_id,omitempty"`
+	JobID  int32 `json:"job_id,omitempty"`
+	//JobUUID        string `json:"job_uuid,omitempty"` //任务完成后发布消息用,暂时不用
+	JobName      string `json:"job_name,omitempty"`
+	PluginUUID   string `json:"plugin_uuid,omitempty"`
+	SourceDbConn string `json:"source_db_conn,omitempty"`
+	//DestDbConn     string `json:"dest_db_conn,omitempty"`
+	//KeepConnect    string `json:"keep_connect,omitempty"`
 	ConnectBuffer  int    `json:"connect_buffer,omitempty"`
 	CronExpression string `json:"cron_expression,omitempty"`
 	SkipHour       string `json:"skip_hour,omitempty"`

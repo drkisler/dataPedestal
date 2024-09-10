@@ -52,19 +52,6 @@ func GetJobs(userID int32, params map[string]any) common.TResponse {
 	return *job.GetJobs(onlineJobIDs)
 }
 
-func GetJobUUID(userID int32, params map[string]any) common.TResponse {
-	if userID == 0 {
-		return *common.Failure("need UserID")
-	}
-	job, err := ctl.ParsePullJobControl(params)
-	if err != nil {
-		return *common.Failure(err.Error())
-	}
-	job.UserID = userID
-	job.OperatorID = userID
-	return *job.GetPullJobUUID()
-}
-
 func SetJobStatus(userID int32, params map[string]any) common.TResponse {
 	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
@@ -117,11 +104,6 @@ func GetDatabaseType(_ int32, params map[string]any) common.TResponse {
 	return (*myPlugin).GetDatabaseType(params)
 }
 
-func GetDestConnOption(_ int32, params map[string]any) common.TResponse {
-	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetDestConnOption(params)
-}
-
 func CheckSourceConnect(_ int32, params map[string]any) common.TResponse {
 	connOption, err := common.ConvertToStrMap(params)
 	if err != nil {
@@ -129,15 +111,6 @@ func CheckSourceConnect(_ int32, params map[string]any) common.TResponse {
 	}
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).CheckSourceConnect(connOption)
-}
-
-func CheckDestConnect(_ int32, params map[string]any) common.TResponse {
-	connOption, err := common.ConvertToStrMap(params)
-	if err != nil {
-		return *common.Failure(err.Error())
-	}
-	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckDestConnect(connOption)
 }
 
 func CheckJobLoaded(_ int32, params map[string]any) common.TResponse {

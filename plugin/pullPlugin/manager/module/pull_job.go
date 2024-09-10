@@ -1,11 +1,10 @@
 package module
 
 import (
+	"context"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
-	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"time"
 )
 
@@ -14,60 +13,49 @@ type TPullJob struct {
 }
 
 func (pj *TPullJob) AddJob() (int64, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return -1, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	pj.JobUUID = uuid.New().String()
-	const strSQLGetMaxID = "with cet_pull as(select job_id from PullJob) select " +
-		"min(a.job_id)+1 from (select job_id from cet_pull union all select 0) a left join cet_pull b on a.job_id+1=b.job_id " +
-		"where b.job_id is null"
-	rows, err := dbs.QuerySQL(strSQLGetMaxID)
-	if err != nil {
-		return -1, err
+	strSQL := fmt.Sprintf("with cet_pull as(select job_id from %s.pull_job) ,"+
+		"cet_id as (select min(a.job_id)+1 job_id from (select job_id from cet_pull union all select 0) a left join cet_pull b on a.job_id+1=b.job_id "+
+		"where b.job_id is null) insert "+
+		"into %s.pull_job(user_id,job_id,job_name,plugin_uuid,source_db_conn,connect_buffer,cron_expression,skip_hour,is_debug,status)"+
+		"select $1,job_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11 "+
+		"from cet_id returning job_id", dbs.GetSchema(), dbs.GetSchema())
+
+	rows, qError := dbs.QuerySQL(strSQL, pj.UserID, pj.JobName, pj.PluginUUID, pj.SourceDbConn, pj.ConnectBuffer,
+		pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status)
+	if qError != nil {
+		return -1, qError
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var result any
+	defer rows.Close()
+	var result int64
 	for rows.Next() {
 		if err = rows.Scan(&result); err != nil {
 			return -1, err
 		}
 	}
-	pj.JobID = int32(result.(int64))
-	const strSQL = "insert " +
-		"into PullJob(user_id,job_id,job_uuid,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression,skip_hour,is_debug,status) " +
-		"values(?,?,?,?,?,?,?,?,?,?,?,?)"
-	if err = dbs.ExecuteSQL(strSQL, pj.UserID, pj.JobID, pj.JobUUID, pj.JobName, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer,
-		pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status); err != nil {
-		return -1, err
-	}
-	return result.(int64), nil
+	return result, nil
 }
 
 func (pj *TPullJob) InitJobByID() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strSQL = "select " +
-		"user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression, is_debug,skip_hour,status,last_run " +
-		"from PullJob where job_id = ?"
-	rows, err := dbs.Queryx(strSQL, pj.JobID)
+	strSQL := fmt.Sprintf("select "+
+		"user_id,job_id,job_name,plugin_uuid,source_db_conn,connect_buffer,cron_expression,skip_hour,is_debug,status,last_run "+
+		"from %s.pull_job where job_id = $1", dbs.GetSchema())
+
+	rows, err := dbs.QuerySQL(strSQL, pj.JobID)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var cnt = 0
 	for rows.Next() {
-		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.SourceDbConn, &pj.DestDbConn, &pj.KeepConnect,
+		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.PluginUUID, &pj.SourceDbConn,
 			&pj.ConnectBuffer, &pj.CronExpression, &pj.IsDebug, &pj.SkipHour, &pj.Status, &pj.LastRun); err != nil {
 			return err
 		}
@@ -80,99 +68,78 @@ func (pj *TPullJob) InitJobByID() error {
 }
 
 func (pj *TPullJob) InitJobByName() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
+	strSQL := fmt.Sprintf("select "+
+		"user_id,job_id,job_name,plugin_uuid,source_db_conn,connect_buffer,cron_expression,skip_hour,is_debug,status,last_run "+
+		"from %s.pull_job where job_name = $1", dbs.GetSchema())
 
-	const strSQL = "select " +
-		"user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression, is_debug,skip_hour,status,last_run " +
-		"from PullJob where job_name = ?"
-	rows, err := dbs.Queryx(strSQL, pj.JobName)
+	rows, err := dbs.QuerySQL(strSQL, pj.JobName)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var cnt = 0
 	for rows.Next() {
-		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.SourceDbConn, &pj.DestDbConn, &pj.KeepConnect,
+		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.PluginUUID, &pj.SourceDbConn,
 			&pj.ConnectBuffer, &pj.CronExpression, &pj.IsDebug, &pj.SkipHour, &pj.Status, &pj.LastRun); err != nil {
 			return err
 		}
 		cnt++
 	}
 	if cnt == 0 {
-		return fmt.Errorf("JobName %s不存在", pj.JobName)
+		return fmt.Errorf("job_name %s不存在", pj.JobName)
 	}
 	return nil
 }
 
 func (pj *TPullJob) UpdateJob() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-
-	const strSQL = "update  " +
-		"PullJob set job_name=?,source_db_conn=?,dest_db_conn=?,keep_connect=?,connect_buffer=?,cron_expression=?,skip_hour=?, is_debug=?, status=?  " +
-		"where job_id= ? "
-	return dbs.ExecuteSQL(strSQL, pj.JobName, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer, pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status, pj.JobID)
+	strSQL := fmt.Sprintf("update "+
+		"%s.pull_job set job_name=$1,plugin_uuid=$2,source_db_conn=$3,connect_buffer=$6,cron_expression=$7,skip_hour=$8, is_debug=$9, status=$10"+
+		" where job_id = $11", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pj.JobName, pj.PluginUUID, pj.SourceDbConn, pj.ConnectBuffer, pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status, pj.JobID)
 }
 
 func (pj *TPullJob) DeleteJob() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
+	strSQL := fmt.Sprintf("delete "+
+		"from %s.pull_job where job_id= $1 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pj.JobID)
 
-	const strSQL = "delete " +
-		"from PullJob where job_id= ? "
-	return dbs.ExecuteSQL(strSQL, pj.JobID)
 }
 
 func (pj *TPullJob) GetJobs(ids *string) ([]common.TPullJob, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	strSQL := fmt.Sprintf("WITH RECURSIVE cte(id, val) AS ("+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER), "+
-		"SUBSTR(val, INSTR(val, ',')+1) "+
-		"FROM (SELECT '%s' AS val)"+
-		" UNION ALL "+
-		"SELECT CAST(SUBSTR(val, 1, INSTR(val, ',')-1) AS INTEGER),"+
-		"       SUBSTR(val, INSTR(val, ',')+1) "+
-		" FROM cte"+
-		" WHERE INSTR(val, ',')>0"+
-		")"+
-		"SELECT a.user_id,a.job_id,a.job_name,a.source_db_conn,a.dest_db_conn,a.keep_connect,a.connect_buffer,"+
-		"a.cron_expression, a.is_debug,a.skip_hour,a.status,a.last_run,COALESCE(c.status,''),COALESCE(c.ErrorInfo,'') "+
-		"from PullJob a inner join cte b on a.job_id=b.id left join PullJobLog c on a.job_id=c.job_id and a.last_run=c.start_time "+
-		"where a.user_id=? order by a.job_id", *ids)
+
+	strSQL := fmt.Sprintf("SELECT a.user_id,a.job_id,a.job_name,a.plugin_uuid,a.plugin_uuid,a.source_db_conn,a.connect_buffer,"+
+		"a.cron_expression,a.is_debug,a.skip_hour,a.status,a.last_run,COALESCE(c.status,''),COALESCE(c.error_info,'') "+
+		"from (select * from %s.pull_job where user_id=$1 and job_id = any(array(SELECT unnest(string_to_array('%s', ','))::bigint)) a "+
+		"left join %s.pull_job_log c on a.job_id=c.job_id and a.last_run=c.start_time "+
+		"order by a.job_id", dbs.GetSchema(), *ids, dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, pj.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var result []common.TPullJob
 	for rows.Next() {
 		var p common.TPullJob
 		var strStatus string
 		var strError string
-		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer,
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.PluginUUID, &p.SourceDbConn, &p.ConnectBuffer,
 			&p.CronExpression, &p.IsDebug, &p.SkipHour, &p.Status, &p.LastRun, &strStatus, &strError); err != nil {
 			return nil, err
 		}
@@ -190,24 +157,22 @@ func (pj *TPullJob) GetJobs(ids *string) ([]common.TPullJob, error) {
 }
 
 func (pj *TPullJob) GetPullJobIDs() ([]int64, error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	strSQLFilter := "where user_id= ?"
+
+	strSQLFilter := "where user_id= $1"
 	if pj.JobName != "" {
 		strSQLFilter = fmt.Sprintf("%s and job_name like '%s'", strSQLFilter, "%"+pj.JobName+"%")
 	}
-	rows, err := dbs.QuerySQL("select "+
-		"job_id from PullJob "+strSQLFilter, pj.UserID)
+	strSQL := fmt.Sprintf("select "+
+		"job_id from %s.pull_job %s", dbs.GetSchema(), strSQLFilter)
+	rows, err := dbs.QuerySQL(strSQL, pj.UserID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	var result []int64
 	for rows.Next() {
 		var jobID int32
@@ -220,39 +185,33 @@ func (pj *TPullJob) GetPullJobIDs() ([]int64, error) {
 }
 
 func (pj *TPullJob) SetJobStatus() error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	const strSQL = "update " +
-		"PullJob set status =? where job_id= ? "
-	return dbs.ExecuteSQL(strSQL, pj.Status, pj.JobID)
+	strSQL := fmt.Sprintf("update "+
+		"%s.pull_job set status =$1 where job_id= $2 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pj.Status, pj.JobID)
 }
 
 func GetAllJobs() (data []TPullJob, total int, err error) {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, 0, err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
 
-	const strSQL = "select " +
-		"user_id,job_id,job_name,source_db_conn,dest_db_conn,keep_connect,connect_buffer, cron_expression,skip_hour, is_debug, status,last_run " +
-		"from PullJob where status=?"
+	strSQL := fmt.Sprintf("select "+
+		"user_id,job_id,job_name,plugin_uuid,source_db_conn,connect_buffer, cron_expression,skip_hour, is_debug, status,last_run "+
+		"from %s.pull_job where status=$1", dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, common.STENABLED)
 	if err != nil {
 		return nil, 0, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 	total = 0
 	for rows.Next() {
 		var p TPullJob
-		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer,
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.PluginUUID, &p.SourceDbConn, &p.ConnectBuffer,
 			&p.CronExpression, &p.SkipHour, &p.IsDebug, &p.Status, &p.LastRun); err != nil {
 			return nil, 0, err
 		}
@@ -263,57 +222,11 @@ func GetAllJobs() (data []TPullJob, total int, err error) {
 }
 
 func (pj *TPullJob) SetLastRun(iStartTime int64) error {
-	dbs, err := metaDataBase.GetDbServ()
+	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return err
 	}
-	dbs.Lock()
-	defer dbs.Unlock()
-
-	const strSQL = "update " +
-		"PullJob set last_run =? where job_id= ? "
-	return dbs.ExecuteSQL(strSQL, iStartTime, pj.JobID)
-}
-
-func (pj *TPullJob) GetPullJobUUID() (string, error) {
-	dbs, err := metaDataBase.GetDbServ()
-	if err != nil {
-		return "", err
-	}
-	dbs.Lock()
-	defer dbs.Unlock()
-	strSQL := "select job_uuid " +
-		"from PullJob where user_id= ?"
-	if pj.JobName != "" {
-		strSQL = fmt.Sprintf("%s and job_name = ?", strSQL)
-	} else if pj.JobID > 0 {
-		strSQL = fmt.Sprintf("%s and job_id = ?", strSQL)
-	} else {
-		return "", fmt.Errorf("JobID或JobName不能为空")
-	}
-	var rows *sqlx.Rows
-
-	if pj.JobName != "" {
-		rows, err = dbs.QuerySQL(strSQL, pj.UserID, pj.JobName)
-	} else if pj.JobID > 0 {
-		rows, err = dbs.QuerySQL(strSQL, pj.UserID, pj.JobID)
-	}
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-	var cnt = 0
-	var jobUUID string
-	for rows.Next() {
-		if err = rows.Scan(&jobUUID); err != nil {
-			return "", err
-		}
-		cnt++
-	}
-	if cnt == 0 {
-		return "", fmt.Errorf("JobID或JobName不存在")
-	}
-	return jobUUID, nil
+	strSQL := fmt.Sprintf("update "+
+		"%s.pull_job set last_run =$1 where job_id= $2 ", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, iStartTime, pj.JobID)
 }

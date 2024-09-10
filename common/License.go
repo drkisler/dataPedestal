@@ -1,7 +1,10 @@
 package common
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -23,7 +26,7 @@ func GenerateProductCode(pluginUUid, fileHash string) string {
 			}
 		}
 	} else {
-		mac = append(mac, os.Getenv("default_key"))
+		mac = append(mac, GetDefaultKey())
 	}
 
 	h := sha256.New()
@@ -65,11 +68,7 @@ func VerifyLicense(key, license string) bool {
 */
 
 func GetDefaultKey() string {
-	result := os.Getenv("default_key")
-	if result == "" {
-		return "Enjoy0rZpJAcL6OnUsORc3XohRpIBUjy"
-	}
-	return result
+	return "Enjoy0rZpJAcL6OnUsORc3XohRpIBUjy"
 }
 
 func FileHash(filePath string) (string, error) {
@@ -81,4 +80,23 @@ func FileHash(filePath string) (string, error) {
 	hasher.Write(file)
 	hashValue := hasher.Sum(nil)
 	return hex.EncodeToString(hashValue), nil
+}
+
+func DecryptAES(cipherText, key string) (string, error) {
+	cipherTextBytes, err := base64.StdEncoding.DecodeString(cipherText)
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher([]byte(key))
+	if err != nil {
+		return "", err
+	}
+	if len(cipherTextBytes) < aes.BlockSize {
+		return "", fmt.Errorf("cipherText too short")
+	}
+	iv := cipherTextBytes[:aes.BlockSize]
+	cipherTextBytes = cipherTextBytes[aes.BlockSize:]
+	mode := cipher.NewCFBDecrypter(block, iv)
+	mode.XORKeyStream(cipherTextBytes, cipherTextBytes)
+	return string(cipherTextBytes), nil
 }

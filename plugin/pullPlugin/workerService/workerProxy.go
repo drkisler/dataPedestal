@@ -5,7 +5,8 @@ import (
 	"github.com/drkisler/dataPedestal/common"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
-	"github.com/drkisler/dataPedestal/universal/logAdmin"
+	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker"
+	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/go-co-op/gocron/v2"
 	"strings"
 	"sync"
@@ -18,15 +19,15 @@ var NewWorker TNewWorker
 
 // TCheckFunc 用于异步在线测试任务和表
 type TCheckFunc = func()
-type TNewWorker = func(connectOption map[string]string, connectBuffer int, keepConnect bool) (clickHouse.IPullWorker, error)
+type TNewWorker = func(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error)
 type TWorkerProxy struct {
 	SignChan  chan int
 	CheckChan chan TCheckFunc
 	scheduler gocron.Scheduler
 	jobs      map[string]*TWorkerJob
-	logger    *logAdmin.TLoggerAdmin
 	status    *common.TStatus
 	wg        *sync.WaitGroup
+	replyURL  string
 }
 
 type TScheduler struct {
@@ -35,7 +36,7 @@ type TScheduler struct {
 }
 
 // NewWorkerProxy 初始化
-func NewWorkerProxy() (*TWorkerProxy, error) {
+func NewWorkerProxy(replyMsgUrl string) (*TWorkerProxy, error) {
 	var err error
 	var scheduler gocron.Scheduler
 	var wg sync.WaitGroup
@@ -53,6 +54,7 @@ func NewWorkerProxy() (*TWorkerProxy, error) {
 		jobs:      runJob,
 		status:    status,
 		wg:        &wg,
+		replyURL:  replyMsgUrl,
 	}, nil
 }
 
@@ -80,7 +82,7 @@ func (pw *TWorkerProxy) StartCheckPool() {
 		}
 	}(pw.wg)
 }
-func (pw *TWorkerProxy) Start(logger *logAdmin.TLoggerAdmin) error {
+func (pw *TWorkerProxy) Start() error {
 	// get all jobs
 	jobs, _, err := ctl.GetAllJobs()
 	if err != nil {
@@ -90,7 +92,7 @@ func (pw *TWorkerProxy) Start(logger *logAdmin.TLoggerAdmin) error {
 	for _, job := range jobs {
 		var workerJob *TWorkerJob
 		var pullJob gocron.Job
-		if workerJob, err = NewWorkerJob(&job, logger); err != nil {
+		if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
 			return err
 		}
 		if pullJob, err = pw.scheduler.NewJob(
@@ -103,7 +105,6 @@ func (pw *TWorkerProxy) Start(logger *logAdmin.TLoggerAdmin) error {
 		workerJob.JobUUID = pullJob.ID()
 		pw.jobs[job.JobName] = workerJob
 	}
-	pw.logger = logger
 	pw.scheduler.Start()
 	pw.status.SetRunning(true)
 	pw.StartCheckPool()
@@ -128,7 +129,7 @@ func (pw *TWorkerProxy) CheckJob(jobName string) error {
 	if err = job.InitJobByName(); err != nil {
 		return err
 	}
-	if workerJob, err = NewWorkerJob(&job, pw.logger); err != nil {
+	if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
 		return err
 	}
 	workerJob.SkipHour = []int{}
@@ -147,7 +148,7 @@ func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 	if err = job.InitJobByName(); err != nil {
 		return err
 	}
-	if workerJob, err = NewWorkerJob(&job, pw.logger); err != nil {
+	if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
 		return err
 	}
 	workerJob.SkipHour = []int{}
@@ -157,7 +158,7 @@ func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 		tableLog.TableID = tableID
 		var iStartTime int64
 		if iStartTime, err = tableLog.StartTableLog(); err != nil {
-			pw.logger.WriteError(fmt.Sprintf("start table log failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()))
+			logService.LogWriter.WriteError(fmt.Sprintf("start table log failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
 		}
 		var tableInfo ctl.TPullTableControl
@@ -165,12 +166,12 @@ func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 		tableInfo.TableID = tableID
 		if err = tableInfo.SetLastRun(iStartTime); err != nil {
 			_ = tableLog.StopTableLog(iStartTime, err.Error())
-			pw.logger.WriteError(fmt.Sprintf("set last run failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()))
+			logService.LogWriter.WriteError(fmt.Sprintf("set last run failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
 		}
-		if tableLog.RecordCount, err = workerJob.PullTable(tableID); err != nil {
+		if tableLog.RecordCount, err = workerJob.PullTable(tableID, iStartTime); err != nil {
 			_ = tableLog.StopTableLog(iStartTime, err.Error())
-			pw.logger.WriteError(fmt.Sprintf("pull table failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()))
+			logService.LogWriter.WriteError(fmt.Sprintf("pull table failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
 		}
 		_ = tableLog.StopTableLog(iStartTime, "")
@@ -190,7 +191,7 @@ func (pw *TWorkerProxy) OnLineJob(jobName string) error {
 			return err
 		}
 
-		if workerJob, err = NewWorkerJob(&job, pw.logger); err != nil {
+		if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
 			return err
 		}
 		if err = workerJob.EnableJob(); err != nil {
@@ -249,162 +250,97 @@ func (pw *TWorkerProxy) StopRun() {
 }
 
 func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
-	worker, err := NewWorker(nil, 2, false)
+	pullWorker, err := NewWorker(nil, 2)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.GetConnOptions(), nil
+	return pullWorker.GetConnOptions(), nil
 }
 
 func (pw *TWorkerProxy) GetSourceQuoteFlag() string {
-	worker, _ := NewWorker(nil, 2, false)
+	pullWorker, _ := NewWorker(nil, 2)
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.GetQuoteFlag()
+	return pullWorker.GetQuoteFlag()
 }
 
 func (pw *TWorkerProxy) GetDatabaseType() string {
-	worker, _ := NewWorker(nil, 2, false)
+	pullWorker, _ := NewWorker(nil, 2)
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.GetDatabaseType()
+	return pullWorker.GetDatabaseType()
 }
 
 func (pw *TWorkerProxy) GetSourceTables(connectOption map[string]string) ([]common.TableInfo, error) {
-	worker, err := NewWorker(connectOption, 2, false)
+	pullWorker, err := NewWorker(connectOption, 2)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.GetTables()
+	return pullWorker.GetTables()
 }
 
 func (pw *TWorkerProxy) GetTableColumns(connectOption map[string]string, tableName *string) ([]common.ColumnInfo, error) {
-	worker, err := NewWorker(connectOption, 2, false)
+	pullWorker, err := NewWorker(connectOption, 2)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.GetColumns(*tableName)
+	return pullWorker.GetColumns(*tableName)
 }
 func (pw *TWorkerProxy) GetSourceTableDDL(connectOption map[string]string, tableCode *string) (*string, error) {
-	worker, err := NewWorker(connectOption, 2, false)
+	pullWorker, err := NewWorker(connectOption, 2)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.GetSourceTableDDL(*tableCode)
+	return pullWorker.GetSourceTableDDL(*tableCode)
 }
 
 func (pw *TWorkerProxy) GenTableScript(connectOption map[string]string, tableCode *string) (*string, error) {
-	worker, err := NewWorker(connectOption, 2, false)
+	pullWorker, err := NewWorker(connectOption, 2)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.GenTableScript(*tableCode)
+	return pullWorker.GenTableScript(*tableCode)
 }
 
-func (pw *TWorkerProxy) GetDestConnOption() ([]string, error) {
-	return clickHouse.GetConnOptions(), nil
-}
-
-func (pw *TWorkerProxy) GetDestTableNames(connectOption map[string]string) ([]common.TableInfo, error) {
-	var option struct {
-		Host     string `json:"host"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-		Database string `json:"dbname"`
-	}
-	var ok bool
-	if option.Host, ok = connectOption["host"]; !ok {
-		return nil, fmt.Errorf("can not find host in connectStr")
-	}
-	if option.User, ok = connectOption["user"]; !ok {
-		return nil, fmt.Errorf("can not find user in connectStr")
-	}
-	if option.Password, ok = connectOption["password"]; !ok {
-		return nil, fmt.Errorf("can not find password in connectStr")
-	}
-	if option.Database, ok = connectOption["dbname"]; !ok {
-		return nil, fmt.Errorf("can not find dbname in connectStr")
-	}
-
-	client, err := clickHouse.NewClickHouseClient(option.Host, option.Database, option.User, option.Password)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = client.CloseConnect
-	}()
-	return client.GetTableNames()
+func (pw *TWorkerProxy) GetDestTableNames(_ map[string]string) ([]common.TableInfo, error) {
+	return clickHouse.GetTableNames()
 }
 
 func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql, filterVal *string) ([]common.ColumnInfo, error) {
-	worker, err := NewWorker(connectOption, 2, false)
+	pullWorker, err := NewWorker(connectOption, 2)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = worker.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
-	return worker.CheckSQLValid(sql, filterVal)
+	return pullWorker.CheckSQLValid(sql, filterVal)
 }
 
 func (pw *TWorkerProxy) CheckSourceConnect(connectOption map[string]string) error {
-	worker, err := NewWorker(connectOption, 2, false)
+	pullWorker, err := NewWorker(connectOption, 2)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = worker.CloseConnect
-	}()
-	return nil
-}
-
-func (pw *TWorkerProxy) CheckDestConnect(connectOption map[string]string) error {
-	var option struct {
-		Host     string `json:"host"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-		Database string `json:"dbname"`
-	}
-	var ok bool
-	if option.Host, ok = connectOption["host"]; !ok {
-		return fmt.Errorf("can not find host in connectStr")
-	}
-
-	if option.User, ok = connectOption["user"]; !ok {
-		return fmt.Errorf("can not find user in connectStr")
-	}
-
-	if option.Password, ok = connectOption["password"]; !ok {
-		return fmt.Errorf("can not find password in connectStr")
-	}
-
-	if option.Database, ok = connectOption["dbname"]; !ok {
-		return fmt.Errorf("can not find dbname in connectStr")
-	}
-
-	client, err := clickHouse.NewClickHouseClient(option.Host, option.Database, option.User, option.Password)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = client.CloseConnect
+		_ = pullWorker.CloseConnect
 	}()
 	return nil
 }

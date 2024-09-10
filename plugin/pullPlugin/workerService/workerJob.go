@@ -2,57 +2,68 @@ package workerService
 
 import (
 	"fmt"
-	"slices"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/drkisler/dataPedestal/common"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
-	"github.com/drkisler/dataPedestal/universal/logAdmin"
+	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker"
+	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
+	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/google/uuid"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type TWorkerJob struct {
 	pluginBase.TBasePlugin
-	JobUUID          uuid.UUID
-	JobID            int32
-	worker           clickHouse.IPullWorker
-	clickHouseClient *clickHouse.TClickHouseClient
-	SourceDbConn     string //datasource
-	DestDbConn       string //数据中心的数据库
-	KeepConnect      bool
-	ConnectBuffer    int
-	SkipHour         []int
-	isWorking        bool //实时的工作状态
-	Enabled          bool //是否启用
+	JobUUID   uuid.UUID
+	JobID     int32
+	workerJob worker.IPullWorker
+	//clickHouseClient *clickHouse.TClickHouseClient
+	msgClient     *messager.TMessageClient
+	SourceDbConn  string //datasource
+	DestDbConn    string //数据中心的数据库
+	ReplyURL      string
+	KeepConnect   bool
+	ConnectBuffer int
+	SkipHour      []int
+	isWorking     bool //实时的工作状态
+	Enabled       bool //是否启用
 }
 
-func NewWorkerJob(job *module.TPullJob, logger *logAdmin.TLoggerAdmin) (*TWorkerJob, error) {
+func NewWorkerJob(job *module.TPullJob, replyUrl string) (*TWorkerJob, error) {
 	var err error
 	var skipHour []int
-	var worker clickHouse.IPullWorker
-	var chClient *clickHouse.TClickHouseClient
+	var workerJob worker.IPullWorker
+	//var chClient *clickHouse.TClickHouseClient
 	var connOption map[string]string
 	strConn := job.SourceDbConn
 	if connOption, err = common.StringToMap(&strConn); err != nil {
 		return nil, err
 	}
-	if worker, err = NewWorker(connOption, job.ConnectBuffer, job.KeepConnect == common.STYES); err != nil {
+	if workerJob, err = NewWorker(connOption, job.ConnectBuffer); err != nil {
 		return nil, err
 	}
+	/*
+		strConn = job.DestDbConn
+		if connOption, err = common.StringToMap(&strConn); err != nil {
+			return nil, err
+		}
 
-	strConn = job.DestDbConn
-	if connOption, err = common.StringToMap(&strConn); err != nil {
-		return nil, err
-	}
+		if chClient, err = clickHouse.NewClickHouseClient(
+			connOption["host"],
+			connOption["dbname"],
+			connOption["user"],
+			connOption["password"],
+			connOption["cluster"],
+		); err != nil {
+			return nil, err
+		}
+	*/
 
-	if chClient, err = clickHouse.NewClickHouseClient(connOption["host"], connOption["dbname"], connOption["user"], connOption["password"]); err != nil {
-		return nil, err
-	}
 	if skipHour, err = func(source string) ([]int, error) {
 		if source == "" {
 			return []int{}, nil
@@ -67,21 +78,28 @@ func NewWorkerJob(job *module.TPullJob, logger *logAdmin.TLoggerAdmin) (*TWorker
 		}
 		return arr, nil
 	}(job.SkipHour); err != nil {
-		logger.WriteError(fmt.Sprintf("解析静默时间参数%s失败：%s", job.SkipHour, err.Error()))
+		logService.LogWriter.WriteError(fmt.Sprintf("解析静默时间参数%s失败：%s", job.SkipHour, err.Error()), false)
+		return nil, err
+	}
+
+	MsgClient, err := messager.NewMessageClient()
+	if err != nil {
 		return nil, err
 	}
 
 	return &TWorkerJob{
-		JobID:            job.JobID,
-		worker:           worker,
-		clickHouseClient: chClient,
-		SourceDbConn:     job.SourceDbConn,
-		DestDbConn:       job.DestDbConn,
-		KeepConnect:      job.KeepConnect == common.STYES,
-		ConnectBuffer:    job.ConnectBuffer,
-		TBasePlugin:      pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: job.IsDebug == common.STYES, Logger: logger},
-		SkipHour:         skipHour,
-		Enabled:          job.Status == common.STENABLED,
+		JobID:     job.JobID,
+		workerJob: workerJob,
+		//clickHouseClient: chClient,
+		SourceDbConn: job.SourceDbConn,
+		//DestDbConn:    job.DestDbConn,
+		//KeepConnect:   job.KeepConnect == common.STYES,
+		ConnectBuffer: job.ConnectBuffer,
+		TBasePlugin:   pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: job.IsDebug == common.STYES},
+		SkipHour:      skipHour,
+		Enabled:       job.Status == common.STENABLED,
+		msgClient:     MsgClient,
+		ReplyURL:      replyUrl,
 	}, nil
 }
 
@@ -101,24 +119,21 @@ func (wj *TWorkerJob) Run() {
 	var jobLog ctl.PullJobLogControl
 	jobLog.JobID = wj.JobID
 	if iStartTime, err = jobLog.StartJobLog(); err != nil {
-		wj.Logger.WriteError(fmt.Sprintf("[%s]启动任务日志失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error()))
+		logService.LogWriter.WriteError(fmt.Sprintf("启动任务日志失败：%s", err.Error()), false)
 		return
 	}
 	// 更新任务启动时间
 	job := &ctl.TPullJob{TPullJob: common.TPullJob{JobID: wj.JobID}}
 	if err = job.SetLastRun(iStartTime); err != nil {
-		wj.Logger.WriteError(fmt.Sprintf("更新任务%s运行时间失败：%s", job.JobName, err.Error()))
+		logService.LogWriter.WriteError(fmt.Sprintf("更新任务%s启动时间失败：%s", job.JobName, err.Error()), false)
 		return
 	}
-	// 将任务开始时间设置到clickhouse客户端中，用于写入数据时标识数据抽取时间，便于数据请求时按照时间提取
-	wj.clickHouseClient.SetJobStartTime(iStartTime)
-
 	// 从这里开始，任务日志已经"启动"，如果有错误，需要记录到日志中
 
 	loc, err := time.LoadLocation("Local")
 	if err != nil {
 		if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("[%s]加载时区失败：%s", time.Now().Format("2006-01-02 15:04:05"), err.Error())); logErr != nil {
-			wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
+			logService.LogWriter.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()), false)
 		}
 		return
 	}
@@ -126,50 +141,19 @@ func (wj *TWorkerJob) Run() {
 	if slices.Contains[[]int, int](wj.SkipHour, time.Now().In(loc).Hour()) {
 		return
 	}
-
-	// 如果是长期运行的任务，则需要检查Running
-	// 如果是一次性任务，则不需要检查
-	if !wj.KeepConnect {
-		if err = wj.clickHouseClient.Connect(); err != nil {
-			if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("连接数据源失败：%s", err.Error())); logErr != nil {
-				wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
-			}
-			return
-		}
-	}
 	if err = wj.PullTables(); err != nil {
-		if err = wj.clickHouseClient.Connect(); err != nil {
-			if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
-				wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
-			}
+		if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
+			logService.LogWriter.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()), false)
 		}
 		return
 	}
 
-	if !wj.KeepConnect {
-		if err = wj.clickHouseClient.Client.Close(); err != nil {
-			if err = wj.clickHouseClient.Connect(); err != nil {
-				if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("关闭数据库连接失败：%s", err.Error())); logErr != nil {
-					wj.Logger.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()))
-				}
-			}
-			return
-		}
-	}
-
-	// 任务结束
-	var jobCtl ctl.TPullJobControl
-	jobCtl.JobID = wj.JobID
-	if err = jobCtl.SentFinishMsg(); err != nil {
-		wj.Logger.WriteError(fmt.Sprintf("发送任务结束消息失败：%s", err.Error()))
-	}
-
 	if err = jobLog.StopJobLog(iStartTime, ""); err != nil {
-		wj.Logger.WriteError(fmt.Sprintf("记录任务结束信息失败：%s", err.Error()))
+		logService.LogWriter.WriteError(fmt.Sprintf("记录任务结束信息失败：%s", err.Error()), false)
 	}
 }
 
-func (wj *TWorkerJob) PullTable(tableID int32) (int64, error) {
+func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64) (int64, error) {
 	var rows interface{}
 	var tbl ctl.TPullTableControl
 	var err error
@@ -182,27 +166,27 @@ func (wj *TWorkerJob) PullTable(tableID int32) (int64, error) {
 	}
 
 	strSQL, strVals := tbl.SelectSql, tbl.FilterVal
-	if rows, err = wj.worker.ReadData(&strSQL, &strVals); err != nil {
+	if rows, err = wj.workerJob.ReadData(&strSQL, &strVals); err != nil {
 		return 0, fmt.Errorf("读取数据失败：%s", err.Error())
 	}
 	// 全量抽取
 	if strVals == "" {
-		if err = wj.clickHouseClient.ClearTableData(tbl.DestTable); err != nil {
+		if err = clickHouse.ClearTableData(tbl.DestTable); err != nil {
 			return 0, fmt.Errorf("清空数据失败：%s", err.Error())
 		}
 	}
-	if total, err = wj.worker.WriteData(tbl.DestTable, tbl.Buffer, rows, wj.clickHouseClient); err != nil {
+	if total, err = wj.workerJob.WriteData(tbl.DestTable, tbl.Buffer, rows, iStartTime); err != nil {
 		return 0, fmt.Errorf("写入数据失败：%s", err.Error())
 	}
 	// 非全量抽取，清除重复的数据
 	if strVals != "" {
-		if err = wj.clickHouseClient.ClearDuplicateData(tbl.DestTable, tbl.FilterCol); err != nil {
+		if err = clickHouse.ClearDuplicateData(tbl.DestTable, tbl.FilterCol); err != nil {
 			return -1, err
 		}
 	}
 
 	if strVals != "" {
-		tbl.FilterVal, err = wj.clickHouseClient.GetMaxFilter(tbl.DestTable, &strVals)
+		tbl.FilterVal, err = clickHouse.GetMaxFilter(tbl.DestTable, &strVals)
 		if err != nil {
 			return 0, fmt.Errorf("获取过滤值失败：%s", err.Error())
 		}
@@ -220,6 +204,7 @@ func (wj *TWorkerJob) PullTables() error {
 	var tblCtl ctl.TPullTableControl
 	var iStartTime int64
 	var err error
+	var data []byte
 	tblCtl.JobID = wj.JobID
 	tables, cnt, err := tblCtl.GetAllTables()
 	if err != nil {
@@ -242,15 +227,27 @@ func (wj *TWorkerJob) PullTables() error {
 			if !wj.IsRunning() {
 				return nil
 			}
-			if tableLog.RecordCount, err = wj.PullTable(tbl.TableID); err != nil {
+			if tableLog.RecordCount, err = wj.PullTable(tbl.TableID, iStartTime); err != nil {
 				if logErr := tableLog.StopTableLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
-					wj.Logger.WriteError(fmt.Sprintf("记录表[%d]错误信息%s失败：%s", tbl.TableID, err.Error(), logErr.Error()))
+					logService.LogWriter.WriteError(fmt.Sprintf("记录表[%d]错误信息%s失败：%s", tbl.TableID, err.Error(), logErr.Error()), false)
 				}
 				continue
 			}
 			if err = tableLog.StopTableLog(iStartTime, ""); err != nil {
-				wj.Logger.WriteError(fmt.Sprintf("记录表[%d]结束信息%s失败：%s", tbl.TableID, err.Error()))
+				logService.LogWriter.WriteError(fmt.Sprintf("记录表[%d]结束信息失败：%s", tbl.TableID, err.Error()), false)
 			}
+			// 发布表数据变动消息
+
+			data, err = wj.msgClient.Send(wj.ReplyURL, messager.OperateRequestPublish,
+				[]byte(clickHouse.GetDataBaseName()+":"+tbl.DestTable /*+":"+strconv.FormatInt(iStartTime, 10)*/))
+			if err != nil {
+				logService.LogWriter.WriteError(fmt.Sprintf("发送表[%d]变动信息失败：%s", tbl.TableID, err.Error()), false)
+			}
+			strData := string(data)
+			if strData != "ok" {
+				logService.LogWriter.WriteError(fmt.Sprintf("发送表[%d]变动信息返回失败：%s", tbl.TableID, strData), false)
+			}
+
 		}
 	}
 	return nil

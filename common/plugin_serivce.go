@@ -25,57 +25,13 @@ func (s *PluginRPCServer) GetConfigTemplate(args interface{}, resp *TResponse) e
 	return nil
 }
 
-func (s *PluginRPCServer) GetErrLog(params string, resp *TResponse) error {
-	*resp = s.Impl.GetErrLog(params)
-	return nil
-}
-func (s *PluginRPCServer) GetErrLogDate(args interface{}, resp *TResponse) error {
-	*resp = s.Impl.GetErrLogDate()
-	return nil
-}
-func (s *PluginRPCServer) DelErrOldLog(strDate string, resp *TResponse) error {
-	*resp = s.Impl.DelErrOldLog(strDate)
-	return nil
-}
-func (s *PluginRPCServer) DelErrLog(params string, resp *TResponse) error {
-	*resp = s.Impl.DelErrLog(params)
-	return nil
-}
-
-func (s *PluginRPCServer) GetInfoLog(params string, resp *TResponse) error {
-	*resp = s.Impl.GetInfoLog(params)
-	return nil
-}
-func (s *PluginRPCServer) GetInfoLogDate(args interface{}, resp *TResponse) error {
-	*resp = s.Impl.GetInfoLogDate()
-	return nil
-}
-func (s *PluginRPCServer) DelInfoOldLog(strDate string, resp *TResponse) error {
-	*resp = s.Impl.DelInfoOldLog(strDate)
-	return nil
-}
-func (s *PluginRPCServer) DelInfoLog(params string, resp *TResponse) error {
-	*resp = s.Impl.DelInfoLog(params)
-	return nil
-}
-
-func (s *PluginRPCServer) GetDebugLog(params string, resp *TResponse) error {
-	*resp = s.Impl.GetDebugLog(params)
-	return nil
-}
-func (s *PluginRPCServer) GetDebugLogDate(args interface{}, resp *TResponse) error {
-	*resp = s.Impl.GetDebugLogDate()
-	return nil
-}
-func (s *PluginRPCServer) DelDebugOldLog(strDate string, resp *TResponse) error {
-	*resp = s.Impl.DelDebugOldLog(strDate)
-	return nil
-}
-func (s *PluginRPCServer) DelDebugLog(params string, resp *TResponse) error {
-	*resp = s.Impl.DelDebugLog(params)
-	return nil
-}
 func (s *PluginRPCServer) CustomInterface(pluginOperate TPluginOperate, resp *TResponse) error {
 	*resp = s.Impl.CustomInterface(pluginOperate)
+	return nil
+}
+
+func (s *PluginRPCServer) GetSystemUsage(args interface{}, resp *string) error {
+	sysUsage := s.Impl.GetSystemUsage()
+	*resp = sysUsage
 	return nil
 }
