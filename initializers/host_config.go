@@ -18,6 +18,7 @@ type THostConfig struct {
 	MessagePort     int32  `toml:"message_port"` // 发送心跳消息包括的自身message端口
 	FileServPort    int32  `toml:"file_port"`    // 发送心跳消息包括的文件服务端口
 	PluginDir       string `toml:"plugin_dir"`
+	DbDriverDir     string `toml:"db_driver_dir"`
 }
 
 func (cfg *THostConfig) SetDefault() {
@@ -33,6 +34,7 @@ func (cfg *THostConfig) SetDefault() {
 	cfg.FileServPort = 8902
 	cfg.MessagePort = 8903
 	cfg.PluginDir = "plugin"
+	cfg.DbDriverDir = "dbDriver"
 }
 func (cfg *THostConfig) LoadConfig(cfgDir, cfgFile string) error {
 	return cfg.TAppBaseConfig.LoadConfig(cfgDir, cfgFile, cfg)

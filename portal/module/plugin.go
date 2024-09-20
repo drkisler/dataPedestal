@@ -3,13 +3,13 @@ package module
 import (
 	"context"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/plugins"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-type TPluginInfo = common.TPluginInfo
+type TPluginInfo = plugins.TPluginInfo
 
 type TPlugin struct {
 	UserID int32 `json:"user_id,omitempty"` //用于标识谁维护的插件
@@ -77,20 +77,18 @@ func (p *TPlugin) QueryPlugin(pageSize int32, pageIndex int32) ([]TPlugin, int, 
 		return nil, 0, err
 	}
 	var rows pgx.Rows
-	strSQL := "select " +
-		"user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file_name, plugin_config, plugin_version,host_uuid,host_name,host_ip,run_type "
-	if p.PluginName != "" {
-		strSQL += fmt.Sprintf("from (select * from %s.plugins where user_id= $1 and plugin_name like '%"+p.PluginName+"%' order by plugin_name)t limit $2 offset ($3-1)*$4", storage.GetSchema())
-		rows, err = storage.QuerySQL(strSQL, p.UserID, pageSize, pageIndex, pageSize)
-	} else if (p.PluginType != "") && (p.PluginType != "全部插件") {
-		strSQL += fmt.Sprintf("from "+
-			"(select * from %s.plugins where user_id= $1 and plugin_type = $2 order by plugin_name)t limit $3 offset ($4-1)*$5", storage.GetSchema())
-		rows, err = storage.QuerySQL(strSQL, p.UserID, p.PluginType, pageSize, pageIndex, pageSize)
-	} else {
-		strSQL += fmt.Sprintf("from "+
-			"(select * from %s.plugins where user_id= $1 order by plugin_name)t limit $2 offset ($3-1)*$4", storage.GetSchema())
-		rows, err = storage.QuerySQL(strSQL, p.UserID, pageSize, pageIndex, pageSize)
+	var strSQL string
+	strSQL = fmt.Sprintf("select * "+
+		"from %s.plugins where user_id= $1 ", storage.GetSchema())
+	if p.PluginType != "全部插件" {
+		strSQL += fmt.Sprintf("and plugin_type = '%s' ", p.PluginType)
 	}
+	if p.PluginName != "" {
+		strSQL += fmt.Sprintf("and plugin_name like '%%%s%%' ", p.PluginName)
+	}
+	rows, err = storage.QuerySQL(fmt.Sprintf("select user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file_name, plugin_config, plugin_version,host_uuid,host_name,host_ip,run_type "+
+		"from (%s)t limit $2 offset ($3-1)*$4", strSQL), p.UserID, pageSize, pageIndex, pageSize)
+
 	if err != nil {
 		return nil, 0, err
 	}

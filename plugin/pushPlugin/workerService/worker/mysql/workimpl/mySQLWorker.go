@@ -3,7 +3,7 @@ package workimpl
 import (
 	"database/sql"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/worker"
 	_ "github.com/go-sql-driver/mysql"
 	"strings"
@@ -64,7 +64,7 @@ func NewMySQLWorker(connectOption map[string]string, connectBuffer int) (worker.
 	return &TMySQLWorker{*dbw, strDBName, strSchema}, nil
 }
 
-func (mSQL *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
+func (mSQL *TMySQLWorker) GetTables() ([]tableInfo.TableInfo, error) {
 	strSQL := "select table_name table_code,coalesce(table_comment,'') table_comment " +
 		"from information_schema.tables where table_schema=$1"
 	rows, err := mSQL.DataBase.Query(strSQL, mSQL.schema)
@@ -75,9 +75,9 @@ func (mSQL *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 	defer func() {
 		_ = rows.Close()
 	}()
-	var data []common.TableInfo
+	var data []tableInfo.TableInfo
 	for rows.Next() {
-		var val common.TableInfo
+		var val tableInfo.TableInfo
 		if err = rows.Scan(&val.TableCode, &val.TableName); err != nil {
 			return nil, err
 
@@ -86,7 +86,7 @@ func (mSQL *TMySQLWorker) GetTables() ([]common.TableInfo, error) {
 	}
 	return data, nil
 }
-func (mSQL *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, error) {
+func (mSQL *TMySQLWorker) GetColumns(tableName string) ([]tableInfo.ColumnInfo, error) {
 	iPos := strings.Index(tableName, ".")
 	schema := ""
 	if iPos > 0 {
@@ -119,9 +119,9 @@ func (mSQL *TMySQLWorker) GetColumns(tableName string) ([]common.ColumnInfo, err
 		_ = rows.Close()
 
 	}()
-	var data []common.ColumnInfo
+	var data []tableInfo.ColumnInfo
 	for rows.Next() {
-		var val common.ColumnInfo
+		var val tableInfo.ColumnInfo
 		if err = rows.Scan(&val.ColumnCode, &val.ColumnName, &val.IsKey, &val.DataType); err != nil {
 			return nil, err
 

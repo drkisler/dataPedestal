@@ -2,7 +2,10 @@ package workerService
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/queryFilter"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	ctl "github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/clickHouse"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/worker"
@@ -26,7 +29,7 @@ type TWorkerProxy struct {
 	CheckChan chan TCheckFunc
 	scheduler gocron.Scheduler
 	jobs      map[string]*TWorkerJob
-	status    *common.TStatus
+	status    *commonStatus.TStatus
 	wg        *sync.WaitGroup
 	replyURL  string
 }
@@ -43,7 +46,7 @@ func NewWorkerProxy(replyMsgUrl string) (*TWorkerProxy, error) {
 	var wg sync.WaitGroup
 	var ch = make(chan int)
 	chkChan := make(chan TCheckFunc)
-	status := common.NewStatus()
+	status := commonStatus.NewStatus()
 	var runJob = make(map[string]*TWorkerJob)
 	if scheduler, err = gocron.NewScheduler(); err != nil {
 		return nil, err
@@ -122,11 +125,12 @@ func (pw *TWorkerProxy) GetOnlineJobID() []int32 {
 }
 
 // CheckJob 测试任务运行
-func (pw *TWorkerProxy) CheckJob(jobName string) error {
+func (pw *TWorkerProxy) CheckJob(userID int32, jobName string) error {
 	var job ctl.TPushJob
 	var workerJob *TWorkerJob
 	var err error
 	job.JobName = jobName
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
 		return err
 	}
@@ -140,12 +144,13 @@ func (pw *TWorkerProxy) CheckJob(jobName string) error {
 	return nil
 }
 
-func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
+func (pw *TWorkerProxy) CheckJobTable(userID int32, jobName string, tableID int32) error {
 	var job ctl.TPushJob
 	var workerJob *TWorkerJob
 
 	var err error
 	job.JobName = jobName
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
 		return err
 	}
@@ -181,13 +186,14 @@ func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 }
 
 // OnLineJob 将指定任务加入scheduler
-func (pw *TWorkerProxy) OnLineJob(jobName string) error {
+func (pw *TWorkerProxy) OnLineJob(userID int32, jobName string) error {
 	var ok bool
 	var err error
 	var workerJob *TWorkerJob
 	var job ctl.TPushJob
 	if workerJob, ok = pw.jobs[jobName]; !ok {
 		job.JobName = jobName
+		job.UserID = userID
 		if err = job.InitJobByName(); err != nil {
 			return err
 		}
@@ -277,11 +283,11 @@ func (pw *TWorkerProxy) GetDatabaseType() string {
 	return myWorker.GetDatabaseType()
 }
 
-func (pw *TWorkerProxy) GetSourceTables(_ map[string]string) ([]common.TableInfo, error) {
+func (pw *TWorkerProxy) GetSourceTables(_ map[string]string) ([]tableInfo.TableInfo, error) {
 	return clickHouse.GetTableNames()
 }
 
-func (pw *TWorkerProxy) GetTableColumns(_ map[string]string, tableCode *string) ([]common.ColumnInfo, error) {
+func (pw *TWorkerProxy) GetTableColumns(_ map[string]string, tableCode *string) ([]tableInfo.ColumnInfo, error) {
 	return clickHouse.GetTableColumns(tableCode)
 }
 func (pw *TWorkerProxy) GetSourceTableDDL(tableInfo map[string]string, _ *string) (*string, error) {
@@ -322,20 +328,20 @@ func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
 	return clickHouse.GetConnOptions(), nil
 }
 
-func (pw *TWorkerProxy) CheckSQLValid(_ map[string]string, sql, filterVal *string) ([]common.ColumnInfo, error) {
+func (pw *TWorkerProxy) CheckSQLValid(_ map[string]string, sql, filterVal *string) ([]tableInfo.ColumnInfo, error) {
 	var strFilter string
 	var err error
 	if filterVal != nil {
 		strFilter = *filterVal
 	}
-	if !common.IsSafeSQL(*sql + strFilter) {
+	if !genService.IsSafeSQL(*sql + strFilter) {
 		return nil, fmt.Errorf("unsafe sql")
 	}
 	var arrValues []interface{}
-	var filters []common.FilterValue
+	var filters []queryFilter.FilterValue
 
 	if strFilter != "" {
-		if filters, err = common.JSONToFilterValues(&strFilter); err != nil {
+		if filters, err = queryFilter.JSONToFilterValues(&strFilter); err != nil {
 			return nil, err
 		}
 		for _, item := range filters {
@@ -356,7 +362,7 @@ func (pw *TWorkerProxy) CheckDestConnect(connectOption map[string]string) error 
 	return nil
 }
 
-func (pw *TWorkerProxy) GetDestTables(connectOption map[string]string) ([]common.TableInfo, error) {
+func (pw *TWorkerProxy) GetDestTables(connectOption map[string]string) ([]tableInfo.TableInfo, error) {
 	myWorker, err := NewWorker(connectOption, 2)
 	if err != nil {
 		return nil, err

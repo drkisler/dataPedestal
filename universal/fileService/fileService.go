@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
 	"io"
 	"net"
 	"os"
@@ -113,7 +113,7 @@ func ReceiveFile(conn net.Conn, folder string) (*TFileMeta, error) {
 		return &fileMeta, fmt.Errorf("%v format error", fileMeta)
 	}
 	// check the file folder exist or not and create it if not exist
-	fileDir := common.GenFilePath(folder, fileMeta.FileUUID)
+	fileDir := genService.GenFilePath(folder, fileMeta.FileUUID)
 	if _, err = os.Stat(fileDir); err != nil {
 		if os.IsNotExist(err) {
 			err = os.Mkdir(fileDir, 0766)
@@ -123,7 +123,7 @@ func ReceiveFile(conn net.Conn, folder string) (*TFileMeta, error) {
 		}
 	}
 	// check the file exist or not and remove it if exist
-	filePath := common.GenFilePath(folder, fileMeta.FileUUID, fileMeta.FileName)
+	filePath := genService.GenFilePath(folder, fileMeta.FileUUID, fileMeta.FileName)
 	if _, err = os.Stat(filePath); err == nil {
 		if err = os.Remove(filePath); err != nil {
 			return nil, fmt.Errorf("删除旧文件%s失败:%s", filePath, err.Error())

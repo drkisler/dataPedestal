@@ -3,7 +3,7 @@ package module
 import (
 	"context"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/timeExtense"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"github.com/jackc/pgx/v5"
 	"time"
@@ -103,7 +103,7 @@ func (jobLog *TPushJobLog) GetLogs(ids *string) ([]TPushJobLog, error) {
 		if err = rows.Scan(&p.JobID, &p.StartTime, &p.StopTime, &p.Status, &p.ErrorInfo); err != nil {
 			return nil, err
 		}
-		p.TimeSpent = common.TimeSpent(p.StartTime, p.StopTime)
+		p.TimeSpent = timeExtense.TimeSpent(p.StartTime, p.StopTime)
 		result = append(result, p)
 	}
 	return result, nil

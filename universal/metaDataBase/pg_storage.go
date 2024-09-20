@@ -94,6 +94,31 @@ func (pg *TPGStorage) ExecuteSQL(ctx context.Context, strSQL string, args ...int
 	return nil
 }
 
+func (pg *TPGStorage) Execute(strSQL string, args ...interface{}) (int64, error) {
+	ctx := context.Background()
+	conn, err := pg.pool.Acquire(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	commandResult, err := tx.Exec(ctx, strSQL, args...)
+	if err != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return 0, fmt.Errorf("exec error: %v, rollback error: %v", err, rollbackErr)
+		}
+		return 0, err
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return commandResult.RowsAffected(), nil
+}
+
 func (pg *TPGStorage) ExecuteDDLs(ctx context.Context, ddlList []string) error {
 	conn, err := pg.pool.Acquire(context.Background())
 	if err != nil {

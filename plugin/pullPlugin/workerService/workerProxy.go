@@ -2,32 +2,37 @@ package workerService
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
-	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker"
+	"github.com/drkisler/dataPedestal/universal/databaseDriver"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/go-co-op/gocron/v2"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
-var NewWorker TNewWorker
+//var NewWorker TNewWorker
 
 //var GetSourceConnOption TGetSourceConnOption
 
 // TCheckFunc 用于异步在线测试任务和表
 type TCheckFunc = func()
-type TNewWorker = func(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error)
+
+// type TNewWorker = func(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error)
+
 type TWorkerProxy struct {
 	SignChan  chan int
 	CheckChan chan TCheckFunc
 	scheduler gocron.Scheduler
-	jobs      map[string]*TWorkerJob
-	status    *common.TStatus
+	jobs      map[int32]*TWorkerJob
+	status    *commonStatus.TStatus
 	wg        *sync.WaitGroup
 	replyURL  string
+	dbDrivers map[string]databaseDriver.IDbDriver
 }
 
 type TScheduler struct {
@@ -36,17 +41,42 @@ type TScheduler struct {
 }
 
 // NewWorkerProxy 初始化
-func NewWorkerProxy(replyMsgUrl string) (*TWorkerProxy, error) {
+func NewWorkerProxy(replyMsgUrl string, dbDriverDir string) (*TWorkerProxy, error) {
 	var err error
 	var scheduler gocron.Scheduler
 	var wg sync.WaitGroup
 	var ch = make(chan int)
 	chkChan := make(chan TCheckFunc)
-	status := common.NewStatus()
-	var runJob = make(map[string]*TWorkerJob)
+	status := commonStatus.NewStatus()
+	var runJob = make(map[int32]*TWorkerJob)
 	if scheduler, err = gocron.NewScheduler(); err != nil {
 		return nil, err
 	}
+
+	databaseDrivers := make(map[string]databaseDriver.IDbDriver)
+	//扫描dbDriverDir目录下所有.so文件，加载数据库驱动
+	var files []os.DirEntry
+	if dbDriverDir != "" {
+		files, err = os.ReadDir(dbDriverDir)
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+			dbDriverName, found := strings.CutSuffix(file.Name(), ".so")
+			if !found || dbDriverName == "" {
+				continue
+			}
+			dbDriver, openErr := databaseDriver.OpenDbDriver(dbDriverDir, file.Name())
+			if openErr != nil {
+				return nil, openErr
+			}
+			databaseDrivers[dbDriverName] = dbDriver
+		}
+	}
+
 	return &TWorkerProxy{ //TBasePlugin: pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: cfg.IsDebug, Logger: logger},
 		SignChan:  ch,
 		CheckChan: chkChan,
@@ -55,6 +85,7 @@ func NewWorkerProxy(replyMsgUrl string) (*TWorkerProxy, error) {
 		status:    status,
 		wg:        &wg,
 		replyURL:  replyMsgUrl,
+		dbDrivers: databaseDrivers,
 	}, nil
 }
 
@@ -92,7 +123,7 @@ func (pw *TWorkerProxy) Start() error {
 	for _, job := range jobs {
 		var workerJob *TWorkerJob
 		var pullJob gocron.Job
-		if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
+		if workerJob, err = NewWorkerJob(&job, pw.replyURL, pw.NewSourceConnect); err != nil {
 			return err
 		}
 		if pullJob, err = pw.scheduler.NewJob(
@@ -103,7 +134,7 @@ func (pw *TWorkerProxy) Start() error {
 			return err
 		}
 		workerJob.JobUUID = pullJob.ID()
-		pw.jobs[job.JobName] = workerJob
+		pw.jobs[job.JobID] = workerJob
 	}
 	pw.scheduler.Start()
 	pw.status.SetRunning(true)
@@ -121,15 +152,16 @@ func (pw *TWorkerProxy) GetOnlineJobID() []int32 {
 }
 
 // CheckJob 测试任务运行
-func (pw *TWorkerProxy) CheckJob(jobName string) error {
+func (pw *TWorkerProxy) CheckJob(userID int32, jobName string) error {
 	var job ctl.TPullJob
 	var workerJob *TWorkerJob
 	var err error
 	job.JobName = jobName
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
 		return err
 	}
-	if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
+	if workerJob, err = NewWorkerJob(&job, pw.replyURL, pw.NewSourceConnect); err != nil {
 		return err
 	}
 	workerJob.SkipHour = []int{}
@@ -139,16 +171,17 @@ func (pw *TWorkerProxy) CheckJob(jobName string) error {
 	return nil
 }
 
-func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
+func (pw *TWorkerProxy) CheckJobTable(userID int32, jobName string, tableID int32) error {
 	var job ctl.TPullJob
 	var workerJob *TWorkerJob
 
 	var err error
 	job.JobName = jobName
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
 		return err
 	}
-	if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
+	if workerJob, err = NewWorkerJob(&job, pw.replyURL, pw.NewSourceConnect); err != nil {
 		return err
 	}
 	workerJob.SkipHour = []int{}
@@ -161,10 +194,10 @@ func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 			logService.LogWriter.WriteError(fmt.Sprintf("start table log failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
 		}
-		var tableInfo ctl.TPullTableControl
-		tableInfo.JobID = job.JobID
-		tableInfo.TableID = tableID
-		if err = tableInfo.SetLastRun(iStartTime); err != nil {
+		var tableControl ctl.TPullTableControl
+		tableControl.JobID = job.JobID
+		tableControl.TableID = tableID
+		if err = tableControl.SetLastRun(iStartTime); err != nil {
 			_ = tableLog.StopTableLog(iStartTime, err.Error())
 			logService.LogWriter.WriteError(fmt.Sprintf("set last run failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
@@ -180,24 +213,25 @@ func (pw *TWorkerProxy) CheckJobTable(jobName string, tableID int32) error {
 }
 
 // OnLineJob 将指定任务加入scheduler
-func (pw *TWorkerProxy) OnLineJob(jobName string) error {
+func (pw *TWorkerProxy) OnLineJob(userID int32, jobName string) error {
 	var ok bool
 	var err error
 	var workerJob *TWorkerJob
 	var job ctl.TPullJob
-	if workerJob, ok = pw.jobs[jobName]; !ok {
-		job.JobName = jobName
-		if err = job.InitJobByName(); err != nil {
-			return err
-		}
+	job.JobName = jobName
+	job.UserID = userID
+	if err = job.InitJobByName(); err != nil {
+		return err
+	}
 
-		if workerJob, err = NewWorkerJob(&job, pw.replyURL); err != nil {
+	if workerJob, ok = pw.jobs[job.JobID]; !ok {
+		if workerJob, err = NewWorkerJob(&job, pw.replyURL, pw.NewSourceConnect); err != nil {
 			return err
 		}
 		if err = workerJob.EnableJob(); err != nil {
 			return err
 		}
-		pw.jobs[jobName] = workerJob
+		pw.jobs[job.JobID] = workerJob
 	}
 	pullJob, err := pw.scheduler.NewJob(
 		gocron.CronJob(job.CronExpression, len(strings.Split(job.CronExpression, " ")) > 5),
@@ -207,36 +241,48 @@ func (pw *TWorkerProxy) OnLineJob(jobName string) error {
 	if err != nil {
 		return err
 	}
-	pw.jobs[jobName].JobUUID = pullJob.ID()
+	pw.jobs[job.JobID].JobUUID = pullJob.ID()
 	return nil
 }
 
-func (pw *TWorkerProxy) CheckJobLoaded(jobName string) bool {
-	if _, ok := pw.jobs[jobName]; !ok {
-		return false
+func (pw *TWorkerProxy) CheckJobLoaded(userID int32, jobName string) (bool, error) {
+	var job ctl.TPullJob
+	job.JobName = jobName
+	job.UserID = userID
+	if err := job.InitJobByName(); err != nil {
+		return false, err
 	}
-	return true
+	if _, ok := pw.jobs[job.JobID]; !ok {
+		return false, fmt.Errorf("job %s not found", jobName)
+	}
+	return true, nil
 }
 
 // OffLineJob 下线指定任务
-func (pw *TWorkerProxy) OffLineJob(jobName string) error {
-	if _, ok := pw.jobs[jobName]; !ok {
+func (pw *TWorkerProxy) OffLineJob(userID int32, jobName string) error {
+	var job ctl.TPullJob
+	job.JobName = jobName
+	job.UserID = userID
+	if err := job.InitJobByName(); err != nil {
+		return err
+	}
+	if _, ok := pw.jobs[job.JobID]; !ok {
 		return fmt.Errorf("job %s not found", jobName)
 	}
-	jobUUID := pw.jobs[jobName].JobUUID
+	jobUUID := pw.jobs[job.JobID].JobUUID
 	if err := pw.scheduler.RemoveJob(jobUUID); err != nil {
 		return err
 	}
-	pw.jobs[jobName].Stop()
-	if err := pw.jobs[jobName].DisableJob(); err != nil {
+	pw.jobs[job.JobID].Stop()
+	if err := pw.jobs[job.JobID].DisableJob(); err != nil {
 		return err
 	}
-	pw.jobs[jobName].Enabled = false
-	delete(pw.jobs, jobName)
+	pw.jobs[job.JobID].Enabled = false
+	delete(pw.jobs, job.JobID)
 	return nil
 }
 
-// 停止scheduler
+// StopScheduler 停止scheduler
 func (pw *TWorkerProxy) StopScheduler() {
 	_ = pw.scheduler.StopJobs()
 }
@@ -249,98 +295,73 @@ func (pw *TWorkerProxy) StopRun() {
 	pw.wg.Wait()
 }
 
-func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
-	pullWorker, err := NewWorker(nil, 2)
+func (pw *TWorkerProxy) GetSourceQuoteFlag(dbDriver string) (string, error) {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return "", fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	return driver.GetQuoteFlag(), nil
+}
+
+func (pw *TWorkerProxy) GetSourceTables(dbDriver string) ([]tableInfo.TableInfo, error) {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return nil, fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	return driver.GetTables()
+}
+
+func (pw *TWorkerProxy) GetTableColumns(dbDriver, tableName string) ([]tableInfo.ColumnInfo, error) {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return nil, fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	return driver.GetColumns(tableName)
+}
+func (pw *TWorkerProxy) GetSourceTableDDL(dbDriver, tableName string) (*string, error) {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return nil, fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	return driver.GetSourceTableDDL(tableName)
+}
+
+func (pw *TWorkerProxy) GenTableScript(dbDriver, tableName string) (*string, error) {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return nil, fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	return driver.ConvertTableDDL(tableName)
+}
+
+func (pw *TWorkerProxy) CheckSQLValid(dbDriver, sql, filterVal string) ([]tableInfo.ColumnInfo, error) {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return nil, fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	return driver.CheckSQLValid(sql, filterVal)
+}
+
+func (pw *TWorkerProxy) CheckSourceConnect(dbDriver, connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) error {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	return driver.OpenConnect(connectJson, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections)
+}
+
+func (pw *TWorkerProxy) NewSourceConnect(dbDriver, connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) (databaseDriver.IDbDriver, error) {
+	driver, ok := pw.dbDrivers[dbDriver]
+	if !ok {
+		return nil, fmt.Errorf("db driver %s not found", dbDriver)
+	}
+	connect, err := driver.NewConnect(connectJson, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.GetConnOptions(), nil
+	return connect, nil
 }
 
-func (pw *TWorkerProxy) GetSourceQuoteFlag() string {
-	pullWorker, _ := NewWorker(nil, 2)
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.GetQuoteFlag()
-}
-
-func (pw *TWorkerProxy) GetDatabaseType() string {
-	pullWorker, _ := NewWorker(nil, 2)
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.GetDatabaseType()
-}
-
-func (pw *TWorkerProxy) GetSourceTables(connectOption map[string]string) ([]common.TableInfo, error) {
-	pullWorker, err := NewWorker(connectOption, 2)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.GetTables()
-}
-
-func (pw *TWorkerProxy) GetTableColumns(connectOption map[string]string, tableName *string) ([]common.ColumnInfo, error) {
-	pullWorker, err := NewWorker(connectOption, 2)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.GetColumns(*tableName)
-}
-func (pw *TWorkerProxy) GetSourceTableDDL(connectOption map[string]string, tableCode *string) (*string, error) {
-	pullWorker, err := NewWorker(connectOption, 2)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.GetSourceTableDDL(*tableCode)
-}
-
-func (pw *TWorkerProxy) GenTableScript(connectOption map[string]string, tableCode *string) (*string, error) {
-	pullWorker, err := NewWorker(connectOption, 2)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.GenTableScript(*tableCode)
-}
-
-func (pw *TWorkerProxy) GetDestTableNames(_ map[string]string) ([]common.TableInfo, error) {
+func (pw *TWorkerProxy) GetDestTables() ([]tableInfo.TableInfo, error) {
 	return clickHouse.GetTableNames()
-}
-
-func (pw *TWorkerProxy) CheckSQLValid(connectOption map[string]string, sql, filterVal *string) ([]common.ColumnInfo, error) {
-	pullWorker, err := NewWorker(connectOption, 2)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return pullWorker.CheckSQLValid(sql, filterVal)
-}
-
-func (pw *TWorkerProxy) CheckSourceConnect(connectOption map[string]string) error {
-	pullWorker, err := NewWorker(connectOption, 2)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = pullWorker.CloseConnect
-	}()
-	return nil
 }

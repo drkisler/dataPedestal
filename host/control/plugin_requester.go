@@ -3,7 +3,8 @@ package control
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/plugins"
 	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/hashicorp/go-plugin"
@@ -23,7 +24,7 @@ type TPluginRequester struct {
 	SerialNumber string
 	PluginFile   string
 	Client       *plugin.Client
-	ImpPlugin    common.IPlugin
+	ImpPlugin    plugins.IPlugin
 	//PluginPort   int32
 }
 
@@ -31,10 +32,10 @@ type TPluginRequester struct {
 func RunPlugins() {
 	var req *TPluginRequester
 	var err error
-	plugins := module.GetAutoRunPlugins()
-	for _, item := range plugins {
+	arrPlugins := module.GetAutoRunPlugins()
+	for _, item := range arrPlugins {
 		if req, err = NewPlugin(item.SerialNumber,
-			common.GenFilePath(initializers.HostConfig.PluginDir, item.PluginUUID, item.PluginFileName)); err != nil {
+			genService.GenFilePath(initializers.HostConfig.PluginDir, item.PluginUUID, item.PluginFileName)); err != nil {
 			//common.LogServ.Error("RunPlugins.NewPlugin()", item.PluginUUID, item.PluginFileName, err.Error())
 			return
 		}
@@ -58,7 +59,7 @@ func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
 		MagicCookieValue: serialNumber,
 	}
 	var pluginMap = map[string]plugin.Plugin{
-		serialNumber: &common.PluginImplement{},
+		serialNumber: &plugins.PluginImplement{},
 	}
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: handshakeConfig,
@@ -73,7 +74,7 @@ func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TPluginRequester{serialNumber, pluginFile, client, raw.(common.IPlugin)}, nil
+	return &TPluginRequester{serialNumber, pluginFile, client, raw.(plugins.IPlugin)}, nil
 }
 
 func CheckPluginExists(UUID string) bool {
@@ -82,7 +83,7 @@ func CheckPluginExists(UUID string) bool {
 	_, ok := pluginList[UUID]
 	return ok
 }
-func LoadPlugin(pluginUUID, serialNumber, pluginFile, config, pluginName, DBConnection, replyUrl string) (int64, error) {
+func LoadPlugin(pluginUUID, serialNumber, pluginFile, config, pluginName, DBConnection string, hostConfig initializers.THostConfig) (int64, error) {
 	if CheckPluginExists(pluginUUID) {
 		return -1, fmt.Errorf("该插件已经加载")
 	}
@@ -98,7 +99,8 @@ func LoadPlugin(pluginUUID, serialNumber, pluginFile, config, pluginName, DBConn
 	configMap["plugin_uuid"] = pluginUUID
 	configMap["db_connection"] = DBConnection
 	configMap["plugin_name"] = pluginName
-	configMap["host_reply_url"] = replyUrl
+	configMap["host_reply_url"] = hostConfig.LocalRepUrl
+	configMap["db_driver_dir"] = genService.GenFilePath(hostConfig.DbDriverDir) //将路径转换为绝对路径
 
 	var data []byte
 	data, err = json.Marshal(&configMap)

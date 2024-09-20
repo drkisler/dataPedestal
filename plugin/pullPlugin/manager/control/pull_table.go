@@ -2,7 +2,9 @@ package control
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/enMap"
+	"github.com/drkisler/dataPedestal/common/pageBuffer"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
 	"sync"
 )
@@ -21,27 +23,27 @@ type TPullTableControl struct {
 }
 
 // AddTable 新增表
-func (pc *TPullTableControl) AppendTable() *common.TResponse {
+func (pc *TPullTableControl) AppendTable() *response.TResponse {
 	pullTable := pc.TPullTable
 	id, err := pullTable.AddTable()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.ReturnInt(id)
+	return response.ReturnInt(id)
 }
-func (pc *TPullTableControl) ModifyTable() *common.TResponse {
+func (pc *TPullTableControl) ModifyTable() *response.TResponse {
 	pullTable := pc.TPullTable
 	if err := pullTable.AlterTable(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
-func (pc *TPullTableControl) RemoveTable() *common.TResponse {
+func (pc *TPullTableControl) RemoveTable() *response.TResponse {
 	pullTable := pc.TPullTable
 	if err := pullTable.DeleteTable(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
 // fmt.Sprintf("%s:%s", pt.TableCode, pt.TableName)
@@ -49,50 +51,50 @@ func (pc *TPullTableControl) ToString() string {
 	return fmt.Sprintf("pageSize:%d,tableCode:%s,TableName:%s", pc.PageSize, pc.TableCode, pc.TableName)
 }
 
-func (pc *TPullTableControl) QueryTables() *common.TResponse {
-	var result common.TRespDataSet
+func (pc *TPullTableControl) QueryTables() *response.TResponse {
+	var result response.TRespDataSet
 	value, ok := tablePageBuffer.Load(pc.OperatorID)
 
-	if (!ok) || (value.(common.PageBuffer).QueryParam != pc.ToString()) || pc.PageIndex == 1 {
+	if (!ok) || (value.(pageBuffer.PageBuffer).QueryParam != pc.ToString()) || pc.PageIndex == 1 {
 		ids, err := pc.TPullTable.GetTableIDs()
 		if err != nil {
-			return common.Failure(err.Error())
+			return response.Failure(err.Error())
 		}
-		tablePageBuffer.Store(pc.OperatorID, common.NewPageBuffer(pc.OperatorID, pc.ToString(), int64(pc.PageSize), ids))
+		tablePageBuffer.Store(pc.OperatorID, pageBuffer.NewPageBuffer(pc.OperatorID, pc.ToString(), int64(pc.PageSize), ids))
 	}
 	value, _ = tablePageBuffer.Load(pc.OperatorID)
-	pageBuffer := value.(common.PageBuffer)
+	pageBuffer := value.(pageBuffer.PageBuffer)
 	if pageBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
-		return common.Success(&result)
+		return response.Success(&result)
 	}
 	ids, err := pageBuffer.GetPageIDs(int64(pc.PageIndex - 1))
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	if result.ArrData, err = pc.TPullTable.GetTables(ids); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	result.Total = pageBuffer.Total
-	return common.Success(&result)
+	return response.Success(&result)
 }
-func (pc *TPullTableControl) SetFilterValue() *common.TResponse {
+func (pc *TPullTableControl) SetFilterValue() *response.TResponse {
 	var err error
 	pullTable := pc.TPullTable
 	if err = pullTable.SetFilterVal(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (pc *TPullTableControl) AlterTableStatus() *common.TResponse {
+func (pc *TPullTableControl) AlterTableStatus() *response.TResponse {
 	var err error
 	pullTable := pc.TPullTable
 	if err = pullTable.SetTableStatus(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
 // GetAllTables 任务调度用
@@ -101,13 +103,13 @@ func (pc *TPullTableControl) GetAllTables() ([]TPullTable, int, error) {
 	return pullTable.GetAllTables()
 }
 
-func (pc *TPullTableControl) GetSourceTableDDL() *common.TResponse {
+func (pc *TPullTableControl) GetSourceTableDDL() *response.TResponse {
 	pullTable := pc.TPullTable
 	ddl, err := pullTable.GetSourceTableDDL()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.ReturnStr(ddl)
+	return response.ReturnStr(ddl)
 }
 
 func (pc *TPullTableControl) SetLastRun(iStartTime int64) error {
@@ -118,7 +120,7 @@ func (pc *TPullTableControl) SetLastRun(iStartTime int64) error {
 func ParsePullTableControl(data map[string]any) (*TPullTableControl, *TPullJob, error) {
 	var err error
 	var result TPullTableControl
-	if result.JobName, err = common.GetStringValueFromMap("job_name", data); err != nil {
+	if result.JobName, err = enMap.GetStringValueFromMap("job_name", data); err != nil {
 		return nil, nil, err
 	}
 	if result.JobName == "" {
@@ -126,48 +128,49 @@ func ParsePullTableControl(data map[string]any) (*TPullTableControl, *TPullJob, 
 	}
 
 	var job TPullJob
+	job.UserID = data["operator_id"].(int32)
 	job.JobName = result.JobName
 	if err = job.InitJobByName(); err != nil {
 		return nil, nil, err
 	}
 	result.JobID = job.JobID
-	if result.TableID, err = common.GetInt32ValueFromMap("table_id", data); err != nil {
+	if result.TableID, err = enMap.GetInt32ValueFromMap("table_id", data); err != nil {
 		return nil, nil, err
 	}
-	if result.TableName, err = common.GetStringValueFromMap("table_name", data); err != nil {
+	if result.TableName, err = enMap.GetStringValueFromMap("table_name", data); err != nil {
 		return nil, nil, err
 	}
-	if result.TableCode, err = common.GetStringValueFromMap("table_code", data); err != nil {
+	if result.TableCode, err = enMap.GetStringValueFromMap("table_code", data); err != nil {
 		return nil, nil, err
 	}
-	if result.DestTable, err = common.GetStringValueFromMap("dest_table", data); err != nil {
+	if result.DestTable, err = enMap.GetStringValueFromMap("dest_table", data); err != nil {
 		return nil, nil, err
 	}
-	if result.SelectSql, err = common.GetStringValueFromMap("select_sql", data); err != nil {
+	if result.SelectSql, err = enMap.GetStringValueFromMap("select_sql", data); err != nil {
 		return nil, nil, err
 	}
-	if result.FilterCol, err = common.GetStringValueFromMap("filter_col", data); err != nil {
+	if result.FilterCol, err = enMap.GetStringValueFromMap("filter_col", data); err != nil {
 		return nil, nil, err
 	}
-	if result.FilterVal, err = common.GetStringValueFromMap("filter_val", data); err != nil {
+	if result.FilterVal, err = enMap.GetStringValueFromMap("filter_val", data); err != nil {
 		return nil, nil, err
 	}
-	if result.KeyCol, err = common.GetStringValueFromMap("key_col", data); err != nil {
+	if result.KeyCol, err = enMap.GetStringValueFromMap("key_col", data); err != nil {
 		return nil, nil, err
 	}
-	if result.Buffer, err = common.GetIntValueFromMap("buffer", data); err != nil {
+	if result.Buffer, err = enMap.GetIntValueFromMap("buffer", data); err != nil {
 		return nil, nil, err
 	}
-	if result.Status, err = common.GetStringValueFromMap("status", data); err != nil {
+	if result.Status, err = enMap.GetStringValueFromMap("status", data); err != nil {
 		return nil, nil, err
 	}
-	if result.LastRun, err = common.GetInt64ValueFromMap("last_run", data); err != nil {
+	if result.LastRun, err = enMap.GetInt64ValueFromMap("last_run", data); err != nil {
 		return nil, nil, err
 	}
-	if result.PageIndex, err = common.GetInt32ValueFromMap("page_index", data); err != nil {
+	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
 		return nil, nil, err
 	}
-	if result.PageSize, err = common.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
 		return nil, nil, err
 	}
 	if result.PageIndex == 0 {

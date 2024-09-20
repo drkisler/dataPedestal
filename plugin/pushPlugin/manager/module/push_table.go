@@ -3,13 +3,13 @@ package module
 import (
 	"context"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/pushJob"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"time"
 )
 
 type TPushTable struct {
-	common.TPushTable
+	pushJob.TPushTable
 }
 
 func (pt *TPushTable) AddTable() (int64, error) {
@@ -118,7 +118,7 @@ func (pt *TPushTable) GetTableIDs() ([]int64, error) {
 	return result, nil
 }
 
-func (pt *TPushTable) GetTables(ids *string) ([]common.TPushTable, error) {
+func (pt *TPushTable) GetTables(ids *string) ([]pushJob.TPushTable, error) {
 	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
@@ -136,9 +136,9 @@ func (pt *TPushTable) GetTables(ids *string) ([]common.TPushTable, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var result []common.TPushTable
+	var result []pushJob.TPushTable
 	for rows.Next() {
-		var p common.TPushTable
+		var p pushJob.TPushTable
 		var strStatus string
 		var strError string
 		if err = rows.Scan(&p.JobID, &p.TableID, &p.TableCode, &p.SourceTable, &p.SelectSql, &p.SourceUpdated, &p.KeyCol, &p.Buffer, &p.Status,
@@ -214,7 +214,7 @@ func (pt *TPushTable) GetAllTables() ([]TPushTable, int, error) {
 	strSQL := fmt.Sprintf("select "+
 		"job_id,table_id,table_code,source_table,select_sql,source_updated,key_col,buffer,status,last_run "+
 		"from %s.push_table where job_id= $1 and status=$2", dbs.GetSchema())
-	rows, err := dbs.QuerySQL(strSQL, pt.JobID, common.STENABLED)
+	rows, err := dbs.QuerySQL(strSQL, pt.JobID, commonStatus.STENABLED)
 
 	if err != nil {
 		return nil, -1, err

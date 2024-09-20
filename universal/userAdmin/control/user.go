@@ -2,7 +2,7 @@ package control
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/universal/userAdmin/module"
 )
 
@@ -41,54 +41,54 @@ func (uc *TUserControl) checkAdmin() error {
 	}
 	return nil
 }
-func (uc *TUserControl) ResetPassword() *common.TResponse {
+func (uc *TUserControl) ResetPassword() *response.TResponse {
 	err := uc.checkAdmin()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	user := uc.TUser
 	if err = user.ResetPassword(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 
 }
-func (uc *TUserControl) AddUser() *common.TResponse {
+func (uc *TUserControl) AddUser() *response.TResponse {
 	err := uc.checkAdmin()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	user := uc.TUser
 	userid, err := user.AddUser()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.ReturnInt(int64(userid))
+	return response.ReturnInt(userid)
 }
-func (uc *TUserControl) AlterUser() *common.TResponse {
+func (uc *TUserControl) AlterUser() *response.TResponse {
 	err := uc.checkAdmin()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	user := uc.TUser
 	if err = user.AlterUser(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 
 }
-func (uc *TUserControl) DeleteUser() *common.TResponse {
+func (uc *TUserControl) DeleteUser() *response.TResponse {
 	err := uc.checkAdmin()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	user := uc.TUser
 	if err = user.DeleteUser(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
-func (uc *TUserControl) QueryUser() *common.TResponse {
+func (uc *TUserControl) QueryUser() *response.TResponse {
 	if uc.PageIndex == 0 {
 		uc.PageIndex = 1
 	}
@@ -97,12 +97,12 @@ func (uc *TUserControl) QueryUser() *common.TResponse {
 	}
 	err := uc.checkAdmin()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	user := uc.TUser
-	var data common.TRespDataSet
+	var data response.TRespDataSet
 	if data.ArrData, data.Total, err = user.QueryUser(uc.PageSize, uc.PageIndex); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(&data)
+	return response.Success(&data)
 }

@@ -3,14 +3,14 @@ package module
 import (
 	"context"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/pushJob"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"github.com/jackc/pgx/v5"
 	"time"
 )
 
 type TPushJob struct {
-	common.TPushJob
+	pushJob.TPushJob
 }
 
 func (pj *TPushJob) AddJob() (int64, error) {
@@ -74,8 +74,8 @@ func (pj *TPushJob) InitJobByName() error {
 
 	strSQL := fmt.Sprintf("select "+
 		"user_id,job_id,job_name,plugin_uuid,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression,skip_hour,is_debug,status,last_run "+
-		"from %s.push_job where job_name = $1", dbs.GetSchema())
-	rows, err := dbs.QuerySQL(strSQL, pj.JobName)
+		"from %s.push_job where user_id = $1 and job_name = $2", dbs.GetSchema())
+	rows, err := dbs.QuerySQL(strSQL, pj.UserID, pj.JobName)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (pj *TPushJob) DeleteJob() error {
 	return dbs.ExecuteSQL(context.Background(), strSQL, pj.JobID)
 }
 
-func (pj *TPushJob) GetJobs(ids *string) ([]common.TPushJob, error) {
+func (pj *TPushJob) GetJobs(ids *string) ([]pushJob.TPushJob, error) {
 	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
@@ -138,9 +138,9 @@ func (pj *TPushJob) GetJobs(ids *string) ([]common.TPushJob, error) {
 	}
 
 	defer rows.Close()
-	var result []common.TPushJob
+	var result []pushJob.TPushJob
 	for rows.Next() {
-		var p common.TPushJob
+		var p pushJob.TPushJob
 		var strStatus string
 		var strError string
 		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.PluginUUID, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer,
@@ -208,7 +208,7 @@ func GetAllJobs() (data []TPushJob, total int, err error) {
 	strSQL := fmt.Sprintf("select "+
 		"user_id,job_id,job_name,plugin_uuid,source_db_conn,dest_db_conn,keep_connect,connect_buffer, cron_expression,skip_hour, is_debug, status,last_run "+
 		"from %s.push_job where status=$1", dbs.GetSchema())
-	rows, err := dbs.QuerySQL(strSQL, common.STENABLED)
+	rows, err := dbs.QuerySQL(strSQL, commonStatus.STENABLED)
 	if err != nil {
 		return nil, 0, err
 	}

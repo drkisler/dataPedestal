@@ -2,12 +2,15 @@ package workerService
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
+	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/pullJob"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
-	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker"
+	"github.com/drkisler/dataPedestal/universal/databaseDriver"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/google/uuid"
@@ -21,48 +24,27 @@ type TWorkerJob struct {
 	pluginBase.TBasePlugin
 	JobUUID   uuid.UUID
 	JobID     int32
-	workerJob worker.IPullWorker
-	//clickHouseClient *clickHouse.TClickHouseClient
-	msgClient     *messager.TMessageClient
-	SourceDbConn  string //datasource
-	DestDbConn    string //数据中心的数据库
-	ReplyURL      string
-	KeepConnect   bool
-	ConnectBuffer int
-	SkipHour      []int
-	isWorking     bool //实时的工作状态
-	Enabled       bool //是否启用
+	sourceDB  databaseDriver.IDbDriver
+	msgClient *messager.TMessageClient
+	ReplyURL  string
+	//KeepConnect bool
+
+	SkipHour  []int
+	isWorking bool //实时的工作状态
+	Enabled   bool //是否启用
 }
 
-func NewWorkerJob(job *module.TPullJob, replyUrl string) (*TWorkerJob, error) {
-	var err error
+func NewWorkerJob(job *module.TPullJob, replyUrl string, newDbDriver func(string, string, int, int, int, int) (databaseDriver.IDbDriver, error)) (*TWorkerJob, error) {
 	var skipHour []int
-	var workerJob worker.IPullWorker
-	//var chClient *clickHouse.TClickHouseClient
-	var connOption map[string]string
-	strConn := job.SourceDbConn
-	if connOption, err = common.StringToMap(&strConn); err != nil {
+	var dbSource databaseDriver.IDbDriver
+	ds, err := job.GetDataSource()
+	if err != nil {
 		return nil, err
 	}
-	if workerJob, err = NewWorker(connOption, job.ConnectBuffer); err != nil {
-		return nil, err
-	}
-	/*
-		strConn = job.DestDbConn
-		if connOption, err = common.StringToMap(&strConn); err != nil {
-			return nil, err
-		}
 
-		if chClient, err = clickHouse.NewClickHouseClient(
-			connOption["host"],
-			connOption["dbname"],
-			connOption["user"],
-			connOption["password"],
-			connOption["cluster"],
-		); err != nil {
-			return nil, err
-		}
-	*/
+	if dbSource, err = newDbDriver(ds.DatabaseDriver, ds.ConnectString, int(ds.MaxIdleTime), int(ds.MaxOpenConnections), int(ds.ConnMaxLifetime), int(ds.MaxIdleConnections)); err != nil {
+		return nil, err
+	}
 
 	if skipHour, err = func(source string) ([]int, error) {
 		if source == "" {
@@ -88,18 +70,13 @@ func NewWorkerJob(job *module.TPullJob, replyUrl string) (*TWorkerJob, error) {
 	}
 
 	return &TWorkerJob{
-		JobID:     job.JobID,
-		workerJob: workerJob,
-		//clickHouseClient: chClient,
-		SourceDbConn: job.SourceDbConn,
-		//DestDbConn:    job.DestDbConn,
-		//KeepConnect:   job.KeepConnect == common.STYES,
-		ConnectBuffer: job.ConnectBuffer,
-		TBasePlugin:   pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: job.IsDebug == common.STYES},
-		SkipHour:      skipHour,
-		Enabled:       job.Status == common.STENABLED,
-		msgClient:     MsgClient,
-		ReplyURL:      replyUrl,
+		JobID:       job.JobID,
+		sourceDB:    dbSource,
+		TBasePlugin: pluginBase.TBasePlugin{TStatus: commonStatus.NewStatus(), IsDebug: job.IsDebug == commonStatus.STYES},
+		SkipHour:    skipHour,
+		Enabled:     job.Status == commonStatus.STENABLED,
+		msgClient:   MsgClient,
+		ReplyURL:    replyUrl,
 	}, nil
 }
 
@@ -111,6 +88,7 @@ func (wj *TWorkerJob) Run() {
 	wj.isWorking = true
 	defer func() {
 		wj.isWorking = false
+		_ = wj.sourceDB.CloseConnect()
 	}()
 	// 启动任务日志
 	var iStartTime int64
@@ -123,7 +101,7 @@ func (wj *TWorkerJob) Run() {
 		return
 	}
 	// 更新任务启动时间
-	job := &ctl.TPullJob{TPullJob: common.TPullJob{JobID: wj.JobID}}
+	job := &ctl.TPullJob{TPullJob: pullJob.TPullJob{JobID: wj.JobID}}
 	if err = job.SetLastRun(iStartTime); err != nil {
 		logService.LogWriter.WriteError(fmt.Sprintf("更新任务%s启动时间失败：%s", job.JobName, err.Error()), false)
 		return
@@ -154,7 +132,6 @@ func (wj *TWorkerJob) Run() {
 }
 
 func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64) (int64, error) {
-	var rows interface{}
 	var tbl ctl.TPullTableControl
 	var err error
 	var total int64
@@ -166,26 +143,46 @@ func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64) (int64, error) 
 	}
 
 	strSQL, strVals := tbl.SelectSql, tbl.FilterVal
-	if rows, err = wj.workerJob.ReadData(&strSQL, &strVals); err != nil {
-		return 0, fmt.Errorf("读取数据失败：%s", err.Error())
+	clickHouseClient, err := clickHouseLocal.GetClickHouseDriver(nil)
+	if err != nil {
+		return 0, fmt.Errorf("获取ClickHouse驱动失败：%s", err.Error())
 	}
-	// 全量抽取
+
+	clickDB, err := clickHouseSQL.GetClickHouseClient(nil)
+	if err != nil {
+		return 0, err
+	}
+
+	// strVals == "" 全量抽取,数据抽取前先清空目标表，需要将表数据备份
 	if strVals == "" {
+		tx, transErr := clickDB.BeginTransaction()
+		if transErr != nil {
+			return 0, fmt.Errorf("开启事务失败：%s", transErr.Error())
+		}
+		if _, err = tx.Exec(fmt.Sprintf("CREATE TEMPORARY TABLE IF NOT EXISTS temp_%s as select * from %s", tbl.DestTable, tbl.DestTable)); err != nil {
+			return 0, err
+		}
 		if err = clickHouse.ClearTableData(tbl.DestTable); err != nil {
+			_ = tx.Rollback()
 			return 0, fmt.Errorf("清空数据失败：%s", err.Error())
 		}
-	}
-	if total, err = wj.workerJob.WriteData(tbl.DestTable, tbl.Buffer, rows, iStartTime); err != nil {
-		return 0, fmt.Errorf("写入数据失败：%s", err.Error())
-	}
-	// 非全量抽取，清除重复的数据
-	if strVals != "" {
+		if total, err = wj.sourceDB.PullData(strSQL, strVals, tbl.DestTable, tbl.Buffer, iStartTime, clickHouseClient); err != nil {
+			if _, rollbackErr := tx.Exec(fmt.Sprintf("INSERT "+
+				"INTO %s select * from temp_%s", tbl.DestTable, tbl.DestTable)); rollbackErr != nil {
+				_ = tx.Rollback()
+				return 0, fmt.Errorf("回滚失败：%s", rollbackErr.Error())
+			}
+			_ = tx.Rollback()
+			return 0, fmt.Errorf("读取数据失败：%s", err.Error())
+		}
+		_ = tx.Commit()
+	} else {
+		if total, err = wj.sourceDB.PullData(strSQL, strVals, tbl.DestTable, tbl.Buffer, iStartTime, clickHouseClient); err != nil { // .ReadData(&strSQL, &strVals)
+			return 0, fmt.Errorf("读取数据失败：%s", err.Error())
+		}
 		if err = clickHouse.ClearDuplicateData(tbl.DestTable, tbl.FilterCol); err != nil {
 			return -1, err
 		}
-	}
-
-	if strVals != "" {
 		tbl.FilterVal, err = clickHouse.GetMaxFilter(tbl.DestTable, &strVals)
 		if err != nil {
 			return 0, fmt.Errorf("获取过滤值失败：%s", err.Error())
@@ -194,10 +191,7 @@ func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64) (int64, error) 
 			return 0, fmt.Errorf("更新过滤值失败：%s", err.Error())
 		}
 	}
-	// convert current time to string
-	//_ = tbl.SetPullResult(fmt.Sprintf("[%s]拉取数据成功，共%d条", time.Now().Format("2006-01-02 15:04:05"), total))
 	return total, nil
-
 }
 
 func (wj *TWorkerJob) PullTables() error {
@@ -233,7 +227,7 @@ func (wj *TWorkerJob) PullTables() error {
 				}
 				continue
 			}
-			if err = tableLog.StopTableLog(iStartTime, ""); err != nil {
+			if err = tableLog.StopTableLog(iStartTime, fmt.Sprintf("[%s]拉取数据成功，共%d条", time.Now().Format("2006-01-02 15:04:05"), tableLog.RecordCount)); err != nil {
 				logService.LogWriter.WriteError(fmt.Sprintf("记录表[%d]结束信息失败：%s", tbl.TableID, err.Error()), false)
 			}
 			// 发布表数据变动消息
@@ -260,12 +254,12 @@ func (wj *TWorkerJob) IsWorking() bool {
 func (wj *TWorkerJob) DisableJob() error {
 	var job ctl.TPullJob
 	job.JobID = wj.JobID
-	job.Status = common.STDISABLED
+	job.Status = commonStatus.STDISABLED
 	return job.SetJobStatus()
 }
 func (wj *TWorkerJob) EnableJob() error {
 	var job ctl.TPullJob
 	job.JobID = wj.JobID
-	job.Status = common.STENABLED
+	job.Status = commonStatus.STENABLED
 	return job.SetJobStatus()
 }

@@ -3,7 +3,9 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/plugins"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
@@ -15,15 +17,16 @@ import (
 )
 
 var SerialNumber string
-var PluginServ common.IPlugin
+var PluginServ plugins.IPlugin
 var operateMap map[string]TPluginFunc
 
 type TBasePlugin = pluginBase.TBasePlugin
-type TPluginFunc func(userID int32, params map[string]any) common.TResponse
+type TPluginFunc func(userID int32, params map[string]any) response.TResponse
 
 type TMyPlugin struct {
 	TBasePlugin
 	HostReplyUrl string `json:"host_reply_url,omitempty"`
+	DbDriverDir  string `json:"db_driver_dir,omitempty"`
 	workerProxy  *workerService.TWorkerProxy
 }
 
@@ -61,71 +64,70 @@ func InitPlugin() {
 	operateMap["queryTableLogs"] = QueryTableLogs
 
 	operateMap["checkSourceConnection"] = CheckSourceConnect
-	operateMap["getSourceConnOption"] = GetSourceConnOption
 	operateMap["getSourceQuoteFlag"] = GetSourceQuoteFlag
-	operateMap["getSourceDatabaseType"] = GetDatabaseType
+
 	//operateMap["getDestConnOption"] = GetDestConnOption
 	//operateMap["getSourceTableDDL"] = GetSourceTableDDLSQL //GetSourceTableDDLSQL   GetSourceTableDDL
 
 }
 
-func CreateMyPullPlugin() common.IPlugin {
-	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: common.NewStatus()}}
+func CreateMyPullPlugin() plugins.IPlugin {
+	return &TMyPlugin{TBasePlugin: TBasePlugin{TStatus: commonStatus.NewStatus()}}
 }
 
 // Load 根据配置信息设置属性，创建必要的变量
-func (mp *TMyPlugin) Load(config string) common.TResponse {
+func (mp *TMyPlugin) Load(config string) response.TResponse {
 	if mp == nil {
-		return *common.Failure("plugin 初始化失败，不能加载")
+		return *response.Failure("plugin 初始化失败，不能加载")
 	}
 	var err error
 	var connOpt map[string]string
 
 	var pubServCfg TMyPlugin
 	if err = json.Unmarshal([]byte(config), &pubServCfg); err != nil {
-		return *common.Failure(fmt.Sprintf("解析配置失败:%s", err.Error()))
+		return *response.Failure(fmt.Sprintf("解析配置失败:%s", err.Error()))
 	}
 	if pubServCfg.PluginName == "" {
-		return *common.Failure("插件名称不能为空")
+		return *response.Failure("插件名称不能为空")
 	}
 	if pubServCfg.PluginUUID == "" {
-		return *common.Failure("插件UUID不能为空")
+		return *response.Failure("插件UUID不能为空")
 	}
 	logService.LogWriter = logService.NewLogWriter(fmt.Sprintf("%s(%s)", pubServCfg.PluginName, pubServCfg.PluginUUID))
 
 	if pubServCfg.DBConnection == "" {
 		logService.LogWriter.WriteError("未能获取到数据库连接信息，请确认配置是否正确", false)
-		return *common.Failure("未能获取到数据库连接信息，请确认配置是否正确")
+		return *response.Failure("未能获取到数据库连接信息，请确认配置是否正确")
 	}
 
 	if pubServCfg.HostReplyUrl == "" {
 		logService.LogWriter.WriteError("未能获取到应答服务地址，请确认配置是否正确", false)
-		return *common.Failure("未能获取到应答服务地址，请确认配置是否正确")
+		return *response.Failure("未能获取到应答服务地址，请确认配置是否正确")
 	}
 	pubServCfg.SetConnection(pubServCfg.DBConnection)
 
 	connOpt = pubServCfg.GetConnectOption()
 	metaDataBase.SetConnectOption(connOpt)
 	if _, err = metaDataBase.GetPgServ(); err != nil {
-		logService.LogWriter.WriteError(fmt.Sprintf("数据库连接失败:%s", err.Error()), false)
-		return *common.Failure(fmt.Sprintf("数据库连接失败:%s", err.Error()))
+		logService.LogWriter.WriteLocal(fmt.Sprintf("数据库连接失败:%s", err.Error())) // WriteError(fmt.Sprintf("数据库连接失败:%s", err.Error()), false)
+		return *response.Failure(fmt.Sprintf("数据库连接失败:%s", err.Error()))
 	}
 	mp.PluginName = pubServCfg.PluginName
 	logService.LogWriter = logService.NewLogWriter(mp.PluginUUID)
 
-	if mp.workerProxy, err = workerService.NewWorkerProxy(pubServCfg.HostReplyUrl); err != nil {
+	if mp.workerProxy, err = workerService.NewWorkerProxy(pubServCfg.HostReplyUrl, pubServCfg.DbDriverDir); err != nil {
 		logService.LogWriter.WriteError(fmt.Sprintf("创建worker代理%s失败:%s", pubServCfg.HostReplyUrl, err.Error()), false)
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 
 	logService.LogWriter.WriteInfo("插件加载成功", false)
 	//需要返回端口号，如果没有则返回1
 	//return *common.ReturnInt(int(cfg.ServerPort))
-	return *common.ReturnInt(1)
+	return *response.ReturnInt(1)
 }
 
 // GetConfigTemplate 向客户端返回配置信息的样例
-func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
+func (mp *TMyPlugin) GetConfigTemplate() response.TResponse {
 	//var cfg initializers.TMySQLConfig
 	//cfg.IsDebug = false
 	//cfg.ConnectString = "user:password@tcp(localhost:3306)/dbname?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true"
@@ -141,17 +143,17 @@ func (mp *TMyPlugin) GetConfigTemplate() common.TResponse {
 	cfg.IsDebug = false
 	data, err := json.Marshal(&cfg)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
-	return common.TResponse{Code: 0, Info: string(data)}
+	return response.TResponse{Code: 0, Info: string(data)}
 }
 
 // Run 启动程序，启动前必须先Load
-func (mp *TMyPlugin) Run() common.TResponse {
+func (mp *TMyPlugin) Run() response.TResponse {
 	//启动调度器
 	if err := mp.workerProxy.Start(); err != nil {
 		logService.LogWriter.WriteError(err.Error(), false)
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 
 	mp.SetRunning(true)
@@ -168,155 +170,188 @@ func (mp *TMyPlugin) Run() common.TResponse {
 	}
 
 	logService.LogWriter.WriteInfo("插件已停止", false)
-	return *common.Success(nil)
+	return *response.Success(nil)
 }
 
 // Stop 停止程序，释放资源
-func (mp *TMyPlugin) Stop() common.TResponse {
+func (mp *TMyPlugin) Stop() response.TResponse {
 	mp.TBasePlugin.Stop()
 	// 停止长期任务，对于scheduler的停止，需要单独处理
 	mp.workerProxy.StopRun()
 
 	dbs, _ := metaDataBase.GetPgServ()
 	dbs.Close()
-	return common.TResponse{Code: 0, Info: "success stop plugin"} //*common.Success(nil)
-}
-
-func (mp *TMyPlugin) GetSourceConnOption(_ map[string]any) common.TResponse {
-
-	options, err := mp.workerProxy.GetSourceConnOption()
-	if err != nil {
-		return *common.Failure(err.Error())
-	}
-	return *common.Success(&common.TRespDataSet{ArrData: options, Total: int64(len(options))})
+	return response.TResponse{Code: 0, Info: "success stop plugin"} //*common.Success(nil)
 }
 
 func (mp *TMyPlugin) GetOnlineJobIDs() []int32 {
 	return mp.workerProxy.GetOnlineJobID()
 }
 
-func (mp *TMyPlugin) GetSourceQuoteFlag(_ map[string]any) common.TResponse {
-	return common.TResponse{Code: 0, Info: mp.workerProxy.GetSourceQuoteFlag()}
-}
-
-func (mp *TMyPlugin) GetDatabaseType(_ map[string]any) common.TResponse {
-	return common.TResponse{Code: 0, Info: mp.workerProxy.GetDatabaseType()}
+func (mp *TMyPlugin) GetSourceQuoteFlag(params map[string]any) response.TResponse {
+	dbDriver, ok := params["db_driver"]
+	if !ok {
+		return *response.Failure("db_driver is empty")
+	}
+	result, err := mp.workerProxy.GetSourceQuoteFlag(dbDriver.(string))
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+	return response.TResponse{Code: 0, Info: result}
 }
 
 // GetSourceTables 从数据源中获取表清单
-func (mp *TMyPlugin) GetSourceTables(connectOption map[string]string) common.TResponse {
-	tables, err := mp.workerProxy.GetSourceTables(connectOption)
+func (mp *TMyPlugin) GetSourceTables(dbDriver string) response.TResponse {
+	tables, err := mp.workerProxy.GetSourceTables(dbDriver)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
-	return *common.Success(&common.TRespDataSet{ArrData: tables, Total: int64(len(tables))})
+	return *response.Success(&response.TRespDataSet{ArrData: tables, Total: int64(len(tables))})
 }
 
-func (mp *TMyPlugin) OnLineJob(params map[string]any) common.TResponse {
+func (mp *TMyPlugin) OnLineJob(userID int32, params map[string]any) response.TResponse {
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
-	if err := mp.workerProxy.OnLineJob(strJobName.(string)); err != nil {
-		return *common.Failure(err.Error())
+	if err := mp.workerProxy.OnLineJob(userID, strJobName.(string)); err != nil {
+		return *response.Failure(err.Error())
 	}
-	return *common.Success(nil)
+	return *response.Success(nil)
 }
 
-func (mp *TMyPlugin) CheckJob(params map[string]any) common.TResponse {
+func (mp *TMyPlugin) CheckJob(userID int32, params map[string]any) response.TResponse {
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
-	if err := mp.workerProxy.CheckJob(strJobName.(string)); err != nil {
-		return *common.Failure(err.Error())
+	if err := mp.workerProxy.CheckJob(userID, strJobName.(string)); err != nil {
+		return *response.Failure(err.Error())
 	}
-	return *common.Success(nil)
+	return *response.Success(nil)
 }
 
-func (mp *TMyPlugin) CheckJobTable(params map[string]any) common.TResponse {
+func (mp *TMyPlugin) CheckJobTable(userID int32, params map[string]any) response.TResponse {
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
 	intTableID, ok := params["table_id"]
 	if !ok {
-		return *common.Failure("tableID is empty")
+		return *response.Failure("tableID is empty")
 	}
-	if err := mp.workerProxy.CheckJobTable(strJobName.(string), int32(intTableID.(float64))); err != nil {
-		return *common.Failure(err.Error())
+	if err := mp.workerProxy.CheckJobTable(userID, strJobName.(string), int32(intTableID.(float64))); err != nil {
+		return *response.Failure(err.Error())
 	}
-	return *common.Success(nil)
+	return *response.Success(nil)
 }
 
-func (mp *TMyPlugin) CheckJobLoaded(params map[string]any) common.TResponse {
+func (mp *TMyPlugin) CheckJobLoaded(params map[string]any) response.TResponse {
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
-	if ok = mp.workerProxy.CheckJobLoaded(strJobName.(string)); !ok {
-		return *common.Failure(fmt.Sprintf("job %s not exist", strJobName))
+	intUserID, ok := params["user_id"]
+	if !ok {
+		return *response.Failure("userID is empty")
 	}
-	return *common.Success(nil)
+	var err error
+	if ok, err = mp.workerProxy.CheckJobLoaded(intUserID.(int32), strJobName.(string)); err != nil {
+		return *response.Failure(err.Error())
+	}
+	if !ok {
+		return *response.Failure(fmt.Sprintf("job %s not exist", strJobName))
+	}
+	return *response.Success(nil)
 }
 
-func (mp *TMyPlugin) OffLineJob(params map[string]any) common.TResponse {
+func (mp *TMyPlugin) OffLineJob(params map[string]any) response.TResponse {
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
-	if err := mp.workerProxy.OffLineJob(strJobName.(string)); err != nil {
-		return *common.Failure(err.Error())
+	intUserID, ok := params["user_id"]
+	if !ok {
+		return *response.Failure("userID is empty")
 	}
-	return *common.Success(nil)
+	if err := mp.workerProxy.OffLineJob(intUserID.(int32), strJobName.(string)); err != nil {
+		return *response.Failure(err.Error())
+	}
+	return *response.Success(nil)
 }
 
-func (mp *TMyPlugin) GetTableColumns(connectOption map[string]string, tableName *string) common.TResponse {
-	cols, err := mp.workerProxy.GetTableColumns(connectOption, tableName)
+func (mp *TMyPlugin) GetTableColumns(dbDriver string, tableName string) response.TResponse {
+	cols, err := mp.workerProxy.GetTableColumns(dbDriver, tableName)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
-	return *common.Success(&common.TRespDataSet{ArrData: cols, Total: int64(len(cols))})
+	return *response.Success(&response.TRespDataSet{ArrData: cols, Total: int64(len(cols))})
 }
 
-func (mp *TMyPlugin) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
-	return mp.workerProxy.GetSourceTableDDL(connectOption, tableName)
+func (mp *TMyPlugin) GetSourceTableDDL(dbDriver string, tableName string) (*string, error) {
+	return mp.workerProxy.GetSourceTableDDL(dbDriver, tableName)
 }
 
-func (mp *TMyPlugin) GetDestTables(connectOption map[string]string) common.TResponse {
-	tables, err := mp.workerProxy.GetDestTableNames(connectOption)
+func (mp *TMyPlugin) GetDestTables() response.TResponse {
+	tables, err := mp.workerProxy.GetDestTables()
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
-	return *common.Success(&common.TRespDataSet{ArrData: tables, Total: int64(len(tables))})
+	return *response.Success(&response.TRespDataSet{ArrData: tables, Total: int64(len(tables))})
 }
-func (mp *TMyPlugin) GetTableScript(connectOption map[string]string, tableName *string) common.TResponse {
-	script, err := mp.workerProxy.GenTableScript(connectOption, tableName)
+func (mp *TMyPlugin) GetTableScript(dbDriver string, tableName string) response.TResponse {
+	script, err := mp.workerProxy.GenTableScript(dbDriver, tableName)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
-	return *common.ReturnStr(*script)
+	return *response.ReturnStr(*script)
 }
 
-func (mp *TMyPlugin) CheckSQLValid(connectOption map[string]string, sql, filterVal *string) common.TResponse {
-	columns, err := mp.workerProxy.CheckSQLValid(connectOption, sql, filterVal)
+func (mp *TMyPlugin) CheckSQLValid(dbDriver string, sql, filterVal string) response.TResponse {
+	columns, err := mp.workerProxy.CheckSQLValid(dbDriver, sql, filterVal)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
-	return *common.RespData(int64(len(columns)), columns, nil)
+	return *response.RespData(int64(len(columns)), columns, nil)
 }
 
-func (mp *TMyPlugin) CheckSourceConnect(connectOption map[string]string) common.TResponse {
-	if err := mp.workerProxy.CheckSourceConnect(connectOption); err != nil {
-		return *common.Failure(err.Error())
+func (mp *TMyPlugin) CheckSourceConnect(params map[string]any) response.TResponse {
+	dbDriver, ok := params["db_driver"]
+	if !ok {
+		return *response.Failure("db_driver is empty")
 	}
-	return *common.Success(nil)
+	strConnect, ok := params["connect_string"]
+	if !ok {
+		return *response.Failure("connect_string is empty")
+	}
+	maxIdleTime, ok := params["max_idle_time"]
+	if !ok {
+		return *response.Failure("max_idle_time is empty")
+	}
+	maxOpenConnections, ok := params["max_open_connections"]
+	if !ok {
+		return *response.Failure("max_open_connections is empty")
+	}
+	connMaxLifetime, ok := params["conn_max_lifetime"]
+	if !ok {
+		return *response.Failure("conn_max_lifetime is empty")
+	}
+	maxIdleConnections, ok := params["max_idle_connections"]
+	if !ok {
+		return *response.Failure("max_idle_connections is empty")
+	}
+
+	if err := mp.workerProxy.CheckSourceConnect(dbDriver.(string), strConnect.(string), maxIdleTime.(int),
+		maxOpenConnections.(int), connMaxLifetime.(int), maxIdleConnections.(int)); err != nil {
+		return *response.Failure(err.Error())
+	}
+	return *response.Success(nil)
 }
 
-func (mp *TMyPlugin) CustomInterface(pluginOperate common.TPluginOperate) common.TResponse {
+func (mp *TMyPlugin) CustomInterface(pluginOperate plugins.TPluginOperate) response.TResponse {
 	operateFunc, ok := operateMap[pluginOperate.OperateName]
 	if !ok {
-		return *common.Failure(fmt.Sprintf("接口 %s 不存在", pluginOperate.OperateName))
+		return *response.Failure(fmt.Sprintf("接口 %s 不存在", pluginOperate.OperateName))
 	}
 	return operateFunc(pluginOperate.UserID, pluginOperate.Params)
 }

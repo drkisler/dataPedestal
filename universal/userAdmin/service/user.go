@@ -3,7 +3,8 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/universal/logAdmin/service"
 
 	//"github.com/drkisler/dataPedestal/portal/module"
@@ -19,20 +20,20 @@ func Login(ctx *gin.Context) {
 	var strToken string
 
 	if err := ctx.ShouldBind(&usr); err != nil {
-		ctx.JSON(200, common.Failure(err.Error()))
+		ctx.JSON(200, response.Failure(err.Error()))
 		return
 	}
 	_, err := json.Marshal(&usr)
 	if err != nil {
-		ctx.JSON(200, common.Failure(err.Error()))
+		ctx.JSON(200, response.Failure(err.Error()))
 		return
 	}
 	if err = usr.Login(); err != nil {
-		ctx.JSON(200, common.Failure(err.Error()))
+		ctx.JSON(200, response.Failure(err.Error()))
 		return
 	}
 	if strToken, err = utils.GetToken(usr.Account, usr.UserID); err != nil {
-		ctx.JSON(200, common.Failure(err.Error()))
+		ctx.JSON(200, response.Failure(err.Error()))
 		return
 	}
 	usr.Password = ""
@@ -45,10 +46,10 @@ func DeleteUser(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&usr); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	usr.OperatorID, usr.OperatorCode = userID, userCode
@@ -64,10 +65,10 @@ func AddUser(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&usr); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	usr.OperatorID, usr.OperatorCode = userID, userCode
@@ -85,10 +86,10 @@ func AlterUser(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&usr); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	usr.OperatorID, usr.OperatorCode = userID, userCode
@@ -105,10 +106,10 @@ func QueryUser(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&usr); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	usr.OperatorID, usr.OperatorCode = userID, userCode
@@ -126,10 +127,10 @@ func ResetPassword(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&usr); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	usr.OperatorID, usr.OperatorCode = userID, userCode
@@ -145,10 +146,10 @@ func ResetPassword(ctx *gin.Context) {
 func CheckUser(ctx *gin.Context) {
 	var err error
 	var usr usrCtl.TUserControl
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if usr.OperatorID, usr.OperatorCode, err = ginContext.GetOperator(); err != nil {
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
-	ginContext.Reply(common.ReturnInt(int64(usr.UserID)))
+	ginContext.Reply(response.ReturnInt(int64(usr.UserID)))
 }

@@ -1,78 +1,79 @@
 package service
 
 import (
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/enMap"
+	"github.com/drkisler/dataPedestal/common/response"
 	ctl "github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/control"
 )
 
-func AddTable(userID int32, params map[string]any) common.TResponse {
+func AddTable(userID int32, params map[string]any) response.TResponse {
 	ptc, _, err := ctl.ParsePushTableControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
 	return *(ptc.AppendTable())
 }
-func AlterTable(userID int32, params map[string]any) common.TResponse {
+func AlterTable(userID int32, params map[string]any) response.TResponse {
 	ptc, _, err := ctl.ParsePushTableControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
 
 	return *(ptc.ModifyTable())
 }
-func DeleteTable(userID int32, params map[string]any) common.TResponse {
+func DeleteTable(userID int32, params map[string]any) response.TResponse {
 	ptc, _, err := ctl.ParsePushTableControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
 	return *(ptc.RemoveTable())
 }
 
-func GetSourceTableDDL(userID int32, params map[string]any) common.TResponse {
+func GetSourceTableDDL(userID int32, params map[string]any) response.TResponse {
 	var ptc ctl.TPushTableControl
 	var err error
-	if ptc.SourceTable, err = common.GetStringValueFromMap("source_table", params); err != nil {
-		return *common.Failure(err.Error())
+	if ptc.SourceTable, err = enMap.GetStringValueFromMap("source_table", params); err != nil {
+		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
 	return *(ptc.GetSourceTableDDL())
 }
 
-func GetPushTables(userID int32, params map[string]any) common.TResponse {
+func GetPushTables(userID int32, params map[string]any) response.TResponse {
 	ptc, _, err := ctl.ParsePushTableControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
 
 	return *(ptc.QueryTables())
 }
 
-func ClearTableLog(userID int32, params map[string]any) common.TResponse {
+func ClearTableLog(userID int32, params map[string]any) response.TResponse {
 	tbc, err := ctl.ParseTableLogControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	tbc.OperatorID = userID
 	return *tbc.ClearTableLog()
 }
 
-func DeleteTableLog(userID int32, params map[string]any) common.TResponse {
+func DeleteTableLog(userID int32, params map[string]any) response.TResponse {
 	tbc, err := ctl.ParseTableLogControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	tbc.OperatorID = userID
 	return *tbc.DeleteTableLog()
 }
 
-func QueryTableLogs(userID int32, params map[string]any) common.TResponse {
+func QueryTableLogs(userID int32, params map[string]any) response.TResponse {
 	tbc, err := ctl.ParseTableLogControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	tbc.OperatorID = userID
 	return *tbc.QueryTableLogs()
@@ -88,75 +89,78 @@ func QueryTableLogs(userID int32, params map[string]any) common.TResponse {
 		return *(ptc.GetSourceTableDDL())
 	}
 */
-func SetTableStatus(userID int32, params map[string]any) common.TResponse {
+func SetTableStatus(userID int32, params map[string]any) response.TResponse {
 	ptc, _, err := ctl.ParsePushTableControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
 	return *(ptc.AlterTableStatus())
 }
 
-func GetSourceTables(_ int32, params map[string]any) common.TResponse {
+func GetSourceTables(userID int32, params map[string]any) response.TResponse {
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
 	var job ctl.TPushJob
 	var err error
 	job.JobName = strJobName.(string)
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	strConn := job.SourceDbConn
 	var connOption map[string]string
-	if connOption, err = common.StringToMap(&strConn); err != nil {
-		return *common.Failure(err.Error())
+	if connOption, err = enMap.StringToMap(&strConn); err != nil {
+		return *response.Failure(err.Error())
 	}
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).GetSourceTables(connOption)
 }
 
-func GetDestTables(_ int32, params map[string]any) common.TResponse {
+func GetDestTables(userID int32, params map[string]any) response.TResponse {
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
 	var job ctl.TPushJob
 	var err error
 	job.JobName = strJobName.(string)
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	strConn := job.DestDbConn
 	var connOption map[string]string
-	if connOption, err = common.StringToMap(&strConn); err != nil {
-		return *common.Failure(err.Error())
+	if connOption, err = enMap.StringToMap(&strConn); err != nil {
+		return *response.Failure(err.Error())
 	}
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).GetDestTables(connOption)
 }
 
-func GetTableColumns(_ int32, params map[string]any) common.TResponse {
+func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 	//connectStr, tableName *string
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
 	var job ctl.TPushJob
 	var err error
 	job.JobName = strJobName.(string)
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	strConn := job.SourceDbConn
 	var connOption map[string]string
-	if connOption, err = common.StringToMap(&strConn); err != nil {
-		return *common.Failure(err.Error())
+	if connOption, err = enMap.StringToMap(&strConn); err != nil {
+		return *response.Failure(err.Error())
 	}
 	tableName, ok := params["table_name"]
 	if !ok {
-		return *common.Failure("tableName is empty")
+		return *response.Failure("tableName is empty")
 	}
 	strTableName := tableName.(string)
 
@@ -190,16 +194,16 @@ func GetTableColumns(_ int32, params map[string]any) common.TResponse {
 		return (*myPlugin).GetTableScript(connOption, &strTableName)
 	}
 */
-func CheckSQLValid(_ int32, params map[string]any) common.TResponse {
+func CheckSQLValid(userID int32, params map[string]any) response.TResponse {
 	//job_name sqlString; filterColumn; filterValue
 	strFilterValue := ""
 	strJobName, ok := params["job_name"]
 	if !ok {
-		return *common.Failure("jobName is empty")
+		return *response.Failure("jobName is empty")
 	}
 	strSQL, ok := params["sql"]
 	if !ok {
-		return *common.Failure("sql is empty")
+		return *response.Failure("sql is empty")
 	}
 	filterValue, ok := params["filter_value"]
 	if ok {
@@ -209,13 +213,14 @@ func CheckSQLValid(_ int32, params map[string]any) common.TResponse {
 	var job ctl.TPushJob
 	var err error
 	job.JobName = strJobName.(string)
+	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	strConn := job.SourceDbConn
 	var connOption map[string]string
-	if connOption, err = common.StringToMap(&strConn); err != nil {
-		return *common.Failure(err.Error())
+	if connOption, err = enMap.StringToMap(&strConn); err != nil {
+		return *response.Failure(err.Error())
 	}
 
 	sql := strSQL.(string)

@@ -3,12 +3,15 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/plugins"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/gin-gonic/gin"
+	"strings"
 )
 
 var IsDebug bool
@@ -63,15 +66,18 @@ func StopPlugin(data []byte) []byte {
 	return result
 }
 
-func GetPlugins() []byte {
+func GetPlugins(data []byte) []byte {
 	var plugin control.TPluginControl
+	arrStr := strings.Split(string(data), ":")
+	plugin.PluginType = arrStr[0]
+	plugin.PluginName = arrStr[1]
 	result, _ := json.Marshal(plugin.GetPlugins())
 	return result
 }
 
 func SetLicense(data []byte) []byte {
 	if len(data) != 36+19*2 {
-		resp := common.Failure("请提供正确的序列号和授权码格式")
+		resp := response.Failure("请提供正确的序列号和授权码格式")
 		result, _ := json.Marshal(resp)
 		return result
 	}
@@ -79,7 +85,7 @@ func SetLicense(data []byte) []byte {
 
 	item, ok := plugins.Get(string(data[:36]))
 	if !ok {
-		resp := common.Failure(fmt.Sprintf("插件%s不存在", string(data[:36])))
+		resp := response.Failure(fmt.Sprintf("插件%s不存在", string(data[:36])))
 		result, _ := json.Marshal(resp)
 		return result
 	}
@@ -88,11 +94,11 @@ func SetLicense(data []byte) []byte {
 	plugin.LicenseCode = string(data[55:])
 
 	if err := plugin.SetLicenseCode(plugin.ProductCode, plugin.LicenseCode); err != nil {
-		resp := common.Failure(err.Error())
+		resp := response.Failure(err.Error())
 		result, _ := json.Marshal(resp)
 		return result
 	}
-	resp := common.Success(nil)
+	resp := response.Success(nil)
 	result, _ := json.Marshal(resp)
 	return result
 
@@ -119,35 +125,35 @@ func GetHandleFileResult(data []byte) []byte {
 		return data
 	}
 
-	data, _ = json.Marshal(common.Ongoing())
+	data, _ = json.Marshal(response.Ongoing())
 	return data
 }
 
 func PluginApi(ctx *gin.Context) {
 	var plugin control.TPluginControl
-	var operate common.TPluginOperate
+	var operate plugins.TPluginOperate
 	var params map[string]any
 	var err error
 	var userID int32
 	var userCode string
 	params = make(map[string]any)
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&params); err != nil {
 		logService.LogWriter.WriteError(fmt.Sprintf("PluginApi check request error: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
 	strUUID := ctx.Param("uuid")
 	if strUUID == "" {
 		logService.LogWriter.WriteError("PluginApi uuid is empty", false)
-		ginContext.Reply(common.Failure("uuid is empty"))
+		ginContext.Reply(response.Failure("uuid is empty"))
 		return
 	}
 	api := ctx.Param("api")
 	if api == "" {
 		logService.LogWriter.WriteError("PluginApi api is empty", false)
-		ginContext.Reply(common.Failure("api is empty"))
+		ginContext.Reply(response.Failure("api is empty"))
 		return
 	}
 	plugin.PluginUUID = strUUID

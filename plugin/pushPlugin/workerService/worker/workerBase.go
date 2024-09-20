@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/jmoiron/sqlx"
 	"regexp"
 	"strings"
@@ -15,8 +15,8 @@ type IPushWorker interface {
 	OpenConnect() error  // close dest
 	CloseConnect() error // close dest
 	//CheckSQLValid(strSQL, strFilterVal *string) ([]common.ColumnInfo, error) // push data by sql
-	GetColumns(tableName string) ([]common.ColumnInfo, error) //
-	GetTables() ([]common.TableInfo, error)
+	GetColumns(tableName string) ([]tableInfo.ColumnInfo, error) //
+	GetTables() ([]tableInfo.TableInfo, error)
 	//ReadData(strSQL, filterVal *string) (interface{}, error) //
 	//GenTableScript(tableName string) (*string, error)
 	WriteData(insertSQL string, batch int, data *sql.Rows) (int64, error) // 将数据格式转换为本地格式

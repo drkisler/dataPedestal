@@ -3,13 +3,14 @@ package clickHouse
 import (
 	"database/sql"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 )
 
 func CheckTableExists(tableName string) (bool, error) {
 	var cnt uint64
-	conn, err := common.GetClickHouseClient(nil)
+	conn, err := clickHouseSQL.GetClickHouseClient(nil)
 	if err != nil {
 		return false, err
 	}
@@ -31,8 +32,8 @@ func CheckTableExists(tableName string) (bool, error) {
 	return cnt == 1, nil
 
 }
-func GetTableNames() ([]common.TableInfo, error) {
-	conn, err := common.GetClickHouseClient(nil)
+func GetTableNames() ([]tableInfo.TableInfo, error) {
+	conn, err := clickHouseSQL.GetClickHouseClient(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -45,10 +46,10 @@ func GetTableNames() ([]common.TableInfo, error) {
 	defer func() {
 		_ = rows.Close()
 	}()
-	var tables []common.TableInfo
+	var tables []tableInfo.TableInfo
 	for rows.Next() {
 		// 字典表中不存在为NULL 的数据，所以不需要判断
-		var tableInfo common.TableInfo
+		var tableInfo tableInfo.TableInfo
 		if err = rows.Scan(&tableInfo.TableCode, &tableInfo.TableName); err != nil {
 			return nil, err
 		}
@@ -57,8 +58,8 @@ func GetTableNames() ([]common.TableInfo, error) {
 	return tables, nil
 }
 
-func GetTableColumns(tableName *string) ([]common.ColumnInfo, error) {
-	conn, err := common.GetClickHouseClient(nil)
+func GetTableColumns(tableName *string) ([]tableInfo.ColumnInfo, error) {
+	conn, err := clickHouseSQL.GetClickHouseClient(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -81,9 +82,9 @@ func GetTableColumns(tableName *string) ([]common.ColumnInfo, error) {
 	defer func() {
 		_ = rows.Close()
 	}()
-	var columns []common.ColumnInfo
+	var columns []tableInfo.ColumnInfo
 	for rows.Next() {
-		var columnInfo common.ColumnInfo
+		var columnInfo tableInfo.ColumnInfo
 		if err = rows.Scan(&columnInfo.ColumnCode, &columnInfo.ColumnName, &columnInfo.DataType, &columnInfo.IsKey); err != nil {
 			return nil, err
 		}
@@ -93,7 +94,7 @@ func GetTableColumns(tableName *string) ([]common.ColumnInfo, error) {
 }
 
 func ReadData(selectSQL, insertSQL string, BatchSize int, WriteData func(insertSQL string, batch int, data *sql.Rows) (int64, error), args ...any) (int64, error) {
-	conn, err := common.GetClickHouseClient(nil)
+	conn, err := clickHouseSQL.GetClickHouseClient(nil)
 	if err != nil {
 		return -1, err
 	}
@@ -108,8 +109,8 @@ func ReadData(selectSQL, insertSQL string, BatchSize int, WriteData func(insertS
 }
 
 // GetSQLColumns 获取SQL语句中的列信息
-func GetSQLColumns(strSQL string, args ...any) ([]common.ColumnInfo, error) {
-	conn, err := common.GetClickHouseClient(nil)
+func GetSQLColumns(strSQL string, args ...any) ([]tableInfo.ColumnInfo, error) {
+	conn, err := clickHouseSQL.GetClickHouseClient(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -121,9 +122,9 @@ func GetSQLColumns(strSQL string, args ...any) ([]common.ColumnInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var columns []common.ColumnInfo
+	var columns []tableInfo.ColumnInfo
 	for _, t := range types {
-		var columnInfo common.ColumnInfo
+		var columnInfo tableInfo.ColumnInfo
 		columnInfo.ColumnName = t.Name()
 		columnInfo.ColumnCode = t.Name()
 		columnInfo.DataType = t.DatabaseTypeName()

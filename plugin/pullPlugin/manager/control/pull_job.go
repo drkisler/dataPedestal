@@ -2,7 +2,9 @@ package control
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/enMap"
+	"github.com/drkisler/dataPedestal/common/pageBuffer"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
 	"slices"
 	"sync"
@@ -27,49 +29,53 @@ func ParsePullJobControl(data map[string]any) (*TPullJobControl, error) {
 		return nil, err
 	}
 	result.UserID = result.OperatorID*/
-	if result.PageSize, err = common.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
 		return nil, err
 	}
-	if result.PageIndex, err = common.GetInt32ValueFromMap("page_index", data); err != nil {
+	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
 		return nil, err
 	}
-	if result.JobID, err = common.GetInt32ValueFromMap("job_id", data); err != nil {
+	if result.JobID, err = enMap.GetInt32ValueFromMap("job_id", data); err != nil {
 		return nil, err
 	}
-	if result.JobName, err = common.GetStringValueFromMap("job_name", data); err != nil {
+	if result.JobName, err = enMap.GetStringValueFromMap("job_name", data); err != nil {
 		return nil, err
 	}
-	if result.SourceDbConn, err = common.GetStringValueFromMap("source_db_conn", data); err != nil {
+	/*
+		if result.SourceDbConn, err = enMap.GetStringValueFromMap("source_db_conn", data); err != nil {
+			return nil, err
+		}
+
+			if result.DestDbConn, err = enMap.GetStringValueFromMap("dest_db_conn", data); err != nil {
+				return nil, err
+			}
+			if result.KeepConnect, err = enMap.GetStringValueFromMap("keep_connect", data); err != nil {
+				return nil, err
+			}
+
+		if result.ConnectBuffer, err = enMap.GetIntValueFromMap("connect_buffer", data); err != nil {
+			return nil, err
+		}
+	*/
+	if result.CronExpression, err = enMap.GetStringValueFromMap("cron_expression", data); err != nil {
 		return nil, err
 	}
-	if result.DestDbConn, err = common.GetStringValueFromMap("dest_db_conn", data); err != nil {
+	if result.SkipHour, err = enMap.GetStringValueFromMap("skip_hour", data); err != nil {
 		return nil, err
 	}
-	if result.KeepConnect, err = common.GetStringValueFromMap("keep_connect", data); err != nil {
+	if result.IsDebug, err = enMap.GetStringValueFromMap("is_debug", data); err != nil {
 		return nil, err
 	}
-	if result.ConnectBuffer, err = common.GetIntValueFromMap("connect_buffer", data); err != nil {
+	if result.Status, err = enMap.GetStringValueFromMap("status", data); err != nil {
 		return nil, err
 	}
-	if result.CronExpression, err = common.GetStringValueFromMap("cron_expression", data); err != nil {
+	if result.LastRun, err = enMap.GetInt64ValueFromMap("last_run", data); err != nil {
 		return nil, err
 	}
-	if result.SkipHour, err = common.GetStringValueFromMap("skip_hour", data); err != nil {
+	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
 		return nil, err
 	}
-	if result.IsDebug, err = common.GetStringValueFromMap("is_debug", data); err != nil {
-		return nil, err
-	}
-	if result.Status, err = common.GetStringValueFromMap("status", data); err != nil {
-		return nil, err
-	}
-	if result.LastRun, err = common.GetInt64ValueFromMap("last_run", data); err != nil {
-		return nil, err
-	}
-	if result.PageIndex, err = common.GetInt32ValueFromMap("page_index", data); err != nil {
-		return nil, err
-	}
-	if result.PageSize, err = common.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
 		return nil, err
 	}
 	if result.PageIndex == 0 {
@@ -82,62 +88,62 @@ func ParsePullJobControl(data map[string]any) (*TPullJobControl, error) {
 
 }
 
-func (job *TPullJobControl) AddJob() *common.TResponse {
+func (job *TPullJobControl) AddJob() *response.TResponse {
 	pullJob := job.TPullJob
 	id, err := pullJob.AddJob()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.ReturnInt(id)
+	return response.ReturnInt(id)
 }
 
-func (job *TPullJobControl) AlterJob() *common.TResponse {
+func (job *TPullJobControl) AlterJob() *response.TResponse {
 	pullJob := job.TPullJob
 	err := pullJob.UpdateJob()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (job *TPullJobControl) DeleteJob() *common.TResponse {
+func (job *TPullJobControl) DeleteJob() *response.TResponse {
 	pullJob := job.TPullJob
 	err := pullJob.DeleteJob()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 func (job *TPullJobControl) ToString() string {
 	return fmt.Sprintf("pageSize:%d, job_name:%s", job.PageSize, job.JobName)
 }
 
-func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
-	var result common.TRespDataSet
+func (job *TPullJobControl) GetJobs(onlineIDs []int32) *response.TResponse {
+	var result response.TRespDataSet
 	value, ok := jobPageBuffer.Load(job.OperatorID)
-	if (!ok) || (value.(common.PageBuffer).QueryParam != job.ToString()) || job.PageIndex == 1 {
+	if (!ok) || (value.(pageBuffer.PageBuffer).QueryParam != job.ToString()) || job.PageIndex == 1 {
 		ids, err := job.GetPullJobIDs()
 		if err != nil {
-			return common.Failure(err.Error())
+			return response.Failure(err.Error())
 		}
-		jobPageBuffer.Store(job.OperatorID, common.NewPageBuffer(job.OperatorID, job.ToString(), int64(job.PageSize), ids))
+		jobPageBuffer.Store(job.OperatorID, pageBuffer.NewPageBuffer(job.OperatorID, job.ToString(), int64(job.PageSize), ids))
 	}
 	value, _ = jobPageBuffer.Load(job.OperatorID)
-	pageBuffer := value.(common.PageBuffer)
+	pageBuffer := value.(pageBuffer.PageBuffer)
 	if pageBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
-		return common.Success(&result)
+		return response.Success(&result)
 	}
 
 	ids, err := pageBuffer.GetPageIDs(int64(job.PageIndex - 1))
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 
 	jobs, err := job.TPullJob.GetJobs(ids)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	for iIndex := range jobs {
 		jobs[iIndex].LoadStatus = "unloaded"
@@ -148,16 +154,16 @@ func (job *TPullJobControl) GetJobs(onlineIDs []int32) *common.TResponse {
 	result.ArrData = jobs
 
 	result.Total = pageBuffer.Total
-	return common.Success(&result)
+	return response.Success(&result)
 }
 
-func (job *TPullJobControl) SetJobStatus() *common.TResponse {
+func (job *TPullJobControl) SetJobStatus() *response.TResponse {
 	pullJob := job.TPullJob
 	err := pullJob.SetJobStatus()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
 func (job *TPullJobControl) SetLastRun(iStartTime int64) error {

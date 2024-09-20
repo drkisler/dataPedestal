@@ -1,7 +1,8 @@
 package service
 
 import (
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/response"
 	logCtl "github.com/drkisler/dataPedestal/universal/logAdmin/control"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 
 func preHandleLogRequest(ctx *gin.Context) (*logCtl.TSysLogControl, error) {
 	var log logCtl.TSysLogControl
-	err := common.CheckRequest(ctx, &log)
+	err := genService.CheckRequest(ctx, &log)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +23,7 @@ func preHandleLogRequest(ctx *gin.Context) (*logCtl.TSysLogControl, error) {
 func GetLogDate(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, response.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.GetLogDate())
@@ -31,7 +32,7 @@ func GetLogDate(ctx *gin.Context) {
 func GetLogLocate(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, response.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.GetLogLocate())
@@ -58,7 +59,7 @@ func GetLogInfo(ctx *gin.Context) {
 func DelLog(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, response.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.DeleteLog())
@@ -67,7 +68,7 @@ func DelLog(ctx *gin.Context) {
 func DelOldLog(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, response.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.DeleteOldLog())
@@ -76,7 +77,7 @@ func DelOldLog(ctx *gin.Context) {
 func DelLogByDate(ctx *gin.Context) {
 	log, err := preHandleLogRequest(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, common.Failure(err.Error()))
+		ctx.JSON(http.StatusOK, response.Failure(err.Error()))
 		return
 	}
 	ctx.JSON(http.StatusOK, log.DeleteLogByDate())

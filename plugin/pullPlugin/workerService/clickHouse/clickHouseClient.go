@@ -4,22 +4,31 @@ import (
 	"context"
 	"fmt"
 	"github.com/ClickHouse/ch-go/proto"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
+	"github.com/drkisler/dataPedestal/common/queryFilter"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"strings"
 )
 
 func ClearTableData(tableName string) error {
-	driver, err := common.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
 	if err != nil {
 		return err
 	}
 	ctx := context.Background()
+
+	clusterName := driver.GetClusterName()
+	if clusterName == "" {
+		return driver.ExecuteSQL(ctx, fmt.Sprintf("TRUNCATE "+
+			"TABLE %s", tableName), nil)
+	}
+
 	return driver.ExecuteSQL(ctx, fmt.Sprintf("TRUNCATE "+
-		"TABLE %s", tableName), nil)
+		"TABLE IF EXISTS %s ON CLUSTER %s", tableName, clusterName), nil)
 }
 
 func GetDataBaseName() string {
-	driver, err := common.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
 	if err != nil {
 		return ""
 	}
@@ -27,7 +36,7 @@ func GetDataBaseName() string {
 }
 
 func ClearDuplicateData(tableName string, keyColumns string) error {
-	driver, err := common.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
 	if err != nil {
 		return err
 	}
@@ -36,18 +45,18 @@ func ClearDuplicateData(tableName string, keyColumns string) error {
 	if clusterName != "" {
 		strSQL = fmt.Sprintf("Alter "+
 			"table %s ON CLUSTER %s delete where (%s,%s) in (SELECT %s,min(%s) %s from %s group by %s HAVING count(*)>1)",
-			tableName, clusterName, keyColumns, common.TimeStampColumn, keyColumns, common.TimeStampColumn, common.TimeStampColumn, tableName, keyColumns)
+			tableName, clusterName, keyColumns, queryFilter.TimeStampColumn, keyColumns, queryFilter.TimeStampColumn, queryFilter.TimeStampColumn, tableName, keyColumns)
 	} else {
 		strSQL = fmt.Sprintf("Alter "+
 			"table %s delete where (%s,%s) in (SELECT %s,min(%s) %s from %s group by %s HAVING count(*)>1)",
-			tableName, keyColumns, common.TimeStampColumn, keyColumns, common.TimeStampColumn, common.TimeStampColumn, tableName, keyColumns)
+			tableName, keyColumns, queryFilter.TimeStampColumn, keyColumns, queryFilter.TimeStampColumn, queryFilter.TimeStampColumn, tableName, keyColumns)
 	}
 	ctx := context.Background()
 	return driver.ExecuteSQL(ctx, strSQL, nil)
 }
 
-func GetTableNames() ([]common.TableInfo, error) {
-	driver, err := common.GetClickHouseDriver(nil)
+func GetTableNames() ([]tableInfo.TableInfo, error) {
+	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -70,21 +79,21 @@ func GetTableNames() ([]common.TableInfo, error) {
 	if err = driver.QuerySQL(ctx, strSQL, param, result); err != nil {
 		return nil, err
 	}
-	var tables []common.TableInfo
+	var tables []tableInfo.TableInfo
 	if resultData[0].Rows() > 0 {
 		for i := 0; i < resultData[0].Rows(); i++ {
-			tables = append(tables, common.TableInfo{TableCode: resultData[0].Row(i), TableName: resultData[1].Row(i)})
+			tables = append(tables, tableInfo.TableInfo{TableCode: resultData[0].Row(i), TableName: resultData[1].Row(i)})
 		}
 	}
 	return tables, nil
 }
 
 func GetMaxFilter(tableName string, filterValue *string) (string, error) {
-	driver, err := common.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
 	if err != nil {
 		return "", err
 	}
-	filterCondition, err := common.JSONToFilterConditions(filterValue)
+	filterCondition, err := queryFilter.JSONToFilterConditions(filterValue)
 	if err != nil {
 		return "", err
 	}
@@ -111,7 +120,7 @@ func GetMaxFilter(tableName string, filterValue *string) (string, error) {
 			filterCondition[iIndex].Value = colStr.Row(0)
 		}
 	}
-	strFilter, err := common.FilterConditionsToJSON(filterCondition)
+	strFilter, err := queryFilter.FilterConditionsToJSON(filterCondition)
 	if err != nil {
 		return "", err
 	}

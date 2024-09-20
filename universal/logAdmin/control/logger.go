@@ -2,7 +2,7 @@ package control
 
 import (
 	"errors"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/universal/logAdmin/module"
 	"time"
 )
@@ -56,52 +56,52 @@ func (sc *TSysLogControl) GetCurrentDate() (string, error) {
 	return strDate, nil
 }
 
-func (sc *TSysLogControl) WriteInfoLog() *common.TResponse {
+func (sc *TSysLogControl) WriteInfoLog() *response.TResponse {
 	if err := sc.checkValid(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	strDate, err := sc.GetCurrentDate()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	sc.LogDate = strDate
 	sc.LogType = InfoLog
 	if err = sc.PutLog(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (sc *TSysLogControl) WriteDebugLog() *common.TResponse {
+func (sc *TSysLogControl) WriteDebugLog() *response.TResponse {
 	if err := sc.checkValid(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	strDate, err := sc.GetCurrentDate()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	sc.LogDate = strDate
 	sc.LogType = DebugLog
 	if err = sc.PutLog(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (sc *TSysLogControl) WriteErrorLog() *common.TResponse {
+func (sc *TSysLogControl) WriteErrorLog() *response.TResponse {
 	if err := sc.checkValid(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	strDate, err := sc.GetCurrentDate()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	sc.LogDate = strDate
 	sc.LogType = ErrorLog
 	if err = sc.PutLog(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
 func (sc *TSysLogControl) WriteLog(info string) error {
@@ -120,62 +120,62 @@ func (sc *TSysLogControl) WriteLog(info string) error {
 	return nil
 }
 
-func (sc *TSysLogControl) DeleteLog() *common.TResponse {
+func (sc *TSysLogControl) DeleteLog() *response.TResponse {
 	if err := sc.TSysLog.DeleteLog(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (sc *TSysLogControl) GetLogDate() *common.TResponse {
+func (sc *TSysLogControl) GetLogDate() *response.TResponse {
 	var err error
-	var dataSet common.TRespDataSet
+	var dataSet response.TRespDataSet
 	dataSet.ArrData, dataSet.Total, err = sc.TSysLog.GetLogDate()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(&dataSet)
+	return response.Success(&dataSet)
 }
 
-func (sc *TSysLogControl) GetLogLocate() *common.TResponse {
+func (sc *TSysLogControl) GetLogLocate() *response.TResponse {
 	var err error
-	var dataSet common.TRespDataSet
+	var dataSet response.TRespDataSet
 	dataSet.ArrData, dataSet.Total, err = sc.TSysLog.GetLogLocate()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(&dataSet)
+	return response.Success(&dataSet)
 }
 
-func (sc *TSysLogControl) GetLogInfo() *common.TResponse {
+func (sc *TSysLogControl) GetLogInfo() *response.TResponse {
 	if err := sc.checkValid(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	var err error
-	var dataSet common.TRespDataSet
+	var dataSet response.TRespDataSet
 	dataSet.ArrData, dataSet.Total, err = sc.TSysLog.GetLogs(sc.PageSize, sc.PageIndex)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(&dataSet)
+	return response.Success(&dataSet)
 }
 
-func (sc *TSysLogControl) DeleteLogByDate() *common.TResponse {
+func (sc *TSysLogControl) DeleteLogByDate() *response.TResponse {
 	if sc.LogDate == "" {
-		return common.Failure("日志日期为空")
+		return response.Failure("日志日期为空")
 	}
 	if err := sc.TSysLog.DeleteLogByDate(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (sc *TSysLogControl) DeleteOldLog() *common.TResponse {
+func (sc *TSysLogControl) DeleteOldLog() *response.TResponse {
 	if sc.LogDate == "" {
-		return common.Failure("日志日期为空")
+		return response.Failure("日志日期为空")
 	}
 	if err := sc.TSysLog.DeleteOldLog(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }

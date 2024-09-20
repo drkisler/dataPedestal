@@ -3,7 +3,7 @@ package module
 import (
 	"context"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"github.com/jackc/pgx/v5"
 	"time"
@@ -58,7 +58,7 @@ func (s *TSysLog) GetLogs(pageSize int32, pageIndex int32) ([]TSysLog, int64, er
 	if err != nil {
 		return nil, 0, err
 	}
-	if !common.IsSafeSQL(s.LogLocate + " " + s.LogType) {
+	if !genService.IsSafeSQL(s.LogLocate + " " + s.LogType) {
 		return nil, 0, fmt.Errorf("unsafe sql")
 	}
 

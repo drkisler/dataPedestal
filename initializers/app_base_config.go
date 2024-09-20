@@ -3,7 +3,8 @@ package initializers
 import (
 	"fmt"
 	"github.com/BurntSushi/toml"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/license"
 	"os"
 	"strings"
 )
@@ -40,7 +41,7 @@ func (cfg *TAppBaseConfig) LoadConfig(cfgParentFullPath, cfgFile string, config 
 		}
 	}
 	// check the config file exists if not create
-	common.GenFilePath()
+	genService.GenFilePath()
 
 	cfg.filePath = cfgParentFullPath + os.Getenv("Separator") + cfgFile
 	if _, err := os.Stat(cfg.filePath); err != nil {
@@ -84,7 +85,7 @@ func (cfg *TAppBaseConfig) GetConnection() (map[string]string, error) {
 	if cfg.DBConnection == "" {
 		return nil, fmt.Errorf("数据库连接字符串为空")
 	}
-	if cfg.DBConnection, err = common.DecryptAES(cfg.DBConnection, common.GetDefaultKey()); err != nil {
+	if cfg.DBConnection, err = license.DecryptAES(cfg.DBConnection, license.GetDefaultKey()); err != nil {
 		return nil, err
 	}
 	return parseToMap(cfg.DBConnection), nil

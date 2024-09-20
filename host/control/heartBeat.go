@@ -1,7 +1,8 @@
 package control
 
 import (
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/hostInfo"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"sync"
@@ -9,9 +10,9 @@ import (
 )
 
 type THeartBeat struct {
-	hostInfo  *common.THostInfo
+	hostInfo  *hostInfo.THostInfo
 	msgClient *messager.TMessageClient
-	status    common.TStatus
+	status    commonStatus.TStatus
 	wg        *sync.WaitGroup
 }
 
@@ -27,7 +28,7 @@ func NewHeartBeat() (*THeartBeat, error) {
 	if msgClient, err = messager.NewMessageClient(); err != nil {
 		return nil, err
 	}
-	var HostInfo = common.THostInfo{
+	var HostInfo = hostInfo.THostInfo{
 		HostUUID:     initializers.HostConfig.HostUUID,
 		HostName:     initializers.HostConfig.SelfName,
 		HostIP:       initializers.HostConfig.SelfIP,
@@ -36,7 +37,7 @@ func NewHeartBeat() (*THeartBeat, error) {
 		FileServPort: initializers.HostConfig.FileServPort,
 	}
 	var wg sync.WaitGroup
-	return &THeartBeat{hostInfo: &HostInfo, msgClient: msgClient, status: common.TStatus{Lock: &sync.Mutex{}}, wg: &wg}, nil
+	return &THeartBeat{hostInfo: &HostInfo, msgClient: msgClient, status: commonStatus.TStatus{Lock: &sync.Mutex{}}, wg: &wg}, nil
 }
 
 func (hb *THeartBeat) Start() {

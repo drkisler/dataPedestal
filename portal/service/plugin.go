@@ -3,7 +3,9 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/license"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/control"
 	"github.com/drkisler/dataPedestal/universal/logAdmin/service"
@@ -22,10 +24,10 @@ func DeletePlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -41,10 +43,10 @@ func AddPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -61,10 +63,10 @@ func AlterPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -82,10 +84,10 @@ func QueryPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -101,10 +103,10 @@ func SetRunType(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -122,10 +124,10 @@ func RunPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -143,10 +145,10 @@ func StopPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -164,10 +166,10 @@ func LoadPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -185,10 +187,10 @@ func UnloadPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -206,10 +208,10 @@ func UpdateConfig(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -226,10 +228,10 @@ func GetTempConfig(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -264,7 +266,7 @@ func receiveFile(ctx *gin.Context, isUpdate bool) (*control.TPluginControl, erro
 		return nil, err
 	}
 
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		return nil, err
 	}
@@ -279,7 +281,7 @@ func receiveFile(ctx *gin.Context, isUpdate bool) (*control.TPluginControl, erro
 	}
 
 	plugin.PluginFileName = fileName
-	filePath := common.GenFilePath(initializers.PortalCfg.PluginDir, plugin.PluginUUID, fileName)
+	filePath := genService.GenFilePath(initializers.PortalCfg.PluginDir, plugin.PluginUUID, fileName)
 
 	if isUpdate {
 		if err = removeOldFile(filePath); err != nil {
@@ -295,7 +297,7 @@ func receiveFile(ctx *gin.Context, isUpdate bool) (*control.TPluginControl, erro
 		return nil, fmt.Errorf("保存文件%s失败:%s", filePath, err.Error())
 	}
 
-	if plugin.SerialNumber, err = common.FileHash(filePath); err != nil {
+	if plugin.SerialNumber, err = license.FileHash(filePath); err != nil {
 		return nil, err
 	}
 
@@ -325,11 +327,11 @@ func prepareDirectory(filePath string) error {
 }
 
 func Upload(ctx *gin.Context) {
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	plugin, err := receiveFile(ctx, false)
 	if err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while receive file: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	result := plugin.UpdatePlugFileName()
@@ -341,28 +343,28 @@ func Upload(ctx *gin.Context) {
 	ginContext.Reply(result)
 }
 func UpdatePluginFile(ctx *gin.Context) {
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	plugin, err := receiveFile(ctx, true)
 	if err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while receive file: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	if err = plugin.UpdateFile(); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while update file: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	// get host info by hostUUID
 	hostInfo, err := control.Survey.GetHostInfoByID(plugin.HostUUID)
 	if err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while get host info: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	if hostInfo.IsExpired() {
 		service.LogWriter.WriteError(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName), false)
-		ginContext.Reply(common.Failure(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName)))
+		ginContext.Reply(response.Failure(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName)))
 		return
 	}
 	result := plugin.PublishPlugin(hostInfo.ActiveHost.HostUUID)
@@ -376,24 +378,24 @@ func UpdatePluginFile(ctx *gin.Context) {
 func Download(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	var err error
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.ReplyBadRequest(common.Failure(err.Error()))
+		ginContext.ReplyBadRequest(response.Failure(err.Error()))
 		return
 	}
 	plugin.PluginUUID = ginContext.GetQuery("uuid")
 	if plugin.PluginUUID == "" {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing uuid: %s", "uuid is empty"), false)
-		ginContext.ReplyBadRequest(common.Failure("需要提供插件ID"))
+		ginContext.ReplyBadRequest(response.Failure("需要提供插件ID"))
 		return
 	}
 	if err = plugin.InitByUUID(); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while init plugin by uuid: %s", err.Error()), false)
-		ginContext.ReplyBadRequest(common.Failure(err.Error()))
+		ginContext.ReplyBadRequest(response.Failure(err.Error()))
 		return
 	}
-	filePath := common.GenFilePath(initializers.PortalCfg.PluginDir,
+	filePath := genService.GenFilePath(initializers.PortalCfg.PluginDir,
 		plugin.PluginUUID, plugin.PluginFileName)
 
 	ctx.FileAttachment(filePath, plugin.PluginFileName)
@@ -403,10 +405,10 @@ func GetPluginNameList(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -425,10 +427,10 @@ func PubPlugin(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -448,10 +450,10 @@ func TakeDown(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -469,10 +471,10 @@ func GetProductKey(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -490,16 +492,16 @@ func SetLicenseCode(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 
 	if err = plugin.InitByUUID(); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while init plugin by uuid: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 
@@ -519,10 +521,10 @@ func GetHosts(ctx *gin.Context) {
 	var err error
 	var userID int32
 	var userCode string
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
@@ -539,39 +541,39 @@ func PluginAPI(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	var err error
 	var hostInfo *control.TActiveHost
-	ginContext := common.NewGinContext(ctx)
+	ginContext := genService.NewGinContext(ctx)
 	if plugin.OperatorID, plugin.OperatorCode, err = ginContext.GetOperator(); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	strUUID := ctx.Param("uuid")
 	if strUUID == "" {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing uuid: %s", "uuid is empty"), false)
-		ginContext.Reply(common.Failure("uuid is empty"))
+		ginContext.Reply(response.Failure("uuid is empty"))
 		return
 	}
 	api := ctx.Param("api")
 	if api == "" {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing api: %s", "api is empty"), false)
-		ginContext.Reply(common.Failure("api is empty"))
+		ginContext.Reply(response.Failure("api is empty"))
 		return
 	}
 	// 通过pluginUUID获取Host信息
 	plugin.PluginUUID = strUUID
 	if err = plugin.InitByUUID(); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while init plugin by uuid: %s", err.Error()), false)
-		ginContext.Reply(common.Failure("请求的服务不存在，请确认相应的插件是否存在"))
+		ginContext.Reply(response.Failure("请求的服务不存在，请确认相应的插件是否存在"))
 		return
 	}
 	if hostInfo, err = control.Survey.GetHostInfoByID(plugin.HostUUID); err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while get host info: %s", err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	if hostInfo.IsExpired() {
 		service.LogWriter.WriteError(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName), false)
-		ginContext.Reply(common.Failure(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName)))
+		ginContext.Reply(response.Failure(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName)))
 		return
 	}
 
@@ -581,7 +583,7 @@ func PluginAPI(ctx *gin.Context) {
 	remoteUrl, err := url.Parse(target)
 	if err != nil {
 		service.LogWriter.WriteError(fmt.Sprintf("Error while parse url %s: %s", target, err.Error()), false)
-		ginContext.Reply(common.Failure(err.Error()))
+		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
 	proxy := httputil.NewSingleHostReverseProxy(remoteUrl)

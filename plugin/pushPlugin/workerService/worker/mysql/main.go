@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/license"
+	"github.com/drkisler/dataPedestal/common/plugins"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/service"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/worker/mysql/workimpl"
@@ -16,14 +18,14 @@ import (
 )
 
 func main() {
-	gob.Register(common.TPluginOperate{})
-	gob.Register([]common.ColumnInfo{})
-	gob.Register([]common.TableInfo{})
+	gob.Register(plugins.TPluginOperate{})
+	gob.Register([]tableInfo.ColumnInfo{})
+	gob.Register([]tableInfo.TableInfo{})
 	file, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
 	}
-	if service.SerialNumber, err = common.FileHash(file); err != nil {
+	if service.SerialNumber, err = license.FileHash(file); err != nil {
 		log.Fatal(err)
 	}
 	_ = os.Setenv("FilePath", filepath.Dir(file))
@@ -65,7 +67,7 @@ func main() {
 	workerService.NewWorker = workimpl.NewMySQLWorker
 
 	pluginMap := map[string]plugin.Plugin{
-		service.SerialNumber: &common.PluginImplement{Impl: service.PluginServ},
+		service.SerialNumber: &plugins.PluginImplement{Impl: service.PluginServ},
 	}
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,

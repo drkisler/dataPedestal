@@ -2,7 +2,10 @@ package control
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/enMap"
+	"github.com/drkisler/dataPedestal/common/pageBuffer"
+	"github.com/drkisler/dataPedestal/common/pushJob"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/module"
 	"sync"
 	"time"
@@ -10,7 +13,7 @@ import (
 
 var tblLogPageBuffer sync.Map
 
-type TPushTableLog = common.TPushTableLog
+type TPushTableLog = pushJob.TPushTableLog
 type TPushTableLogControl struct {
 	OperatorID   int32
 	OperatorCode string
@@ -22,34 +25,34 @@ type TPushTableLogControl struct {
 func ParseTableLogControl(data map[string]any) (*TPushTableLogControl, error) {
 	var err error
 	var result TPushTableLogControl
-	if result.PageSize, err = common.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
 		return nil, err
 	}
-	if result.PageIndex, err = common.GetInt32ValueFromMap("page_index", data); err != nil {
+	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
 		return nil, err
 	}
-	if result.JobID, err = common.GetInt32ValueFromMap("job_id", data); err != nil {
+	if result.JobID, err = enMap.GetInt32ValueFromMap("job_id", data); err != nil {
 		return nil, err
 	}
-	if result.TableID, err = common.GetInt32ValueFromMap("table_id", data); err != nil {
+	if result.TableID, err = enMap.GetInt32ValueFromMap("table_id", data); err != nil {
 		return nil, err
 	}
-	if result.StartTime, err = common.GetStringValueFromMap("start_time", data); err != nil {
+	if result.StartTime, err = enMap.GetStringValueFromMap("start_time", data); err != nil {
 		return nil, err
 	}
-	if result.StopTime, err = common.GetStringValueFromMap("stop_time", data); err != nil {
+	if result.StopTime, err = enMap.GetStringValueFromMap("stop_time", data); err != nil {
 		return nil, err
 	}
-	if result.TimeSpent, err = common.GetStringValueFromMap("time_spent", data); err != nil {
+	if result.TimeSpent, err = enMap.GetStringValueFromMap("time_spent", data); err != nil {
 		return nil, err
 	}
-	if result.Status, err = common.GetStringValueFromMap("status", data); err != nil {
+	if result.Status, err = enMap.GetStringValueFromMap("status", data); err != nil {
 		return nil, err
 	}
-	if result.RecordCount, err = common.GetInt64ValueFromMap("record_count", data); err != nil {
+	if result.RecordCount, err = enMap.GetInt64ValueFromMap("record_count", data); err != nil {
 		return nil, err
 	}
-	if result.ErrorInfo, err = common.GetStringValueFromMap("error_info", data); err != nil {
+	if result.ErrorInfo, err = enMap.GetStringValueFromMap("error_info", data); err != nil {
 		return nil, err
 	}
 
@@ -77,69 +80,69 @@ func (p *TPushTableLogControl) StopTableLog(iStartTime int64, sErrorInfo string)
 	return tableLog.StopTableLog(sErrorInfo)
 }
 
-func (p *TPushTableLogControl) ClearTableLog() *common.TResponse {
+func (p *TPushTableLogControl) ClearTableLog() *response.TResponse {
 	var tableLog module.TPushTableLog
 	tableLog.JobID = p.JobID
 	tableLog.TableID = p.TableID
 	if err := tableLog.ClearTableLog(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (p *TPushTableLogControl) DeleteTableLog() *common.TResponse {
+func (p *TPushTableLogControl) DeleteTableLog() *response.TResponse {
 	var tableLog module.TPushTableLog
 	tableLog.JobID = p.JobID
 	tableLog.TableID = p.TableID
 	tTime, err := time.Parse(time.DateTime, p.StartTime)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	tableLog.StartTime = tTime.Unix()
 
 	if err = tableLog.DeleteTableLog(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 func (p *TPushTableLogControl) ToString() string {
 	return fmt.Sprintf("job_id:%d, table_id:%d, status:%s, page_size:%d",
 		p.JobID, p.TableID, p.Status, p.PageSize)
 }
-func (p *TPushTableLogControl) QueryTableLogs() *common.TResponse {
-	var result common.TRespDataSet
+func (p *TPushTableLogControl) QueryTableLogs() *response.TResponse {
+	var result response.TRespDataSet
 
 	value, ok := tblLogPageBuffer.Load(p.OperatorID)
-	if (!ok) || (value.(common.PageBuffer).QueryParam != p.ToString()) || (p.PageIndex == 1) {
+	if (!ok) || (value.(pageBuffer.PageBuffer).QueryParam != p.ToString()) || (p.PageIndex == 1) {
 		ids, err := p.ToModulePushTableLog().GetLogIDs()
 		if err != nil {
-			return common.Failure(err.Error())
+			return response.Failure(err.Error())
 		}
-		tblLogPageBuffer.Store(p.OperatorID, common.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids))
+		tblLogPageBuffer.Store(p.OperatorID, pageBuffer.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids))
 	}
 	value, _ = tblLogPageBuffer.Load(p.OperatorID)
-	pageBuffer := value.(common.PageBuffer)
+	pageBuffer := value.(pageBuffer.PageBuffer)
 	if pageBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
-		return common.Success(&result)
+		return response.Success(&result)
 	}
 	ids, err := pageBuffer.GetPageIDs(int64(p.PageIndex - 1))
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	var logs []module.TPushTableLog
 	if logs, err = p.ToModulePushTableLog().GetLogs(ids); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	var resultData []common.TPushTableLog
+	var resultData []pushJob.TPushTableLog
 	for _, log := range logs {
 		resultData = append(resultData, *ToCommonPushTableLog(&log))
 	}
 	result.ArrData = resultData
 	result.Total = pageBuffer.Total
 
-	return common.Success(&result)
+	return response.Success(&result)
 }
 
 // ToModulePushTableLog common.TPushTableLog -> module.TPushTableLog
@@ -161,8 +164,8 @@ func (p *TPushTableLogControl) ToModulePushTableLog() *module.TPushTableLog {
 	return &result
 }
 
-func ToCommonPushTableLog(p *module.TPushTableLog) *common.TPushTableLog {
-	var result common.TPushTableLog
+func ToCommonPushTableLog(p *module.TPushTableLog) *pushJob.TPushTableLog {
+	var result pushJob.TPushTableLog
 	result.JobID = p.JobID
 	result.TableID = p.TableID
 	result.StartTime = time.Unix(p.StartTime, 0).Format(time.DateTime)

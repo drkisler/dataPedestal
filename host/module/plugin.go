@@ -2,13 +2,14 @@ package module
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/plugins"
+	"github.com/drkisler/dataPedestal/common/syncMap"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"sync"
 )
 
-type TPluginInfo = common.TPluginInfo
+type TPluginInfo = plugins.TPluginInfo
 type TPlugin struct {
 	TPluginInfo
 	LicenseCode string `json:"license_code"`
@@ -24,7 +25,7 @@ func InitPluginMap() error {
 		return err
 	}
 	strSQL := fmt.Sprintf("select "+
-		"plugin_uuid, plugin_name, plugin_file_name, plugin_config, serial_number, license_code, product_code, run_type "+
+		"plugin_uuid, plugin_name, plugin_type ,plugin_file_name, plugin_config, serial_number, license_code, product_code, run_type "+
 		"from %s.plugins "+
 		"where host_uuid = $1", storage.GetSchema())
 	rows, err := storage.QuerySQL(strSQL, initializers.HostConfig.HostUUID)
@@ -34,7 +35,7 @@ func InitPluginMap() error {
 	defer rows.Close()
 	for rows.Next() {
 		var plugin TPlugin
-		err = rows.Scan(&plugin.PluginUUID, &plugin.PluginName, &plugin.PluginFileName, &plugin.PluginConfig, &plugin.SerialNumber, &plugin.LicenseCode, &plugin.ProductCode, &plugin.RunType)
+		err = rows.Scan(&plugin.PluginUUID, &plugin.PluginName, &plugin.PluginType, &plugin.PluginFileName, &plugin.PluginConfig, &plugin.SerialNumber, &plugin.LicenseCode, &plugin.ProductCode, &plugin.RunType)
 		if err != nil {
 			return err
 		}
@@ -44,8 +45,8 @@ func InitPluginMap() error {
 }
 
 // GetPluginList 返回只读的插件列表
-func GetPluginList() common.ReadOnlyMap {
-	var result common.ReadonlyMapWrapper
+func GetPluginList() syncMap.ReadOnlyMap {
+	var result syncMap.ReadonlyMapWrapper
 	result.InitMap(&pluginMap)
 	return &result
 }

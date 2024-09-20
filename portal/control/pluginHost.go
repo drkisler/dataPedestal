@@ -2,7 +2,7 @@ package control
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/hostInfo"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"time"
 )
@@ -14,7 +14,7 @@ func init() {
 var Survey *TSurvey
 
 type TActiveHost struct {
-	ActiveHost common.THostInfo
+	ActiveHost hostInfo.THostInfo
 	ActiveTime time.Time
 }
 
@@ -30,7 +30,7 @@ func NewSurvey() *TSurvey {
 
 func (s *TSurvey) HandleOperate(msg []byte) []byte {
 	var err error
-	var host common.THostInfo
+	var host hostInfo.THostInfo
 	switch msg[0] {
 	case messager.OperateHeartBeat:
 		if err = host.FromByte(msg[1:]); err != nil {
@@ -82,8 +82,8 @@ func (s *TSurvey) GetHostInfoByID(hostUUID string) (*TActiveHost, error) {
 	return result, nil
 }
 
-func (s *TSurvey) GetHostInfo() []common.THostInfo {
-	var hosts []common.THostInfo
+func (s *TSurvey) GetHostInfo() []hostInfo.THostInfo {
+	var hosts []hostInfo.THostInfo
 	for _, v := range s.hostInfo {
 		if !v.IsExpired() {
 			hosts = append(hosts, v.ActiveHost)

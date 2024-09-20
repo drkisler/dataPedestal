@@ -1,7 +1,7 @@
 package control
 
 import (
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/portal/module"
 )
 
@@ -16,26 +16,26 @@ func (t *TLogControl) InsertLog() error {
 	return t.TPortalLog.InsertLog(t.OperatorID)
 }
 
-func (t *TLogControl) GetLogs() *common.TResponse {
+func (t *TLogControl) GetLogs() *response.TResponse {
 	arrData, err := t.TPortalLog.GetLogs(t.OperatorID, t.PageSize, t.PageIndex)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.RespData(int64(len(arrData)), arrData, nil)
+	return response.RespData(int64(len(arrData)), arrData, nil)
 }
 
-func (t *TLogControl) DeleteLogs() *common.TResponse {
+func (t *TLogControl) DeleteLogs() *response.TResponse {
 	err := t.TPortalLog.DeleteLogs(t.OperatorID)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
-func (t *TLogControl) ClearLogs() *common.TResponse {
+func (t *TLogControl) ClearLogs() *response.TResponse {
 	err := t.TPortalLog.ClearLogs(t.OperatorID)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }

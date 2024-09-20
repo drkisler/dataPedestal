@@ -3,7 +3,7 @@ package messager
 import (
 	"errors"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol"
 	"go.nanomsg.org/mangos/v3/protocol/rep"
@@ -17,7 +17,7 @@ type TMessageServer struct {
 	MessageHead   byte
 	MessageBody   []byte
 	socket        mangos.Socket
-	status        common.TStatus
+	status        commonStatus.TStatus
 	wg            *sync.WaitGroup
 	HandleRequest FHandleRequest
 }
@@ -27,12 +27,12 @@ func NewMessageServer(url []string, handler FHandleRequest) (*TMessageServer, er
 		return nil, fmt.Errorf("listen url is empty")
 	}
 	var result TMessageServer
-	var status common.TStatus
+	var status commonStatus.TStatus
 	var lock sync.Mutex
 	var sock mangos.Socket
 	var wg sync.WaitGroup
 	var err error
-	status = common.TStatus{
+	status = commonStatus.TStatus{
 		Lock:    &lock,
 		Running: false,
 	}

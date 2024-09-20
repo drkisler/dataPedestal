@@ -1,47 +1,47 @@
 package service
 
 import (
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/response"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 )
 
-func AddJob(userID int32, params map[string]any) common.TResponse {
+func AddJob(userID int32, params map[string]any) response.TResponse {
 	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	job.UserID = userID
 	job.OperatorID = userID
 	return *job.AddJob()
 }
 
-func AlterJob(userID int32, params map[string]any) common.TResponse {
+func AlterJob(userID int32, params map[string]any) response.TResponse {
 	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	job.UserID = userID
 	job.OperatorID = userID
 	return *job.AlterJob()
 }
 
-func DeleteJob(userID int32, params map[string]any) common.TResponse {
+func DeleteJob(userID int32, params map[string]any) response.TResponse {
 	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	job.UserID = userID
 	job.OperatorID = userID
 	return *job.DeleteJob()
 }
 
-func GetJobs(userID int32, params map[string]any) common.TResponse {
+func GetJobs(userID int32, params map[string]any) response.TResponse {
 	if userID == 0 {
-		return *common.Failure("need UserID")
+		return *response.Failure("need UserID")
 	}
 	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	job.UserID = userID
 	job.OperatorID = userID
@@ -52,86 +52,72 @@ func GetJobs(userID int32, params map[string]any) common.TResponse {
 	return *job.GetJobs(onlineJobIDs)
 }
 
-func SetJobStatus(userID int32, params map[string]any) common.TResponse {
+func SetJobStatus(userID int32, params map[string]any) response.TResponse {
 	job, err := ctl.ParsePullJobControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	job.UserID = userID
 	job.OperatorID = userID
 	return *job.SetJobStatus()
 }
 
-func ClearJobLog(userID int32, params map[string]any) common.TResponse {
+func ClearJobLog(userID int32, params map[string]any) response.TResponse {
 	jlc, err := ctl.ParseJobLogControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	jlc.OperatorID = userID
 	return *jlc.ClearJobLog()
 }
 
-func DeleteJobLog(userID int32, params map[string]any) common.TResponse {
+func DeleteJobLog(userID int32, params map[string]any) response.TResponse {
 	jlc, err := ctl.ParseJobLogControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	jlc.OperatorID = userID
 	return *jlc.DeleteJobLog()
 }
 
-func QueryJobLogs(userID int32, params map[string]any) common.TResponse {
+func QueryJobLogs(userID int32, params map[string]any) response.TResponse {
 	jlc, err := ctl.ParseJobLogControl(params)
 	if err != nil {
-		return *common.Failure(err.Error())
+		return *response.Failure(err.Error())
 	}
 	jlc.OperatorID = userID
 	return *jlc.QueryJobLogs()
 }
 
-func GetSourceConnOption(_ int32, params map[string]any) common.TResponse {
-	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetSourceConnOption(params)
-}
-
-func GetSourceQuoteFlag(_ int32, params map[string]any) common.TResponse {
+func GetSourceQuoteFlag(_ int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).GetSourceQuoteFlag(params)
 }
 
-func GetDatabaseType(_ int32, params map[string]any) common.TResponse {
+func CheckSourceConnect(_ int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetDatabaseType(params)
+	return (*myPlugin).CheckSourceConnect(params)
 }
 
-func CheckSourceConnect(_ int32, params map[string]any) common.TResponse {
-	connOption, err := common.ConvertToStrMap(params)
-	if err != nil {
-		return *common.Failure(err.Error())
-	}
-	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckSourceConnect(connOption)
-}
-
-func CheckJobLoaded(_ int32, params map[string]any) common.TResponse {
+func CheckJobLoaded(_ int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).CheckJobLoaded(params)
 }
 
-func CheckJob(_ int32, params map[string]any) common.TResponse {
+func CheckJob(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckJob(params)
+	return (*myPlugin).CheckJob(userID, params)
 }
-func CheckJobTable(_ int32, params map[string]any) common.TResponse {
+func CheckJobTable(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckJobTable(params)
+	return (*myPlugin).CheckJobTable(userID, params)
 }
-func OnLineJob(_ int32, params map[string]any) common.TResponse {
+func OnLineJob(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).OnLineJob(params)
+	return (*myPlugin).OnLineJob(userID, params)
 }
 
-func OffLineJob(_ int32, params map[string]any) common.TResponse {
+func OffLineJob(_ int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).OffLineJob(params)
 }

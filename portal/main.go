@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/control"
 	"github.com/drkisler/dataPedestal/portal/service"
+	dsServ "github.com/drkisler/dataPedestal/universal/dataSource/service"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
@@ -46,7 +47,7 @@ func createAndStartGinService() {
 	})
 
 	user := r.Group("/user")
-	user.Use(common.SetHeader, utils.AuthMiddleware, Logger())
+	user.Use(genService.SetHeader, utils.AuthMiddleware, Logger())
 	user.POST("/delete", usrServ.DeleteUser)
 	user.POST("/add", usrServ.AddUser)
 	user.POST("/alter", usrServ.AlterUser)
@@ -54,7 +55,7 @@ func createAndStartGinService() {
 	user.POST("/reset", usrServ.ResetPassword)
 	user.POST("/checkUser", usrServ.CheckUser)
 	plugin := r.Group("/plugin")
-	plugin.Use(common.SetHeader, utils.AuthMiddleware, Logger())
+	plugin.Use(genService.SetHeader, utils.AuthMiddleware, Logger())
 	plugin.POST("/delete", service.DeletePlugin)                               // 删除插件
 	plugin.POST("/add", service.AddPlugin)                                     // 新增插件
 	plugin.POST("/alter", service.AlterPlugin)                                 // 修改插件
@@ -75,8 +76,21 @@ func createAndStartGinService() {
 	plugin.POST("/getProductKey", service.GetProductKey)                       // 获取并验证产品序列号
 	plugin.POST("/setLicenseCode/:productSN/:license", service.SetLicenseCode) // 设置授权码
 	plugin.POST("/updatePluginFile", service.UpdatePluginFile)                 // 更新插件文件
+
+	dataSource := r.Group("/dataSource")
+	dataSource.Use(genService.SetHeader, utils.AuthMiddleware, Logger())
+	dataSource.POST("/deleteDataSource", dsServ.DeleteDataSource)             // 删除数据源
+	dataSource.POST("/addDataSource", dsServ.AddDataSource)                   // 新增数据源
+	dataSource.POST("/updateDataSource", dsServ.UpdateDataSource)             // 修改数据源
+	dataSource.POST("/queryDataSource", dsServ.QueryDataSource)               // 获取数据源列表
+	dataSource.POST("/getDataSourceNames", dsServ.GetDataSourceNames)         // 获取数据源名称列表
+	dataSource.POST("/getDataBaseDrivers", dsServ.GetDataBaseDrivers)         // 获取数据库驱动列表
+	dataSource.POST("/getConnectStringByName", dsServ.GetConnectStringByName) // 获取连接字符串
+	dataSource.POST("/getOptionsByDriverName", dsServ.GetOptionsByDriverName) // 获取数据库驱动连接选项
+	dataSource.POST("/checkConnectString", dsServ.CheckConnectString)         // 测试连接
+
 	logs := r.Group("/logger")
-	logs.Use(common.SetHeader, utils.AuthMiddleware)
+	logs.Use(genService.SetHeader, utils.AuthMiddleware)
 	logs.POST("/getPortalLogs", service.GetLogs)
 	logs.POST("/deletePortalLogs", service.DeleteLogs)
 	logs.POST("/clearPortalLogs", service.ClearLogs)
@@ -90,7 +104,7 @@ func createAndStartGinService() {
 
 	//r.Any("/plugins/:uuid/:route/:api", service.GetTargetUrl)
 	plugins := r.Group("/plugins") //使用路由转发的方式
-	plugins.Use(common.SetHeader, utils.AuthMiddleware, Logger())
+	plugins.Use(genService.SetHeader, utils.AuthMiddleware, Logger())
 	plugins.Any("/:uuid/:api", service.PluginAPI)
 
 	srv := &http.Server{
@@ -145,7 +159,7 @@ func main() {
 	_ = os.Setenv("Separator", string(filepath.Separator))
 
 	// region 读取配置文件连接数据库
-	if err = initializers.PortalCfg.LoadConfig(common.GenFilePath("config"), "config.toml"); err != nil {
+	if err = initializers.PortalCfg.LoadConfig(genService.GenFilePath("config"), "config.toml"); err != nil {
 		fmt.Println(err.Error())
 		logService.LogWriter.WriteLocal(fmt.Sprintf("加载配置文件失败：%s", err.Error()))
 		os.Exit(1)

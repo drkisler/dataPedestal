@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/plugins"
+	"github.com/drkisler/dataPedestal/common/pullJob"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/dataPedestal/host/service"
 	"github.com/drkisler/dataPedestal/initializers"
@@ -64,7 +67,7 @@ func createAndStartServ() {
 	//启动服务
 	r := gin.Default()
 	r.MaxMultipartMemory = 8 << 20
-	r.Use(common.SetHeader, utils.AuthMiddleware)
+	r.Use(genService.SetHeader, utils.AuthMiddleware)
 	r.Any("/:uuid/:api", service.PluginApi)
 	//r.POST("/upload", service.UploadFile) //上传文件
 	srv := &http.Server{
@@ -84,12 +87,12 @@ func createAndStartServ() {
 	logService.LogWriter.WriteInfo(fmt.Sprintf("插件托管服务已停止"), true)
 }
 func main() {
-	gob.Register([]common.TLogInfo{})
-	gob.Register(common.TPluginOperate{})
-	gob.Register([]common.TPullJob{})
-	gob.Register([]common.TPullTable{})
-	gob.Register([]common.ColumnInfo{})
-	gob.Register([]common.TableInfo{})
+	//gob.Register([]common.TLogInfo{})
+	gob.Register(plugins.TPluginOperate{})
+	gob.Register([]pullJob.TPullJob{})
+	gob.Register([]pullJob.TPullTable{})
+	gob.Register([]tableInfo.ColumnInfo{})
+	gob.Register([]tableInfo.TableInfo{})
 	file, err := os.Executable()
 	if err != nil {
 		fmt.Printf("获取可执行文件路径失败：%s", err.Error())
@@ -100,7 +103,7 @@ func main() {
 
 	// region 读取配置文件
 
-	if err = initializers.HostConfig.LoadConfig(common.GenFilePath("config"), "config.toml"); err != nil {
+	if err = initializers.HostConfig.LoadConfig(genService.GenFilePath("config"), "config.toml"); err != nil {
 		fmt.Printf("读取配置文件失败：%s", err.Error())
 		os.Exit(1)
 	}
@@ -123,7 +126,8 @@ func main() {
 
 	metaDataBase.SetConnectOption(connectStr)
 	if _, err = metaDataBase.GetPgServ(); err != nil {
-		logService.LogWriter.WriteError(fmt.Sprintf("连接数据库失败：%s", err.Error()), true)
+		fmt.Println(fmt.Sprintf("连接数据库失败：%s", err.Error()))
+		logService.LogWriter.WriteLocal(fmt.Sprintf("连接数据库失败：%s", err.Error())) //WriteError(fmt.Sprintf("连接数据库失败：%s", err.Error()), true)
 		os.Exit(1)
 	}
 

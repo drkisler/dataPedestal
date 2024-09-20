@@ -2,7 +2,10 @@ package workerService
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/enMap"
+	"github.com/drkisler/dataPedestal/common/pushJob"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/module"
@@ -38,7 +41,7 @@ func NewWorkerJob(job *module.TPushJob, replyUrl string) (*TWorkerJob, error) {
 	var workerJob worker.IPushWorker
 	var connOption map[string]string
 	strConn := job.SourceDbConn
-	if connOption, err = common.StringToMap(&strConn); err != nil {
+	if connOption, err = enMap.StringToMap(&strConn); err != nil {
 		return nil, err
 	}
 	if workerJob, err = NewWorker(connOption, job.ConnectBuffer); err != nil {
@@ -46,7 +49,7 @@ func NewWorkerJob(job *module.TPushJob, replyUrl string) (*TWorkerJob, error) {
 	}
 
 	strConn = job.DestDbConn
-	if connOption, err = common.StringToMap(&strConn); err != nil {
+	if connOption, err = enMap.StringToMap(&strConn); err != nil {
 		return nil, err
 	}
 	if skipHour, err = func(source string) ([]int, error) {
@@ -78,9 +81,9 @@ func NewWorkerJob(job *module.TPushJob, replyUrl string) (*TWorkerJob, error) {
 		SourceDbConn:  job.SourceDbConn,
 		DestDbConn:    job.DestDbConn,
 		ConnectBuffer: job.ConnectBuffer,
-		TBasePlugin:   pluginBase.TBasePlugin{TStatus: common.NewStatus(), IsDebug: job.IsDebug == common.STYES},
+		TBasePlugin:   pluginBase.TBasePlugin{TStatus: commonStatus.NewStatus(), IsDebug: job.IsDebug == commonStatus.STYES},
 		SkipHour:      skipHour,
-		Enabled:       job.Status == common.STENABLED,
+		Enabled:       job.Status == commonStatus.STENABLED,
 		msgClient:     MsgClient,
 		ReplyURL:      replyUrl,
 	}, nil
@@ -106,7 +109,7 @@ func (wj *TWorkerJob) Run() {
 		return
 	}
 	// 更新任务启动时间
-	job := &ctl.TPushJob{TPushJob: common.TPushJob{JobID: wj.JobID}}
+	job := &ctl.TPushJob{TPushJob: pushJob.TPushJob{JobID: wj.JobID}}
 	if err = job.SetLastRun(iStartTime); err != nil {
 		logService.LogWriter.WriteError(fmt.Sprintf("更新任务%s启动时间失败：%s", job.JobName, err.Error()), false)
 		return
@@ -148,7 +151,7 @@ func (wj *TWorkerJob) PushTable(tableID int32) (int64, error) {
 
 	strSQL := tbl.SelectSql
 
-	client, err := common.GetClickHouseClient(nil)
+	client, err := clickHouseSQL.GetClickHouseClient(nil)
 	if err != nil {
 		return 0, fmt.Errorf("获取ClickHouse客户端失败：%s", err.Error())
 	}
@@ -216,12 +219,12 @@ func (wj *TWorkerJob) IsWorking() bool {
 func (wj *TWorkerJob) DisableJob() error {
 	var job ctl.TPushJob
 	job.JobID = wj.JobID
-	job.Status = common.STDISABLED
+	job.Status = commonStatus.STDISABLED
 	return job.SetJobStatus()
 }
 func (wj *TWorkerJob) EnableJob() error {
 	var job ctl.TPushJob
 	job.JobID = wj.JobID
-	job.Status = common.STENABLED
+	job.Status = commonStatus.STENABLED
 	return job.SetJobStatus()
 }

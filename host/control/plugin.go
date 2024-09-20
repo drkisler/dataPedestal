@@ -3,7 +3,10 @@ package control
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drkisler/dataPedestal/common"
+	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/license"
+	"github.com/drkisler/dataPedestal/common/plugins"
+	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/host/module"
 	"github.com/drkisler/dataPedestal/initializers"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
@@ -32,17 +35,17 @@ func (c *TPluginControl) InsertPlugin() {
 	c.AddPlugin()
 }
 
-func (c *TPluginControl) DeletePlugin() *common.TResponse {
+func (c *TPluginControl) DeletePlugin() *response.TResponse {
 	if err := c.RemovePlugin(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
 func (c *TPluginControl) getPluginHash() (string, error) {
-	filePath := common.GenFilePath(initializers.HostConfig.PluginDir,
+	filePath := genService.GenFilePath(initializers.HostConfig.PluginDir,
 		c.PluginUUID, c.PluginFileName)
-	return common.FileHash(filePath)
+	return license.FileHash(filePath)
 }
 
 func (c *TPluginControl) checkLicense() (string, bool) {
@@ -56,12 +59,12 @@ func (c *TPluginControl) checkLicense() (string, bool) {
 	if fileHash != c.SerialNumber {
 		return "插件被篡改，禁止运行", false
 	}
-	strProductCode := common.GenerateProductCode(c.PluginUUID, fileHash)
+	strProductCode := license.GenerateProductCode(c.PluginUUID, fileHash)
 	if c.ProductCode != strProductCode {
 		return "产品序列号错误,请联系授权人", false
 	}
 
-	sn := common.GenerateLicenseCode(c.PluginUUID, c.ProductCode)
+	sn := license.GenerateLicenseCode(c.PluginUUID, c.ProductCode)
 	//验证LicenseCode
 	if sn == c.LicenseCode {
 		return "", true
@@ -70,15 +73,15 @@ func (c *TPluginControl) checkLicense() (string, bool) {
 }
 
 // GetProductKey 获取并验证产品序列号和授权码
-func (c *TPluginControl) GetProductKey() *common.TResponse {
+func (c *TPluginControl) GetProductKey() *response.TResponse {
 	var fileHash string
 	err := c.InitByUUID()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 
 	if fileHash, err = c.getPluginHash(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	var result struct {
 		LicenseCode string `json:"license_code"`
@@ -87,29 +90,37 @@ func (c *TPluginControl) GetProductKey() *common.TResponse {
 	}
 	if c.ProductCode == "" || c.LicenseCode == "" {
 		result.IsValid = false
-		result.ProductCode = common.GenerateProductCode(c.PluginUUID, fileHash)
+		result.ProductCode = license.GenerateProductCode(c.PluginUUID, fileHash)
 		result.LicenseCode = ""
-		return common.RespData(1, result, nil)
+		return response.RespData(1, result, nil)
 	}
-	result.ProductCode = common.GenerateProductCode(c.PluginUUID, fileHash)           //c.ProductCode
-	result.LicenseCode = common.GenerateLicenseCode(c.PluginUUID, result.ProductCode) //c.LicenseCode
+	result.ProductCode = license.GenerateProductCode(c.PluginUUID, fileHash)           //c.ProductCode
+	result.LicenseCode = license.GenerateLicenseCode(c.PluginUUID, result.ProductCode) //c.LicenseCode
 	if result.LicenseCode != c.LicenseCode || result.ProductCode != c.ProductCode {
 		result.IsValid = false
 		result.LicenseCode = c.LicenseCode
-		return common.RespData(1, result, nil)
+		return response.RespData(1, result, nil)
 	}
 	result.IsValid = true
-	return common.RespData(1, result, nil)
+	return response.RespData(1, result, nil)
 }
 
-func (c *TPluginControl) GetPlugins() *common.TResponse {
+func (c *TPluginControl) GetPlugins() *response.TResponse {
 	var result []TPluginControl
-	var data common.TRespDataSet
+	var data response.TRespDataSet
 	plugins := module.GetPluginList()
 	//设置运行状态 value *module.TPlugin
 
 	plugins.Range(func(key string, value any) bool {
 		plugin := value.(*module.TPlugin)
+		if c.PluginType != "全部插件" && c.PluginType != plugin.PluginType {
+			return false
+		}
+
+		if !strings.Contains(plugin.PluginName, c.PluginName) {
+			return false
+		}
+
 		var item *TPluginControl
 		item = signPluginControl(*plugin)
 		item.Status = "待加载"
@@ -141,138 +152,138 @@ func (c *TPluginControl) GetPlugins() *common.TResponse {
 	})
 	data.ArrData = result
 	data.Total = int64(len(result))
-	return common.Success(&data)
+	return response.Success(&data)
 }
 
 // UpdatePlugFileName 更新插件文件名称
-func (c *TPluginControl) UpdatePlugFileName() *common.TResponse {
+func (c *TPluginControl) UpdatePlugFileName() *response.TResponse {
 	strNewFileName := c.PluginFileName
 	if strNewFileName == "" {
-		return common.Failure("文件名不能为空")
+		return response.Failure("文件名不能为空")
 	}
 	if err := c.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	plugin, err := IndexPlugin(c.PluginUUID, c.PluginFileName)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	if plugin.Running() {
-		return common.Failure(fmt.Sprintf("%s is running", c.PluginName))
+		return response.Failure(fmt.Sprintf("%s is running", c.PluginName))
 	}
 	plugins := module.GetPluginList()
 	p, ok := plugins.Get(c.PluginUUID)
 	if !ok {
-		return common.Failure(fmt.Sprintf("%s is not exist", c.PluginName))
+		return response.Failure(fmt.Sprintf("%s is not exist", c.PluginName))
 	}
 	p.(*module.TPlugin).PluginFileName = strNewFileName
 
-	return common.Success(nil)
+	return response.Success(nil)
 }
 
 // LoadPlugin 加载插件
-func (c *TPluginControl) LoadPlugin(strConn string) *common.TResponse {
+func (c *TPluginControl) LoadPlugin(strConn string) *response.TResponse {
 	var err error
 	var iPort int64
 	if err = c.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	if c.PluginFileName == "" {
-		return common.Failure("插件文件为空，请上传文件")
+		return response.Failure("插件文件为空，请上传文件")
 	}
 	if c.LicenseCode == "" {
-		return common.Failure("该插件需要授权")
+		return response.Failure("该插件需要授权")
 	}
 	if c.SerialNumber == "" {
-		return common.Failure("插件序列号为空，请联系授权人")
+		return response.Failure("插件序列号为空，请联系授权人")
 	}
 	if c.ProductCode == "" {
-		return common.Failure("产品序列号为空，请联系授权人")
+		return response.Failure("产品序列号为空，请联系授权人")
 	}
 
 	info, ok := c.checkLicense()
 	if !ok {
-		return common.Failure(info)
+		return response.Failure(info)
 	}
 	if iPort, err = LoadPlugin(c.PluginUUID, c.SerialNumber,
-		common.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID, c.PluginFileName),
-		c.PluginConfig, c.PluginName, strConn, initializers.HostConfig.LocalRepUrl); err != nil {
-		return common.Failure(err.Error())
+		genService.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID, c.PluginFileName),
+		c.PluginConfig, c.PluginName, strConn, initializers.HostConfig); err != nil {
+		return response.Failure(err.Error())
 	}
-	return common.ReturnInt(iPort)
+	return response.ReturnInt(iPort)
 }
 
 // UnloadPlugin 卸载插件不再运行
-func (c *TPluginControl) UnloadPlugin() *common.TResponse {
+func (c *TPluginControl) UnloadPlugin() *response.TResponse {
 	if err := c.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	if err := UnloadPlugin(c.PluginUUID); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 
-	return common.Success(nil)
+	return response.Success(nil)
 }
-func (c *TPluginControl) RunPlugin() *common.TResponse {
+func (c *TPluginControl) RunPlugin() *response.TResponse {
 	if err := c.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	plugin, err := IndexPlugin(c.PluginUUID, c.PluginFileName)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	if plugin.Running() {
-		return common.Failure(fmt.Sprintf("%s is running", c.PluginName))
+		return response.Failure(fmt.Sprintf("%s is running", c.PluginName))
 	}
 	result := plugin.ImpPlugin.Run()
 	//plugin.PluginPort = result.Port
 	return &result
 }
 
-func (c *TPluginControl) CallPluginAPI(operate *common.TPluginOperate) *common.TResponse {
+func (c *TPluginControl) CallPluginAPI(operate *plugins.TPluginOperate) *response.TResponse {
 	err := c.InitByUUID()
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	plugin, err := IndexPlugin(c.PluginUUID, c.PluginFileName)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	result := plugin.ImpPlugin.CustomInterface(*operate)
 	return &result
 }
 
-func (c *TPluginControl) StopPlugin() *common.TResponse {
+func (c *TPluginControl) StopPlugin() *response.TResponse {
 	var err error
 	if err = c.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	runningPlugin, err := IndexPlugin(c.PluginUUID, c.PluginFileName)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	if runningPlugin.ImpPlugin.Running().Info == "true" {
 		result := runningPlugin.ImpPlugin.Stop()
 		return &result
 	}
-	return common.Failure(fmt.Sprintf("%s is not running", c.PluginName))
+	return response.Failure(fmt.Sprintf("%s is not running", c.PluginName))
 }
 
-func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
+func (c *TPluginControl) GetPluginTmpCfg() *response.TResponse {
 	var err error
 	var pluginReq *TPluginRequester
 	//获取模板需要提供序列号
 	newCfg := c.PluginConfig
 	if err = c.InitByUUID(); err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 
 	if c.PluginFileName == "" {
-		return common.Failure("插件文件为空，请上传文件")
+		return response.Failure("插件文件为空，请上传文件")
 	}
 	if CheckPluginExists(c.PluginUUID) {
 		if pluginReq, err = IndexPlugin(c.PluginUUID, c.PluginFileName); err != nil {
-			return common.Failure(err.Error())
+			return response.Failure(err.Error())
 		}
 		result := pluginReq.ImpPlugin.GetConfigTemplate()
 		return &result
@@ -282,17 +293,17 @@ func (c *TPluginControl) GetPluginTmpCfg() *common.TResponse {
 		c.PluginConfig = newCfg
 	}
 	plug, err := NewPlugin(c.SerialNumber,
-		common.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID, c.PluginFileName),
+		genService.GenFilePath(initializers.HostConfig.PluginDir, c.PluginUUID, c.PluginFileName),
 	)
 	if err != nil {
-		return common.Failure(err.Error())
+		return response.Failure(err.Error())
 	}
 	result := plug.ImpPlugin.GetConfigTemplate()
 	return &result
 }
-func (c *TPluginControl) GetLoadedPlugins() *common.TResponse {
+func (c *TPluginControl) GetLoadedPlugins() *response.TResponse {
 	if c.PluginType == "" {
-		return common.Failure("PluginType is empty")
+		return response.Failure("PluginType is empty")
 	}
 	plugins := module.GetPluginList()
 	var UUIDs []string
@@ -303,9 +314,9 @@ func (c *TPluginControl) GetLoadedPlugins() *common.TResponse {
 		}
 		return true
 	})
-	var data common.TRespDataSet
+	var data response.TRespDataSet
 	data.ArrData, data.Total = UUIDs, int64(len(UUIDs))
-	var result common.TResponse
+	var result response.TResponse
 	result.Code, result.Data, result.Info = 0, &data, strings.Join(UUIDs, ",")
 	return &result
 }
