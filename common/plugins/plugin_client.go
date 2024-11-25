@@ -10,37 +10,53 @@ type PluginRPC struct {
 	done   *rpc.Call
 }
 
-func (pRPC *PluginRPC) Load(config string) response.TResponse {
+/*
+	func (pRPC *PluginRPC) Load(config string) response.TResponse {
+		var result response.TResponse
+		err := pRPC.client.Call("Plugin.Load",
+			config,
+			&result)
+		if err != nil {
+			return *response.Failure(err.Error())
+		}
+		return result
+	}
+*/
+func (pRPC *PluginRPC) Run(config string) response.TResponse {
 	var result response.TResponse
-	err := pRPC.client.Call("Plugin.Load",
-		config,
-		&result)
+	/*
+		pRPC.done = pRPC.client.Go("Plugin.Run", config, &result, make(chan *rpc.Call, 10))
+		if pRPC.done.Error != nil {
+			return *response.Failure(pRPC.done.Error.Error())
+		}
+	*/
+	err := pRPC.client.Call("Plugin.Run", config, &result)
 	if err != nil {
 		return *response.Failure(err.Error())
-	}
-	return result
-}
-
-func (pRPC *PluginRPC) Run() response.TResponse {
-	var result response.TResponse
-	pRPC.done = pRPC.client.Go("Plugin.Run", new(interface{}), &result, make(chan *rpc.Call, 10))
-	if pRPC.done.Error != nil {
-		return *response.Failure(pRPC.done.Error.Error())
 	}
 	return result
 }
 
 func (pRPC *PluginRPC) Stop() response.TResponse {
 	var result response.TResponse
-	var err error
-	err = pRPC.client.Call("Plugin.Stop", new(interface{}), &result)
+	/*
+		var err error
+		err = pRPC.client.Call("Plugin.Stop", new(interface{}), &result)
+		if err != nil {
+			return *response.Failure(err.Error())
+		}
+		runResult := <-(pRPC.done).Done
+		if runResult.Error != nil {
+			return *response.Failure(runResult.Error.Error())
+		}
+	*/
+	err := pRPC.client.Call("Plugin.Stop", new(interface{}), &result)
 	if err != nil {
-		return *response.Failure(err.Error())
+		return *response.Failure("Plugin.Stop error: " + err.Error())
 	}
-	runResult := <-(pRPC.done).Done
-	if runResult.Error != nil {
-		return *response.Failure(runResult.Error.Error())
-	}
+
+	//pRPC.client.Close()
+
 	return result
 
 }

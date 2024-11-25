@@ -24,11 +24,6 @@ type TPullJobControl struct {
 func ParsePullJobControl(data map[string]any) (*TPullJobControl, error) {
 	var err error
 	var result TPullJobControl
-
-	/*if result.OperatorID, err = common.GetInt32ValueFromMap("operator_id", data); err != nil {
-		return nil, err
-	}
-	result.UserID = result.OperatorID*/
 	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
 		return nil, err
 	}
@@ -41,22 +36,12 @@ func ParsePullJobControl(data map[string]any) (*TPullJobControl, error) {
 	if result.JobName, err = enMap.GetStringValueFromMap("job_name", data); err != nil {
 		return nil, err
 	}
-	/*
-		if result.SourceDbConn, err = enMap.GetStringValueFromMap("source_db_conn", data); err != nil {
-			return nil, err
-		}
-
-			if result.DestDbConn, err = enMap.GetStringValueFromMap("dest_db_conn", data); err != nil {
-				return nil, err
-			}
-			if result.KeepConnect, err = enMap.GetStringValueFromMap("keep_connect", data); err != nil {
-				return nil, err
-			}
-
-		if result.ConnectBuffer, err = enMap.GetIntValueFromMap("connect_buffer", data); err != nil {
-			return nil, err
-		}
-	*/
+	if result.PluginUUID, err = enMap.GetStringValueFromMap("plugin_uuid", data); err != nil {
+		return nil, err
+	}
+	if result.DsID, err = enMap.GetInt32ValueFromMap("ds_id", data); err != nil {
+		return nil, err
+	}
 	if result.CronExpression, err = enMap.GetStringValueFromMap("cron_expression", data); err != nil {
 		return nil, err
 	}
@@ -129,14 +114,14 @@ func (job *TPullJobControl) GetJobs(onlineIDs []int32) *response.TResponse {
 		jobPageBuffer.Store(job.OperatorID, pageBuffer.NewPageBuffer(job.OperatorID, job.ToString(), int64(job.PageSize), ids))
 	}
 	value, _ = jobPageBuffer.Load(job.OperatorID)
-	pageBuffer := value.(pageBuffer.PageBuffer)
-	if pageBuffer.Total == 0 {
+	pgeBuffer := value.(pageBuffer.PageBuffer)
+	if pgeBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
 		return response.Success(&result)
 	}
 
-	ids, err := pageBuffer.GetPageIDs(int64(job.PageIndex - 1))
+	ids, err := pgeBuffer.GetPageIDs(int64(job.PageIndex - 1))
 	if err != nil {
 		return response.Failure(err.Error())
 	}
@@ -153,7 +138,7 @@ func (job *TPullJobControl) GetJobs(onlineIDs []int32) *response.TResponse {
 	}
 	result.ArrData = jobs
 
-	result.Total = pageBuffer.Total
+	result.Total = pgeBuffer.Total
 	return response.Success(&result)
 }
 

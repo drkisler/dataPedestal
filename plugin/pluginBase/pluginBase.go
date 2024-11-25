@@ -6,12 +6,11 @@ import (
 	"github.com/drkisler/dataPedestal/common/commonStatus"
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/initializers"
-	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/process"
 	"math"
-	"runtime"
+	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type TBasePlugin struct {
@@ -36,18 +35,6 @@ func (bp *TBasePlugin) GetConfigTemplate() response.TResponse {
 	return result
 }
 
-/*
-func (bp *TBasePlugin) Load(config string) common.TResponse {
-	var cfg initializers.TConfigure
-	err := json.Unmarshal([]byte(config), &cfg)
-	if err != nil {
-		return *common.Failure(err.Error())
-	}
-	bp.IsDebug = cfg.IsDebug
-	return *common.Success(nil)
-}
-*/
-
 func (bp *TBasePlugin) Running() response.TResponse {
 	return response.TResponse{Info: strconv.FormatBool(bp.IsRunning())}
 	//return utils.TResponse{Info: "false"}
@@ -59,11 +46,11 @@ func (bp *TBasePlugin) Stop() response.TResponse {
 func (bp *TBasePlugin) SetConnection(source string) {
 	bp.DBConnection = source
 }
-func (bp *TBasePlugin) GetConnectOption() map[string]string {
+func (bp *TBasePlugin) ConvertConnectOption(connection string) map[string]string {
 	result := make(map[string]string)
 
-	// 将输入字符串按空白字符（包括空格、制表符、换行符）分割
-	parts := strings.Fields(bp.DBConnection)
+	// 将输入字符串按空白字符（包括空格、制表符、换行符）分割  bp.DBConnection
+	parts := strings.Fields(connection)
 
 	for _, part := range parts {
 		// 查找第一个"="的位置
@@ -88,14 +75,24 @@ func (bp *TBasePlugin) GetSystemUsage() string {
 		CPUUsage    string  `json:"cpu_usage"`
 		MemoryUsage float64 `json:"memory_usage"`
 	}
-	percent, _ := cpu.Percent(time.Second, false)
-	result.CPUUsage = fmt.Sprintf("%.4f%%", percent[0]) //   truncateWithMath(percent[0], 4)
-
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	result.MemoryUsage = truncateWithMath(float64(m.Sys)/1024/1024, 4)
-	//ioCounters, _ := net.IOCounters(false)
+	pid := int32(os.Getpid())
+	p, _ := process.NewProcess(pid)
+	memInfo, err := p.MemoryInfo()
+	if err != nil {
+		result.CPUUsage = "0.0000%"
+		result.MemoryUsage = 0.0
+		data, _ := json.Marshal(&result)
+		return string(data)
+	}
+	cpuPercent, err := p.CPUPercent()
+	if err != nil {
+		result.CPUUsage = "0.0000%"
+		result.MemoryUsage = 0.0
+		data, _ := json.Marshal(&result)
+		return string(data)
+	}
+	result.CPUUsage = fmt.Sprintf("%.2f%%", cpuPercent)
+	result.MemoryUsage = truncateWithMath(float64(memInfo.RSS)/1024/1024, 4)
 	data, _ := json.Marshal(&result)
 	return string(data)
 }

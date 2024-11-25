@@ -13,6 +13,7 @@ import (
 
 type TPullJob struct {
 	pullJob.TPullJob
+	//DsName string `json:"ds_name,omitempty"`
 }
 
 func (pj *TPullJob) AddJob() (int64, error) {
@@ -24,7 +25,7 @@ func (pj *TPullJob) AddJob() (int64, error) {
 		"cet_id as (select min(a.job_id)+1 job_id from (select job_id from cet_pull union all select 0) a left join cet_pull b on a.job_id+1=b.job_id "+
 		"where b.job_id is null) insert "+
 		"into %s.pull_job(user_id,job_id,job_name,plugin_uuid,ds_id,cron_expression,skip_hour,is_debug,status)"+
-		"select $1,job_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11 "+
+		"select $1,job_id,$2,$3,$4,$5,$6,$7,$8 "+
 		"from cet_id returning job_id", dbs.GetSchema(), dbs.GetSchema())
 
 	rows, qError := dbs.QuerySQL(strSQL, pj.UserID, pj.JobName, pj.PluginUUID, pj.DsID,
@@ -76,7 +77,7 @@ func (pj *TPullJob) InitJobByName() error {
 		return err
 	}
 	strSQL := fmt.Sprintf("select "+
-		"user_id,job_id,job_name,plugin_uuid,cron_expression,skip_hour,is_debug,status,last_run "+
+		"user_id,job_id,job_name,plugin_uuid,ds_id,cron_expression,skip_hour,is_debug,status,last_run "+
 		"from %s.pull_job where user_id = $1 and job_name = $2", dbs.GetSchema())
 
 	rows, err := dbs.QuerySQL(strSQL, pj.UserID, pj.JobName)
@@ -87,7 +88,7 @@ func (pj *TPullJob) InitJobByName() error {
 	var cnt = 0
 	for rows.Next() {
 		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.PluginUUID,
-			&pj.DsID, &pj.CronExpression, &pj.IsDebug, &pj.SkipHour, &pj.Status, &pj.LastRun); err != nil {
+			&pj.DsID, &pj.CronExpression, &pj.SkipHour, &pj.IsDebug, &pj.Status, &pj.LastRun); err != nil {
 			return err
 		}
 		cnt++
@@ -114,23 +115,57 @@ func (pj *TPullJob) DeleteJob() error {
 	if err != nil {
 		return err
 	}
-	strSQL := fmt.Sprintf("delete "+
-		"from %s.pull_job where job_id= $1 ", dbs.GetSchema())
-	return dbs.ExecuteSQL(context.Background(), strSQL, pj.JobID)
+	ctx := context.Background()
+	conn, err := dbs.GetConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	deleteSQLs := []string{
+		fmt.Sprintf("delete "+
+			"from %s.pull_table where job_id= $1 ", dbs.GetSchema()),
+		fmt.Sprintf("delete "+
+			"from %s.pull_job where job_id= $1 ", dbs.GetSchema()),
+	}
+	for _, sql := range deleteSQLs {
+		if _, err = tx.Exec(ctx, sql, pj.JobID); err != nil {
+			return err // 发生错误则返回
+		}
+	}
 
+	if err = tx.Commit(ctx); err != nil {
+		return err // 提交失败
+	}
+	return nil
 }
 
 func (pj *TPullJob) GetJobs(ids *string) ([]pullJob.TPullJob, error) {
+	if ids == nil || *ids == "" {
+		return []pullJob.TPullJob{}, nil
+	}
 	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, err
 	}
 
-	strSQL := fmt.Sprintf("SELECT a.user_id,a.job_id,a.job_name,a.plugin_uuid,a.plugin_uuid,a.ds_id,"+
+	strSQL := fmt.Sprintf("SELECT a.user_id,a.job_id,a.job_name,a.plugin_uuid,a.ds_id,"+
 		"a.cron_expression,a.is_debug,a.skip_hour,a.status,a.last_run,COALESCE(c.status,''),COALESCE(c.error_info,'') "+
-		"from (select * from %s.pull_job where user_id=$1 and job_id = any(array(SELECT unnest(string_to_array('%s', ','))::bigint)) a "+
+		"from (select * from %s.pull_job where user_id=$1 and job_id = any(array(SELECT unnest(string_to_array('%s', ','))::bigint)) ) a "+
 		"left join %s.pull_job_log c on a.job_id=c.job_id and a.last_run=c.start_time "+
 		"order by a.job_id", dbs.GetSchema(), *ids, dbs.GetSchema())
+
+	//logService.LogWriter.WriteLocal("GetJobs SQL: " + strSQL)
+	//logService.LogWriter.WriteLocal("GetJobs user_id: " + fmt.Sprintf("%d", pj.UserID))
+
 	rows, err := dbs.QuerySQL(strSQL, pj.UserID)
 	if err != nil {
 		return nil, err
@@ -237,6 +272,7 @@ func (pj *TPullJob) SetLastRun(iStartTime int64) error {
 func (pj *TPullJob) GetDataSource() (*dsModule.TDataSource, error) {
 	var ds dsModule.TDataSource
 	ds.DsId = pj.DsID
+	ds.UserID = pj.UserID
 	if err := ds.InitByID(license.GetDefaultKey()); err != nil {
 		return nil, err
 	}

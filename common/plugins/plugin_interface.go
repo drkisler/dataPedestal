@@ -6,8 +6,10 @@ import (
 
 type IPlugin interface {
 	// plugin 提供的通用接口
-	Load(config string) response.TResponse
-	Run() response.TResponse
+
+	//Load(config string) response.TResponse
+
+	Run(config string) response.TResponse
 	Running() response.TResponse
 	Stop() response.TResponse
 	GetConfigTemplate() response.TResponse

@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -123,11 +125,11 @@ func GetDefaultKey() string {
 func FileHash(filePath string) (string, error) {
 	file, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("读取文件失败: %v", err)
 	}
-	hasher := sha256.New()
-	hasher.Write(file)
-	hashValue := hasher.Sum(nil)
+	harsher := sha256.New()
+	harsher.Write(file)
+	hashValue := harsher.Sum(nil)
 	return hex.EncodeToString(hashValue), nil
 }
 
@@ -148,4 +150,20 @@ func DecryptAES(cipherText, key string) (string, error) {
 	mode := cipher.NewCFBDecrypter(block, iv)
 	mode.XORKeyStream(cipherTextBytes, cipherTextBytes)
 	return string(cipherTextBytes), nil
+}
+
+func EncryptAES(plainText, key string) (string, error) {
+	plainTextBytes := []byte(plainText)
+	block, err := aes.NewCipher([]byte(key))
+	if err != nil {
+		return "", err
+	}
+	cipherText := make([]byte, aes.BlockSize+len(plainTextBytes))
+	iv := cipherText[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return "", err
+	}
+	mode := cipher.NewCFBEncrypter(block, iv)
+	mode.XORKeyStream(cipherText[aes.BlockSize:], plainTextBytes)
+	return base64.StdEncoding.EncodeToString(cipherText), nil
 }

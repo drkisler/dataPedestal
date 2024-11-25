@@ -34,7 +34,8 @@ func HandleReceiveFile(meta *fileService.TFileMeta, err error) {
 	}
 	var plugin control.TPluginControl
 	plugin.PluginUUID = meta.FileUUID
-	if err = plugin.InitByUUID(); err != nil {
+
+	if err = plugin.InitPluginFromDB(); err != nil {
 		errBuffer[meta.FileUUID] = response.Failure(err.Error())
 		return
 	}
@@ -56,10 +57,8 @@ func HandleOperate(msg []byte) []byte {
 	case messager.OperateGetTempConfig:
 		return GetTempConfig(msg[1:]) //获取临时配置，用于示例
 
-	case messager.OperateLoadPlugin:
-		return LoadPlugin(msg[1:]) //加载插件
-	case messager.OperateUnloadPlugin:
-		return UnloadPlugin(msg[1:]) //卸载插件
+	//case messager.OperateLoadPlugin:return LoadPlugin(msg[1:]) //加载插件
+	//case messager.OperateUnloadPlugin:return UnloadPlugin(msg[1:]) //卸载插件
 	case messager.OperateRunPlugin:
 		return RunPlugin(msg[1:]) //运行插件
 	case messager.OperateStopPlugin:
@@ -78,7 +77,7 @@ func HandleOperate(msg []byte) []byte {
 	case messager.OperateForwardMsg:
 		return PublishServer.PushMsg(msg) //转发消息到服务器，用于转发消息
 	case messager.OperateRequestPublish:
-		return PublishServer.PushMsg(msg) //转发消息到服务器，用于发布请求
+		return PublishServer.PushMsg(msg) //转发消息到服务器，用于消息发布请求
 	default:
 		return result
 	}

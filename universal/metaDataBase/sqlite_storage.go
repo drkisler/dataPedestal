@@ -89,7 +89,12 @@ func (dbs *TStorage) ExecuteSQL(strSQL string, args ...interface{}) error {
 		_ = ctx.Rollback()
 		return err
 	}
-	return ctx.Commit()
+	if err = ctx.Commit(); err != nil {
+		_ = ctx.Rollback()
+		return err
+	}
+
+	return nil
 }
 
 func (dbs *TStorage) QuerySQL(strSQL string, args ...interface{}) (*sqlx.Rows, error) {

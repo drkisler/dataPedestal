@@ -2,6 +2,7 @@ package control
 
 import (
 	"fmt"
+	"github.com/drkisler/dataPedestal/common/license"
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/universal/userAdmin/module"
 )
@@ -17,14 +18,27 @@ type TUserControl struct {
 }
 
 func (uc *TUserControl) Login() error {
-	usr, err := uc.GetUserByAccount()
+	password := uc.Password
+	_, err := uc.GetUserByAccount()
 	if err != nil {
 		return err
 	}
-	if uc.Password != usr.Password {
+
+	storedPassword := ""
+	loginPassword := ""
+
+	if storedPassword, err = license.DecryptAES(uc.Password, license.GetDefaultKey()); err != nil {
+		return err
+	}
+	if loginPassword, err = license.DecryptAES(password, license.GetDefaultKey()); err != nil {
+		return err
+	}
+	if fmt.Sprintf("%d%s", uc.UserID, loginPassword) != storedPassword {
 		return fmt.Errorf("密码错误")
 	}
-	uc.UserID = usr.UserID
+	//if uc.Password != password {
+	//	return fmt.Errorf("密码错误")
+	//}
 	return nil
 }
 
@@ -47,6 +61,14 @@ func (uc *TUserControl) ResetPassword() *response.TResponse {
 		return response.Failure(err.Error())
 	}
 	user := uc.TUser
+	//解密密码
+	if user.Password, err = license.DecryptAES(user.Password, license.GetDefaultKey()); err != nil {
+		return response.Failure(err.Error())
+	}
+	// 重新加密
+	if user.Password, err = license.EncryptAES(fmt.Sprintf("%d%s", user.UserID, user.Password), license.GetDefaultKey()); err != nil {
+		return response.Failure(err.Error())
+	}
 	if err = user.ResetPassword(); err != nil {
 		return response.Failure(err.Error())
 	}
@@ -59,6 +81,11 @@ func (uc *TUserControl) AddUser() *response.TResponse {
 		return response.Failure(err.Error())
 	}
 	user := uc.TUser
+	// 加密
+	if user.Password, err = license.EncryptAES(fmt.Sprintf("%d%s", user.UserID, "P@ssw0rd!"), license.GetDefaultKey()); err != nil {
+		return response.Failure(err.Error())
+	}
+
 	userid, err := user.AddUser()
 	if err != nil {
 		return response.Failure(err.Error())

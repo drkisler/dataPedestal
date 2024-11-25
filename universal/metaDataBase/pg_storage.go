@@ -3,7 +3,7 @@ package metaDataBase
 import (
 	"context"
 	"fmt"
-	"github.com/drkisler/utils"
+	"github.com/drkisler/dataPedestal/common/license"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"strings"
@@ -89,9 +89,14 @@ func (pg *TPGStorage) ExecuteSQL(ctx context.Context, strSQL string, args ...int
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
+		_ = tx.Rollback(ctx)
 		return err
 	}
 	return nil
+}
+
+func (pg *TPGStorage) GetConn(ctx context.Context) (*pgxpool.Conn, error) {
+	return pg.pool.Acquire(ctx)
 }
 
 func (pg *TPGStorage) Execute(strSQL string, args ...interface{}) (int64, error) {
@@ -114,6 +119,7 @@ func (pg *TPGStorage) Execute(strSQL string, args ...interface{}) (int64, error)
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
+		_ = tx.Rollback(ctx)
 		return 0, err
 	}
 	return commandResult.RowsAffected(), nil
@@ -160,6 +166,7 @@ func (pg *TPGStorage) Close() {
 	pg.pool.Close()
 }
 
+// checkUserExists 系统实施时，检查用户是否存在，不存在则插入系统管理员
 func (pg *TPGStorage) checkUserExists() error {
 	strSQL := fmt.Sprintf("insert "+
 		"into %s.sys_user(user_id,user_account,user_name,user_desc,user_role,user_password,user_status)"+
@@ -169,6 +176,6 @@ func (pg *TPGStorage) checkUserExists() error {
 }
 
 func getDefaultPassword() string {
-	enStr := utils.TEnString{String: "P@ssw0rd!"}
-	return enStr.Encrypt(utils.GetDefaultKey())
+	str, _ := license.EncryptAES("P@ssw0rd!", license.GetDefaultKey())
+	return str
 }

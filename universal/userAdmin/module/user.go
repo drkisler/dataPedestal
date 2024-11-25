@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
-	"github.com/drkisler/utils"
 )
 
 type TUser struct {
@@ -82,8 +81,6 @@ func (usr *TUser) ResetPassword() error {
 	if err != nil {
 		return err
 	}
-	var enStr = utils.TEnString{String: usr.Password}
-	usr.Password = enStr.Encrypt(utils.GetDefaultKey())
 	strSQL := fmt.Sprintf("UPDATE "+
 		"%s.sys_user SET user_password = $1 WHERE user_id = $2", storage.GetSchema())
 	return storage.ExecuteSQL(context.Background(), strSQL, usr.Password, usr.UserID)
@@ -100,8 +97,6 @@ func (usr *TUser) AddUser() (int64, error) {
 		"select min(a.user_id)+1,$1,$2,$3,$4,$5,$6  "+
 		"from cet_user a left join %s.sys_user b on a.user_id+1=b.user_id where b.user_id is null returning user_id", storage.GetSchema(),
 		storage.GetSchema(), storage.GetSchema())
-	var enStr = utils.TEnString{String: "123456"}
-	usr.Password = enStr.Encrypt(utils.GetDefaultKey())
 	if err = storage.ExecuteSQL(context.Background(), strSQL, usr.Account, usr.UserName, usr.Desc, usr.Role, usr.Password, usr.Status); err != nil {
 		return 0, err
 	}

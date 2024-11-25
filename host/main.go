@@ -182,6 +182,7 @@ func main() {
 	// endregion
 	// region 自动启动相关插件
 	control.RunPlugins()
+	defer control.StopPlugins()
 	// endregion
 
 	// region 启动系统服务
@@ -191,11 +192,11 @@ func main() {
 		os.Exit(1)
 	}
 	servDaemon := &TWorkerDaemon{srv}
-	status, err := servDaemon.Manage()
+	_, err = servDaemon.Manage()
 	if err != nil {
 		logService.LogWriter.WriteError(fmt.Sprintf("启动系统服务失败：%s", err.Error()), true)
 		os.Exit(1)
 	}
-	logService.LogWriter.WriteInfo(fmt.Sprintf("启动系统服务成功：%s", status), true)
+	//logService.LogWriter.WriteInfo(fmt.Sprintf("启动系统服务成功：%s", status), true)
 	// endregion
 }

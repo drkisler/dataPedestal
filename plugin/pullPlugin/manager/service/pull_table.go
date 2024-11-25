@@ -1,10 +1,8 @@
 package service
 
 import (
-	"github.com/drkisler/dataPedestal/common/license"
 	"github.com/drkisler/dataPedestal/common/response"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
-	dsModule "github.com/drkisler/dataPedestal/universal/dataSource/module"
 )
 
 func AddTable(userID int32, params map[string]any) response.TResponse {
@@ -14,23 +12,12 @@ func AddTable(userID int32, params map[string]any) response.TResponse {
 		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	var ds dsModule.TDataSource
-	ds.UserID = userID
-	ds.DsId = job.DsID
-	if err = ds.InitByID(license.GetDefaultKey()); err != nil {
+	myPlugin := PluginServ.(*TMyPlugin)
+	var tableDDL *string
+	if tableDDL, err = (*myPlugin).GetSourceTableDDL(userID, job.DsID, ptc.TableCode); err != nil {
 		return *response.Failure(err.Error())
 	}
-	myPlugin := PluginServ.(*TMyPlugin)
-	tableCode := ptc.TableCode
-	var tableDDL *string
-	if tableCode != "" {
-		if tableDDL, err = (*myPlugin).GetSourceTableDDL(ds.DatabaseDriver, tableCode); err != nil {
-			return *response.Failure(err.Error())
-		}
-		ptc.SourceDDL = *tableDDL
-	} else {
-		ptc.SourceDDL = ""
-	}
+	ptc.SourceDDL = *tableDDL
 	return *(ptc.AppendTable())
 }
 func AlterTable(userID int32, params map[string]any) response.TResponse {
@@ -40,23 +27,12 @@ func AlterTable(userID int32, params map[string]any) response.TResponse {
 		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	var ds dsModule.TDataSource
-	ds.UserID = userID
-	ds.DsId = job.DsID
-	if err = ds.InitByID(license.GetDefaultKey()); err != nil {
+	myPlugin := PluginServ.(*TMyPlugin)
+	var tableDDL *string
+	if tableDDL, err = (*myPlugin).GetSourceTableDDL(userID, job.DsID, ptc.TableCode); err != nil {
 		return *response.Failure(err.Error())
 	}
-	myPlugin := PluginServ.(*TMyPlugin)
-	tableCode := ptc.TableCode
-	var tableDDL *string
-	if tableCode != "" {
-		if tableDDL, err = (*myPlugin).GetSourceTableDDL(ds.DatabaseDriver, tableCode); err != nil {
-			return *response.Failure(err.Error())
-		}
-		ptc.SourceDDL = *tableDDL
-	} else {
-		ptc.SourceDDL = ""
-	}
+	ptc.SourceDDL = *tableDDL
 	return *(ptc.ModifyTable())
 }
 func DeleteTable(userID int32, params map[string]any) response.TResponse {
@@ -138,14 +114,8 @@ func GetSourceTables(userID int32, params map[string]any) response.TResponse {
 	if err = job.InitJobByName(); err != nil {
 		return *response.Failure(err.Error())
 	}
-	var ds dsModule.TDataSource
-	ds.UserID = userID
-	ds.DsId = job.DsID
-	if err = ds.InitByID(license.GetDefaultKey()); err != nil {
-		return *response.Failure(err.Error())
-	}
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetSourceTables(ds.DatabaseDriver)
+	return (*myPlugin).GetSourceTables(userID, job.DsID)
 }
 
 func GetDestTables(_ int32, _ map[string]any) response.TResponse {
@@ -166,12 +136,7 @@ func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 	if err = job.InitJobByName(); err != nil {
 		return *response.Failure(err.Error())
 	}
-	var ds dsModule.TDataSource
-	ds.UserID = userID
-	ds.DsId = job.DsID
-	if err = ds.InitByID(license.GetDefaultKey()); err != nil {
-		return *response.Failure(err.Error())
-	}
+
 	tableName, ok := params["table_name"]
 	if !ok {
 		return *response.Failure("tableName is empty")
@@ -179,7 +144,7 @@ func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 	strTableName := tableName.(string)
 
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetTableColumns(ds.DatabaseDriver, strTableName)
+	return (*myPlugin).GetTableColumns(userID, job.DsID, strTableName)
 }
 
 func GetTableScript(userID int32, params map[string]any) response.TResponse {
@@ -194,12 +159,7 @@ func GetTableScript(userID int32, params map[string]any) response.TResponse {
 	if err = job.InitJobByName(); err != nil {
 		return *response.Failure(err.Error())
 	}
-	var ds dsModule.TDataSource
-	ds.UserID = userID
-	ds.DsId = job.DsID
-	if err = ds.InitByID(license.GetDefaultKey()); err != nil {
-		return *response.Failure(err.Error())
-	}
+
 	tableName, ok := params["table_name"]
 	if !ok {
 		return *response.Failure("tableName is empty")
@@ -207,7 +167,7 @@ func GetTableScript(userID int32, params map[string]any) response.TResponse {
 	strTableName := tableName.(string)
 
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetTableScript(ds.DatabaseDriver, strTableName)
+	return (*myPlugin).GetTableScript(userID, job.DsID, strTableName)
 }
 
 func CheckSQLValid(userID int32, params map[string]any) response.TResponse {
@@ -233,14 +193,8 @@ func CheckSQLValid(userID int32, params map[string]any) response.TResponse {
 	if err = job.InitJobByName(); err != nil {
 		return *response.Failure(err.Error())
 	}
-	var ds dsModule.TDataSource
-	ds.UserID = userID
-	ds.DsId = job.DsID
-	if err = ds.InitByID(license.GetDefaultKey()); err != nil {
-		return *response.Failure(err.Error())
-	}
 	sql := strSQL.(string)
 
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckSQLValid(ds.DatabaseDriver, sql, strFilterValue)
+	return (*myPlugin).CheckSQLValid(userID, job.DsID, sql, strFilterValue)
 }

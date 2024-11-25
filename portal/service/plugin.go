@@ -161,48 +161,49 @@ func StopPlugin(ctx *gin.Context) {
 	ginContext.Reply(result)
 }
 
-func LoadPlugin(ctx *gin.Context) {
-	var plugin control.TPluginControl
-	var err error
-	var userID int32
-	var userCode string
-	ginContext := genService.NewGinContext(ctx)
-	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
-		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(response.Failure(err.Error()))
-		return
-	}
-	plugin.OperatorID, plugin.OperatorCode = userID, userCode
+/*
+	func LoadPlugin(ctx *gin.Context) {
+		var plugin control.TPluginControl
+		var err error
+		var userID int32
+		var userCode string
+		ginContext := genService.NewGinContext(ctx)
+		if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
+			service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
+			ginContext.Reply(response.Failure(err.Error()))
+			return
+		}
+		plugin.OperatorID, plugin.OperatorCode = userID, userCode
 
-	result := plugin.LoadPlugin()
-	if IsDebug {
-		strJson, _ := json.Marshal(result)
-		service.LogWriter.WriteDebug(fmt.Sprintf("Load plugin: %s", string(strJson)), false)
+		result := plugin.LoadPlugin()
+		if IsDebug {
+			strJson, _ := json.Marshal(result)
+			service.LogWriter.WriteDebug(fmt.Sprintf("Load plugin: %s", string(strJson)), false)
+		}
+		ginContext.Reply(result)
 	}
-	ginContext.Reply(result)
-}
 
-func UnloadPlugin(ctx *gin.Context) {
-	var plugin control.TPluginControl
-	var err error
-	var userID int32
-	var userCode string
-	ginContext := genService.NewGinContext(ctx)
-	if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
-		service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
-		ginContext.Reply(response.Failure(err.Error()))
-		return
+	func UnloadPlugin(ctx *gin.Context) {
+		var plugin control.TPluginControl
+		var err error
+		var userID int32
+		var userCode string
+		ginContext := genService.NewGinContext(ctx)
+		if userID, userCode, err = ginContext.CheckRequest(&plugin); err != nil {
+			service.LogWriter.WriteError(fmt.Sprintf("Error while parsing request: %s", err.Error()), false)
+			ginContext.Reply(response.Failure(err.Error()))
+			return
+		}
+		plugin.OperatorID, plugin.OperatorCode = userID, userCode
+
+		result := plugin.UnloadPlugin()
+		if IsDebug {
+			strJson, _ := json.Marshal(result)
+			service.LogWriter.WriteDebug(fmt.Sprintf("Unload plugin: %s", string(strJson)), false)
+		}
+		ginContext.Reply(result)
 	}
-	plugin.OperatorID, plugin.OperatorCode = userID, userCode
-
-	result := plugin.UnloadPlugin()
-	if IsDebug {
-		strJson, _ := json.Marshal(result)
-		service.LogWriter.WriteDebug(fmt.Sprintf("Unload plugin: %s", string(strJson)), false)
-	}
-	ginContext.Reply(result)
-}
-
+*/
 func UpdateConfig(ctx *gin.Context) {
 	var plugin control.TPluginControl
 	var err error
@@ -367,7 +368,7 @@ func UpdatePluginFile(ctx *gin.Context) {
 		ginContext.Reply(response.Failure(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName)))
 		return
 	}
-	result := plugin.PublishPlugin(hostInfo.ActiveHost.HostUUID)
+	result := plugin.PublishPlugin(hostInfo)
 	if IsDebug {
 		strJson, _ := json.Marshal(result)
 		service.LogWriter.WriteDebug(fmt.Sprintf("publish plugin: %s", string(strJson)), false)
@@ -435,7 +436,19 @@ func PubPlugin(ctx *gin.Context) {
 	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
 
-	result := plugin.PublishPlugin(ginContext.GetParam("hostUUID"))
+	hostInfo, err := control.Survey.GetHostInfoByID(ginContext.GetParam("hostUUID"))
+	if err != nil {
+		service.LogWriter.WriteError(fmt.Sprintf("Error while get host info: %s", err.Error()), false)
+		ginContext.Reply(response.Failure(err.Error()))
+		return
+	}
+	if hostInfo.IsExpired() {
+		service.LogWriter.WriteError(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName), false)
+		ginContext.Reply(response.Failure(fmt.Sprintf("%s已经离线", hostInfo.ActiveHost.HostName)))
+		return
+	}
+
+	result := plugin.PublishPlugin(hostInfo)
 	if IsDebug {
 		strJson, _ := json.Marshal(result)
 		service.LogWriter.WriteDebug(fmt.Sprintf("Publish plugin: %s", string(strJson)), false)

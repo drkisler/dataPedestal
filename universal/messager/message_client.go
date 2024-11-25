@@ -20,10 +20,10 @@ func NewMessageClient() (*TMessageClient, error) {
 	if socket, err = req.NewSocket(); err != nil {
 		return nil, err
 	}
-	if err = socket.SetOption(mangos.OptionSendDeadline, time.Second*2); err != nil {
+	if err = socket.SetOption(mangos.OptionSendDeadline, time.Second*5); err != nil {
 		return nil, err
 	}
-	if err = socket.SetOption(mangos.OptionRecvDeadline, time.Second*2); err != nil {
+	if err = socket.SetOption(mangos.OptionRecvDeadline, time.Second*5); err != nil {
 		return nil, err
 	}
 	return &TMessageClient{

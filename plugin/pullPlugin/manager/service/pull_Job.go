@@ -89,9 +89,9 @@ func QueryJobLogs(userID int32, params map[string]any) response.TResponse {
 	return *jlc.QueryJobLogs()
 }
 
-func GetSourceQuoteFlag(_ int32, params map[string]any) response.TResponse {
+func GetSourceQuoteFlag(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetSourceQuoteFlag(params)
+	return (*myPlugin).GetSourceQuoteFlag(userID, params)
 }
 
 func CheckSourceConnect(_ int32, params map[string]any) response.TResponse {
@@ -99,9 +99,9 @@ func CheckSourceConnect(_ int32, params map[string]any) response.TResponse {
 	return (*myPlugin).CheckSourceConnect(params)
 }
 
-func CheckJobLoaded(_ int32, params map[string]any) response.TResponse {
+func CheckJobLoaded(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckJobLoaded(params)
+	return (*myPlugin).CheckJobLoaded(userID, params)
 }
 
 func CheckJob(userID int32, params map[string]any) response.TResponse {
@@ -117,7 +117,7 @@ func OnLineJob(userID int32, params map[string]any) response.TResponse {
 	return (*myPlugin).OnLineJob(userID, params)
 }
 
-func OffLineJob(_ int32, params map[string]any) response.TResponse {
+func OffLineJob(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).OffLineJob(params)
+	return (*myPlugin).OffLineJob(userID, params)
 }

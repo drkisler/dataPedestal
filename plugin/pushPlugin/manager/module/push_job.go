@@ -3,7 +3,10 @@ package module
 import (
 	"context"
 	"fmt"
+	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/license"
 	"github.com/drkisler/dataPedestal/common/pushJob"
+	dsModule "github.com/drkisler/dataPedestal/universal/dataSource/module"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
 	"github.com/jackc/pgx/v5"
 	"time"
@@ -21,10 +24,10 @@ func (pj *TPushJob) AddJob() (int64, error) {
 	strSQL := fmt.Sprintf("with cet_push as(select job_id from %s.push_job) ,"+
 		"cet_id as (select min(a.job_id)+1 job_id from (select job_id from cet_push union all select 0) a left join cet_push b on a.job_id+1=b.job_id "+
 		"where b.job_id is null) insert "+
-		"into %s.push_job(user_id, job_id, job_name, plugin_uuid, source_db_conn, dest_db_conn, keep_connect, connect_buffer, cron_expression, skip_hour, is_debug)"+
-		"select $1,job_id,$2,$3,$4,$5,$6,$7,$8,$9,$10 "+
+		"into %s.push_job(user_id, job_id, job_name, plugin_uuid, ds_id, cron_expression, skip_hour, is_debug)"+
+		"select $1,job_id,$2,$3,$4,$5,$6,$7 "+
 		"from cet_id returning job_id", dbs.GetSchema(), dbs.GetSchema())
-	rows, err := dbs.QuerySQL(strSQL, pj.UserID, pj.JobName, pj.PluginUUID, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer, pj.CronExpression, pj.SkipHour, pj.IsDebug)
+	rows, err := dbs.QuerySQL(strSQL, pj.UserID, pj.JobName, pj.PluginUUID, pj.DsID, pj.CronExpression, pj.SkipHour, pj.IsDebug)
 	if err != nil {
 		return -1, err
 	}
@@ -45,7 +48,7 @@ func (pj *TPushJob) InitJobByID() error {
 	}
 
 	strSQL := fmt.Sprintf("select "+
-		"user_id,job_id,job_name,plugin_uuid,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression,skip_hour,is_debug,status,last_run "+
+		"user_id,job_id,job_name,plugin_uuid,ds_id,cron_expression,skip_hour,is_debug,status,last_run "+
 		"from %s.push_job where job_id = $1", dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, pj.JobID)
 	if err != nil {
@@ -54,8 +57,8 @@ func (pj *TPushJob) InitJobByID() error {
 	defer rows.Close()
 	var cnt = 0
 	for rows.Next() {
-		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.PluginUUID, &pj.SourceDbConn, &pj.DestDbConn, &pj.KeepConnect,
-			&pj.ConnectBuffer, &pj.CronExpression, &pj.SkipHour, &pj.IsDebug, &pj.Status, &pj.LastRun); err != nil {
+		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.PluginUUID, &pj.DsID,
+			&pj.CronExpression, &pj.SkipHour, &pj.IsDebug, &pj.Status, &pj.LastRun); err != nil {
 			return err
 		}
 		cnt++
@@ -73,7 +76,7 @@ func (pj *TPushJob) InitJobByName() error {
 	}
 
 	strSQL := fmt.Sprintf("select "+
-		"user_id,job_id,job_name,plugin_uuid,source_db_conn,dest_db_conn,keep_connect,connect_buffer,cron_expression,skip_hour,is_debug,status,last_run "+
+		"user_id,job_id,job_name,plugin_uuid,ds_id,cron_expression,skip_hour,is_debug,status,last_run "+
 		"from %s.push_job where user_id = $1 and job_name = $2", dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, pj.UserID, pj.JobName)
 	if err != nil {
@@ -82,8 +85,8 @@ func (pj *TPushJob) InitJobByName() error {
 	defer rows.Close()
 	var cnt = 0
 	for rows.Next() {
-		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.PluginUUID, &pj.SourceDbConn, &pj.DestDbConn, &pj.KeepConnect,
-			&pj.ConnectBuffer, &pj.CronExpression, &pj.SkipHour, &pj.IsDebug, &pj.Status, &pj.LastRun); err != nil {
+		if err = rows.Scan(&pj.UserID, &pj.JobID, &pj.JobName, &pj.PluginUUID, &pj.DsID,
+			&pj.CronExpression, &pj.SkipHour, &pj.IsDebug, &pj.Status, &pj.LastRun); err != nil {
 			return err
 		}
 		cnt++
@@ -92,7 +95,6 @@ func (pj *TPushJob) InitJobByName() error {
 		return fmt.Errorf("JobName %s不存在", pj.JobName)
 	}
 	return nil
-
 }
 
 func (pj *TPushJob) UpdateJob() error {
@@ -105,9 +107,9 @@ func (pj *TPushJob) UpdateJob() error {
 	}
 
 	strSQL := fmt.Sprintf("update "+
-		"%s.push_job set job_name = $1,plugin_uuid = $2,source_db_conn = $3,dest_db_conn = $4,keep_connect = $5,connect_buffer = $6,cron_expression = $7,skip_hour = $8,is_debug = $9,status = $10"+
-		" where job_id=$11", dbs.GetSchema())
-	return dbs.ExecuteSQL(context.Background(), strSQL, pj.JobName, pj.PluginUUID, pj.SourceDbConn, pj.DestDbConn, pj.KeepConnect, pj.ConnectBuffer, pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status, pj.JobID)
+		"%s.push_job set job_name = $1,plugin_uuid = $2,ds_id = $3,cron_expression = $4,skip_hour = $5,is_debug = $6,status = $7"+
+		" where job_id=$8", dbs.GetSchema())
+	return dbs.ExecuteSQL(context.Background(), strSQL, pj.JobName, pj.PluginUUID, pj.DsID, pj.CronExpression, pj.SkipHour, pj.IsDebug, pj.Status, pj.JobID)
 }
 
 func (pj *TPushJob) DeleteJob() error {
@@ -127,9 +129,9 @@ func (pj *TPushJob) GetJobs(ids *string) ([]pushJob.TPushJob, error) {
 		return nil, err
 	}
 
-	strSQL := fmt.Sprintf("SELECT a.user_id,a.job_id,a.job_name,a.plugin_uuid,a.source_db_conn,a.dest_db_conn,a.keep_connect,a.connect_buffer,"+
-		"a.cron_expression, a.is_debug,a.skip_hour,a.status,a.last_run,COALESCE(c.status,'')status,COALESCE(c.error_info,'')error_info "+
-		"from (select a.* from %s.push_job a where a.user_id=$1 and a.job_id= any(array(SELECT unnest(string_to_array('%s', ','))::bigint))  ) a "+
+	strSQL := fmt.Sprintf("SELECT a.user_id,a.job_id,a.job_name,a.plugin_uuid,a.ds_id,"+
+		"a.cron_expression,a.is_debug,a.skip_hour,a.status,a.last_run,COALESCE(c.status,'')status,COALESCE(c.error_info,'')error_info "+
+		"from (select a.* from %s.push_job a where a.user_id=$1 and a.job_id= any(array(SELECT unnest(string_to_array('%s', ','))::bigint)) ) a "+
 		"left join %s.push_job_log c on a.job_id=c.job_id and a.last_run=c.start_time "+
 		"order by a.job_id", dbs.GetSchema(), *ids, dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, pj.UserID)
@@ -143,7 +145,7 @@ func (pj *TPushJob) GetJobs(ids *string) ([]pushJob.TPushJob, error) {
 		var p pushJob.TPushJob
 		var strStatus string
 		var strError string
-		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.PluginUUID, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer,
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.PluginUUID, &p.DsID,
 			&p.CronExpression, &p.IsDebug, &p.SkipHour, &p.Status, &p.LastRun, &strStatus, &strError); err != nil {
 			return nil, err
 		}
@@ -206,7 +208,7 @@ func GetAllJobs() (data []TPushJob, total int, err error) {
 	}
 
 	strSQL := fmt.Sprintf("select "+
-		"user_id,job_id,job_name,plugin_uuid,source_db_conn,dest_db_conn,keep_connect,connect_buffer, cron_expression,skip_hour, is_debug, status,last_run "+
+		"user_id,job_id,job_name,plugin_uuid,ds_id,cron_expression,skip_hour,is_debug,status,last_run "+
 		"from %s.push_job where status=$1", dbs.GetSchema())
 	rows, err := dbs.QuerySQL(strSQL, commonStatus.STENABLED)
 	if err != nil {
@@ -216,7 +218,7 @@ func GetAllJobs() (data []TPushJob, total int, err error) {
 	total = 0
 	for rows.Next() {
 		var p TPushJob
-		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.PluginUUID, &p.SourceDbConn, &p.DestDbConn, &p.KeepConnect, &p.ConnectBuffer,
+		if err = rows.Scan(&p.UserID, &p.JobID, &p.JobName, &p.PluginUUID, &p.DsID,
 			&p.CronExpression, &p.SkipHour, &p.IsDebug, &p.Status, &p.LastRun); err != nil {
 			return nil, 0, err
 		}
@@ -244,7 +246,7 @@ func (pj *TPushJob) GetPushJobUUID() (string, error) {
 	}
 	var rows pgx.Rows
 
-	strSQL := fmt.Sprintf("select job_uuid "+
+	strSQL := fmt.Sprintf("select plugin_uuid "+
 		"from %s.push_job where user_id= $1", dbs.GetSchema())
 	if pj.JobName != "" {
 		strSQL = fmt.Sprintf("%s and job_name = $2", strSQL)
@@ -271,4 +273,14 @@ func (pj *TPushJob) GetPushJobUUID() (string, error) {
 		return "", fmt.Errorf("JobID或JobName不存在")
 	}
 	return jobUUID, nil
+}
+
+func (pj *TPushJob) GetDataSource() (*dsModule.TDataSource, error) {
+	var ds dsModule.TDataSource
+	ds.DsId = pj.DsID
+	ds.UserID = pj.UserID
+	if err := ds.InitByID(license.GetDefaultKey()); err != nil {
+		return nil, err
+	}
+	return &ds, nil
 }

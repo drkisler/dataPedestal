@@ -98,66 +98,31 @@ func SetTableStatus(userID int32, params map[string]any) response.TResponse {
 	return *(ptc.AlterTableStatus())
 }
 
-func GetSourceTables(userID int32, params map[string]any) response.TResponse {
-	strJobName, ok := params["job_name"]
-	if !ok {
-		return *response.Failure("jobName is empty")
-	}
-	var job ctl.TPushJob
-	var err error
-	job.JobName = strJobName.(string)
-	job.UserID = userID
-	if err = job.InitJobByName(); err != nil {
-		return *response.Failure(err.Error())
-	}
-	strConn := job.SourceDbConn
-	var connOption map[string]string
-	if connOption, err = enMap.StringToMap(&strConn); err != nil {
-		return *response.Failure(err.Error())
-	}
+func GetSourceTables(_ int32, params map[string]any) response.TResponse {
+	/*
+		strJobName, ok := params["job_name"]
+		if !ok {
+			return *response.Failure("jobName is empty")
+		}
+		var job ctl.TPushJob
+		var err error
+		job.JobName = strJobName.(string)
+		job.UserID = userID
+		if err = job.InitJobByName(); err != nil {
+			return *response.Failure(err.Error())
+		}
+	*/
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetSourceTables(connOption)
+	return myPlugin.GetSourceTables(params)
 }
 
 func GetDestTables(userID int32, params map[string]any) response.TResponse {
-	strJobName, ok := params["job_name"]
-	if !ok {
-		return *response.Failure("jobName is empty")
-	}
-	var job ctl.TPushJob
-	var err error
-	job.JobName = strJobName.(string)
-	job.UserID = userID
-	if err = job.InitJobByName(); err != nil {
-		return *response.Failure(err.Error())
-	}
-	strConn := job.DestDbConn
-	var connOption map[string]string
-	if connOption, err = enMap.StringToMap(&strConn); err != nil {
-		return *response.Failure(err.Error())
-	}
+
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetDestTables(connOption)
+	return (*myPlugin).GetDestTables(userID, params)
 }
 
-func GetTableColumns(userID int32, params map[string]any) response.TResponse {
-	//connectStr, tableName *string
-	strJobName, ok := params["job_name"]
-	if !ok {
-		return *response.Failure("jobName is empty")
-	}
-	var job ctl.TPushJob
-	var err error
-	job.JobName = strJobName.(string)
-	job.UserID = userID
-	if err = job.InitJobByName(); err != nil {
-		return *response.Failure(err.Error())
-	}
-	strConn := job.SourceDbConn
-	var connOption map[string]string
-	if connOption, err = enMap.StringToMap(&strConn); err != nil {
-		return *response.Failure(err.Error())
-	}
+func GetTableColumns(_ int32, params map[string]any) response.TResponse {
 	tableName, ok := params["table_name"]
 	if !ok {
 		return *response.Failure("tableName is empty")
@@ -165,7 +130,7 @@ func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 	strTableName := tableName.(string)
 
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetTableColumns(connOption, &strTableName)
+	return (*myPlugin).GetTableColumns(nil, &strTableName)
 }
 
 /*
@@ -194,13 +159,9 @@ func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 		return (*myPlugin).GetTableScript(connOption, &strTableName)
 	}
 */
-func CheckSQLValid(userID int32, params map[string]any) response.TResponse {
+func CheckSQLValid(_ int32, params map[string]any) response.TResponse {
 	//job_name sqlString; filterColumn; filterValue
 	strFilterValue := ""
-	strJobName, ok := params["job_name"]
-	if !ok {
-		return *response.Failure("jobName is empty")
-	}
 	strSQL, ok := params["sql"]
 	if !ok {
 		return *response.Failure("sql is empty")
@@ -209,22 +170,8 @@ func CheckSQLValid(userID int32, params map[string]any) response.TResponse {
 	if ok {
 		strFilterValue = filterValue.(string)
 	}
-
-	var job ctl.TPushJob
-	var err error
-	job.JobName = strJobName.(string)
-	job.UserID = userID
-	if err = job.InitJobByName(); err != nil {
-		return *response.Failure(err.Error())
-	}
-	strConn := job.SourceDbConn
-	var connOption map[string]string
-	if connOption, err = enMap.StringToMap(&strConn); err != nil {
-		return *response.Failure(err.Error())
-	}
-
 	sql := strSQL.(string)
 
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckSQLValid(connOption, &sql, &strFilterValue)
+	return (*myPlugin).CheckSQLValid(nil, &sql, &strFilterValue)
 }

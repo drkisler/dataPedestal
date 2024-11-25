@@ -41,16 +41,10 @@ func ParsePushJobControl(data map[string]any) (*TPushJobControl, error) {
 	if result.JobName, err = enMap.GetStringValueFromMap("job_name", data); err != nil {
 		return nil, err
 	}
-	if result.SourceDbConn, err = enMap.GetStringValueFromMap("source_db_conn", data); err != nil {
+	if result.DsID, err = enMap.GetInt32ValueFromMap("ds_id", data); err != nil {
 		return nil, err
 	}
-	if result.DestDbConn, err = enMap.GetStringValueFromMap("dest_db_conn", data); err != nil {
-		return nil, err
-	}
-	if result.KeepConnect, err = enMap.GetStringValueFromMap("keep_connect", data); err != nil {
-		return nil, err
-	}
-	if result.ConnectBuffer, err = enMap.GetIntValueFromMap("connect_buffer", data); err != nil {
+	if result.PluginUUID, err = enMap.GetStringValueFromMap("plugin_uuid", data); err != nil {
 		return nil, err
 	}
 	if result.CronExpression, err = enMap.GetStringValueFromMap("cron_expression", data); err != nil {

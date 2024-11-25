@@ -65,19 +65,8 @@ func (c *TPluginControl) DeletePlugin() *response.TResponse {
 	return response.Success(nil)
 }
 
-func (c *TPluginControl) PublishPlugin(hostUUID string) *response.TResponse {
+func (c *TPluginControl) PublishPlugin(hostInfo *TActiveHost) *response.TResponse {
 	var err error
-	var hostInfo *TActiveHost
-	if err = c.InitByUUID(); err != nil {
-		return response.Failure(err.Error())
-	}
-	if hostInfo, err = Survey.GetHostInfoByID(hostUUID); err != nil {
-		return response.Failure(err.Error())
-	}
-	if hostInfo.IsExpired() {
-		return response.Failure(fmt.Sprintf("%s已经离线", hostUUID))
-	}
-
 	filePath := genService.GenFilePath(initializers.PortalCfg.PluginDir,
 		c.PluginUUID, c.PluginFileName)
 	// 获取插件序列号
@@ -111,7 +100,7 @@ func (c *TPluginControl) PublishPlugin(hostUUID string) *response.TResponse {
 	}
 	result := checkPubResult()
 	for result.Code == 1 {
-		time.Sleep(time.Millisecond * 10)
+		time.Sleep(time.Millisecond * 100)
 		result = checkPubResult()
 	}
 	if result.Code < 0 {
@@ -214,66 +203,67 @@ func (c *TPluginControl) GetPlugin() *response.TResponse {
 	if err != nil {
 		return response.Failure(err.Error())
 	}
+	if Total == 0 {
+		return response.RespData(0, nil, nil)
+	}
 
 	var result []TPluginControl
 
-	if Total > 0 {
-		// pluginMap 辅助查找
-		result = make([]TPluginControl, len(pluginList))
+	result = make([]TPluginControl, len(pluginList))
 
-		for i, item := range pluginList {
+	for i, item := range pluginList {
+		if item.PluginFileName == "" {
 			result[i] = *signPluginControl(item, "待上传")
+		} else if item.HostUUID == "" {
+			result[i] = *signPluginControl(item, "待部署")
+		} else {
+			result[i] = *signPluginControl(item, "已失联") //默认已失联
 		}
-		var pluginMap = make(map[string]int)
-		for iIndex, item := range pluginList {
-			pluginMap[item.PluginUUID] = iIndex
+	}
+	// pluginMap 辅助查找
+	var pluginMap = make(map[string]int)
+	for iIndex, item := range pluginList {
+		pluginMap[item.PluginUUID] = iIndex
+	}
+
+	// 使用 MsgClient 从 Survey中的ActiveHost请求 common.TPluginPort信息
+	var data []byte
+	var resp response.TResponse
+	for _, host := range Survey.GetHostInfo() {
+
+		data, err = MsgClient.Send(fmt.Sprintf("tcp://%s:%d", host.HostIP, host.MessagePort), messager.OperateGetPlugins, []byte(fmt.Sprintf("%s:%s", c.PluginType, c.PluginName)))
+		if err != nil {
+			return response.Failure(err.Error())
 		}
-
-		// 使用 MsgClient 从 Survey中的ActiveHost请求 common.TPluginPort信息
-		var data []byte
-		var resp response.TResponse
-		for _, host := range Survey.GetHostInfo() {
-
-			data, err = MsgClient.Send(fmt.Sprintf("tcp://%s:%d", host.HostIP, host.MessagePort), messager.OperateGetPlugins, []byte(fmt.Sprintf("%s:%s", c.PluginType, c.PluginName)))
-			if err != nil {
-				return response.Failure(err.Error())
-			}
-			if err = json.Unmarshal(data, &resp); err != nil {
-				return response.Failure(err.Error())
-			}
-			if resp.Code < 0 {
-				return &resp
-			}
-			if resp.Data.Total > 0 {
-				for _, v := range resp.Data.ArrData.([]interface{}) {
-					item := v.(map[string]interface{})
-					pluginUUID, ok := item["plugin_uuid"]
-					if !ok {
-						return response.Failure("plugin_uuid is empty")
-					}
-					status, ok := item["status"]
-					if !ok {
-						return response.Failure("status is empty")
-					}
-					strUUID := pluginUUID.(string)
-					if _, ok = pluginMap[strUUID]; !ok {
-						return response.Failure(fmt.Sprintf("plugin %s not found", strUUID))
-					}
-					if result[pluginMap[strUUID]].PluginFileName == "" {
-						result[pluginMap[strUUID]].Status = "待上传"
-					}
-					if result[pluginMap[strUUID]].HostUUID == "" {
-						result[pluginMap[strUUID]].Status = "待部署"
-					}
-					result[pluginMap[strUUID]].Status = status.(string)
-					result[pluginMap[strUUID]].HostPort = host.HostPort
-					result[pluginMap[strUUID]].CPUUsage = item["cpu_usage"].(string)
-					result[pluginMap[strUUID]].MemoryUsage = item["memory_usage"].(float64)
-					//result[pluginMap[strUUID]].NetUsage = item["net_usage"].(string)
+		if err = json.Unmarshal(data, &resp); err != nil {
+			return response.Failure(err.Error())
+		}
+		if resp.Code < 0 {
+			return &resp
+		}
+		if resp.Data.Total > 0 {
+			for _, v := range resp.Data.ArrData.([]interface{}) {
+				item := v.(map[string]interface{})
+				pluginUUID, ok := item["plugin_uuid"]
+				if !ok {
+					return response.Failure("plugin_uuid is empty")
 				}
+				status, ok := item["status"]
+				if !ok {
+					return response.Failure("status is empty")
+				}
+				strUUID := pluginUUID.(string)
+				if _, ok = pluginMap[strUUID]; !ok {
+					return response.Failure(fmt.Sprintf("plugin %s mismatch", strUUID))
+				}
+				result[pluginMap[strUUID]].Status = status.(string)
+				result[pluginMap[strUUID]].HostPort = host.HostPort
+				result[pluginMap[strUUID]].CPUUsage = item["cpu_usage"].(string)
+				result[pluginMap[strUUID]].MemoryUsage = item["memory_usage"].(float64)
+				//result[pluginMap[strUUID]].NetUsage = item["net_usage"].(string)
 			}
-
 		}
+
 	}
 	return response.RespData(int64(Total), result, nil)
 }
@@ -289,23 +279,25 @@ func (c *TPluginControl) UpdatePlugFileName() *response.TResponse {
 	return response.Success(nil)
 }
 
+/*
 // LoadPlugin 加载插件
-func (c *TPluginControl) LoadPlugin() *response.TResponse {
-	var err error
-	if err = c.InitByUUID(); err != nil {
-		return response.Failure(err.Error())
-	}
-	if c.RunType == "禁止启动" {
-		return response.Failure("插件禁止启动")
-	}
-	rep := c.SendRequest(messager.OperateLoadPlugin, true, []byte(c.PluginUUID))
-	if rep.Code < 0 {
-		return rep
-	}
-	//c.PluginPort = rep.Code
-	return response.Success(nil)
-}
 
+	func (c *TPluginControl) LoadPlugin() *response.TResponse {
+		var err error
+		if err = c.InitByUUID(); err != nil {
+			return response.Failure(err.Error())
+		}
+		if c.RunType == "禁止启动" {
+			return response.Failure("插件禁止启动")
+		}
+		rep := c.SendRequest(messager.OperateLoadPlugin, true, []byte(c.PluginUUID))
+		if rep.Code < 0 {
+			return rep
+		}
+		//c.PluginPort = rep.Code
+		return response.Success(nil)
+	}
+*/
 func (c *TPluginControl) SendRequest(opType messager.OperateType, checkExpired bool, reqData []byte) *response.TResponse {
 	if c.HostUUID == "" {
 		return response.Failure(fmt.Sprintf("%s待部署", c.PluginUUID))
@@ -333,14 +325,17 @@ func (c *TPluginControl) SendRequest(opType messager.OperateType, checkExpired b
 	return response.Success(nil)
 }
 
+/*
 // UnloadPlugin 卸载插件不再运行
-func (c *TPluginControl) UnloadPlugin() *response.TResponse {
-	var err error
-	if err = c.InitByUUID(); err != nil {
-		return response.Failure(err.Error())
+
+	func (c *TPluginControl) UnloadPlugin() *response.TResponse {
+		var err error
+		if err = c.InitByUUID(); err != nil {
+			return response.Failure(err.Error())
+		}
+		return c.SendRequest(messager.OperateUnloadPlugin, true, []byte(c.PluginUUID))
 	}
-	return c.SendRequest(messager.OperateUnloadPlugin, true, []byte(c.PluginUUID))
-}
+*/
 func (c *TPluginControl) RunPlugin() *response.TResponse {
 	var err error
 	if err = c.InitByUUID(); err != nil {

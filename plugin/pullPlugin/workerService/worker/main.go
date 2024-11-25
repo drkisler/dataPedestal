@@ -12,7 +12,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 )
 
@@ -64,27 +63,50 @@ func main() {
 			// 1 * * * * 每小时第一分钟执行一次
 			//cfg0 := `{"is_debug": false,"connect_string": "sanyu:Enjoy0r@tcp(192.168.93.159:3306)\/sanyu?timeout=90s&collation=utf8mb4_unicode_ci&autocommit=true&parseTime=true","dest_database": "Address=192.168.110.129:9000,Database=default,User=default,Password=Enjoy0r","keep_connect": false,"connect_buffer": 20,"data_buffer": 2000,"skip_hour": [0,1,2,3],"cron_expression": "0/1 * * * * ?","server_port": 8904}`
 			//replyUrl := "tcp://192.168.93.150:8902"
-			cfg := `{"is_debug": false,"server_port": 8904,"plugin_name":"pullMySQL","db_connection":"user=postgres password=InfoC0re host=192.168.110.130 port=5432 dbname=postgres sslmode=disable pool_max_conns=10 schema=enjoyor","host_reply_url":"ipc:///tmp/ReqRep.ipc","plugin_uuid":"23eb248c-70bb-4b56-870a-738bf92ac0b3","plugin_name":"pullMySQL"}`
-			if resp := pl.Load(cfg); resp.Code < 0 {
+			cfg := `{
+	"db_connection": "user=postgres password=InfoC0re host=192.168.110.130 port=5432 dbname=postgres sslmode=disable pool_max_conns=10 schema=enjoyor",
+    "clickhouse_cfg" :"host=192.168.110.129:9000 user=default password=Enjoy0r dbname=default cluster=default",
+	"db_driver_dir": "/home/kisler/go/output/host/dbDriver",
+	"host_reply_url": "ipc:///tmp/ReqRep.ipc",
+	"is_debug": false,
+	"plugin_name": "pullData",
+	"plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3"
+}`
+
+			//var wg sync.WaitGroup
+			//wg.Add(1)
+			//running := true
+			resp := pl.Run(cfg)
+			if resp.Code < 0 {
 				fmt.Println(resp.Info)
-				return
+				//running = false
+				os.Exit(1)
 
 			}
+			fmt.Println(resp.Info)
 
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go func(wg *sync.WaitGroup) {
-				defer wg.Done()
-				pl.Run()
-			}(&wg)
-			//var operate common.TPluginOperate
-			//operate.UserID = 1
-			//operate.OperateName = "checkJobTable" //"offLineJob"
-			//operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
-			//operate.Params = map[string]any{"job_name": "test", "table_name": "`case`", "table_id": float64(1)}
+			var getTableList = func() {
+				var operate plugins.TPluginOperate
+				operate.UserID = 1
+				operate.OperateName = "checkJobTable" //"offLineJob"
+				operate.PluginUUID = "23eb248c-70bb-4b56-870a-738bf92ac0b3"
+				operate.Params = map[string]any{"job_name": "测试", "table_id": float64(1)}
+				rest := pl.CustomInterface(operate)
+				fmt.Println(fmt.Sprintf("getSourceQuoteFlag %v", rest.Info), rest.Code)
+			}
+			getTableList()
+
 			rest := pl.GetSystemUsage() //pl.CustomInterface(operate)
 			//fmt.Println(fmt.Sprintf("checkJobTable %v", rest.Info), rest.Code)
 			fmt.Println(fmt.Sprintf("getSystemUsage %s", rest))
+			pluginOperate := plugins.TPluginOperate{
+				UserID:      1,
+				PluginUUID:  "23eb248c-70bb-4b56-870a-738bf92ac0b3",
+				OperateName: "getSourceTables",
+				Params:      map[string]any{"job_name": "测试"},
+			}
+
+			pl.CustomInterface(pluginOperate)
 
 			/*
 				func (mp *TMyPlugin) GetSourceTableDDL(connectOption map[string]string, tableName *string) (*string, error) {
@@ -123,7 +145,8 @@ func main() {
 			time.Sleep(10 * time.Second)
 			*/
 			pl.Stop()
-			wg.Wait()
+
+			//wg.Wait()
 			return
 
 		}

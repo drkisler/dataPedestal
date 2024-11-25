@@ -11,14 +11,13 @@ import (
 )
 
 func ClearTableData(tableName string) error {
-	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
 	if err != nil {
 		return err
 	}
 	ctx := context.Background()
-
 	clusterName := driver.GetClusterName()
-	if clusterName == "" {
+	if (clusterName == "") || (clusterName == "default") {
 		return driver.ExecuteSQL(ctx, fmt.Sprintf("TRUNCATE "+
 			"TABLE %s", tableName), nil)
 	}
@@ -28,7 +27,7 @@ func ClearTableData(tableName string) error {
 }
 
 func GetDataBaseName() string {
-	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
 	if err != nil {
 		return ""
 	}
@@ -36,13 +35,13 @@ func GetDataBaseName() string {
 }
 
 func ClearDuplicateData(tableName string, keyColumns string) error {
-	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
 	if err != nil {
 		return err
 	}
 	var strSQL string
 	clusterName := driver.GetClusterName()
-	if clusterName != "" {
+	if (clusterName != "") && (clusterName != "default") {
 		strSQL = fmt.Sprintf("Alter "+
 			"table %s ON CLUSTER %s delete where (%s,%s) in (SELECT %s,min(%s) %s from %s group by %s HAVING count(*)>1)",
 			tableName, clusterName, keyColumns, queryFilter.TimeStampColumn, keyColumns, queryFilter.TimeStampColumn, queryFilter.TimeStampColumn, tableName, keyColumns)
@@ -56,7 +55,8 @@ func ClearDuplicateData(tableName string, keyColumns string) error {
 }
 
 func GetTableNames() ([]tableInfo.TableInfo, error) {
-	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
+
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func GetTableNames() ([]tableInfo.TableInfo, error) {
 }
 
 func GetMaxFilter(tableName string, filterValue *string) (string, error) {
-	driver, err := clickHouseLocal.GetClickHouseDriver(nil)
+	driver, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
 	if err != nil {
 		return "", err
 	}

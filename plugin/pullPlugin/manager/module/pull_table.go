@@ -18,8 +18,8 @@ func (pt *TPullTable) AddTable() (int64, error) {
 	if err != nil {
 		return -1, err
 	}
-	strSQL := fmt.Sprintf("with cet_table as(select table_id from %s.pull_table where job_id=$1), cet_id as"+
-		"(select min(a.table_id)+1 id from (select table_id from cet_table union all select 0) a left join cet_table b on a.table_id+1=b.table_id"+
+	strSQL := fmt.Sprintf("with cet_table as(select table_id from %s.pull_table where job_id=$1), cet_id as "+
+		"(select min(a.table_id)+1 id from (select table_id from cet_table union all select 0) a left join cet_table b on a.table_id+1=b.table_id "+
 		"where b.table_id is null)insert "+
 		"into %s.pull_table(job_id,table_id,table_code,table_name,dest_table,source_ddl,select_sql,filter_col,filter_val,key_col,buffer,status) "+
 		"select $2,id,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12 "+
@@ -103,10 +103,10 @@ func (pt *TPullTable) GetTables(ids *string) ([]pullJob.TPullTable, error) {
 	}
 
 	strSQL := fmt.Sprintf("SELECT a.job_id,a.table_id,a.table_code,a.table_name,a.dest_table,a.select_sql,"+
-		"a.filter_col,a.filter_val,a.key_col,a.buffer,a.status,a.last_run,c.status,c.error_info "+
-		"from (select * from %s.pull_table where job_id=$1 and table_id = any(array(SELECT unnest(string_to_array('%s', ','))::bigint) ) a "+
-		"left join %s.pull_table_log c on a.job_id=c.job_id and a.table_id =c.table_id and a.last_run=c.start_time"+
-		" order by a.table_id", dbs.GetSchema(), *ids, dbs.GetSchema())
+		"a.filter_col,a.filter_val,a.key_col,a.buffer,a.status,a.last_run,coalesce(c.status,'')run_status,coalesce(c.error_info,'')last_error "+
+		"from (select * from %s.pull_table where job_id=$1 and table_id = any(array(SELECT unnest(string_to_array('%s', ','))::bigint) ) )a "+
+		"left join %s.pull_table_log c on a.job_id=c.job_id and a.table_id =c.table_id and a.last_run=c.start_time "+
+		"order by a.table_id", dbs.GetSchema(), *ids, dbs.GetSchema())
 
 	rows, err := dbs.QuerySQL(strSQL, pt.JobID)
 	if err != nil {

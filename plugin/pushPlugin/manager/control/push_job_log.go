@@ -111,13 +111,13 @@ func (p *TPushJobLogControl) QueryJobLogs() *response.TResponse {
 		jobLogPageBuffer.Store(p.OperatorID, pageBuffer.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids))
 	}
 	value, _ = jobLogPageBuffer.Load(p.OperatorID)
-	pageBuffer := value.(pageBuffer.PageBuffer)
-	if pageBuffer.Total == 0 {
+	pgeBuffer := value.(pageBuffer.PageBuffer)
+	if pgeBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
 		return response.Success(&result)
 	}
-	ids, err := pageBuffer.GetPageIDs(int64(p.PageIndex - 1))
+	ids, err := pgeBuffer.GetPageIDs(int64(p.PageIndex - 1))
 	if err != nil {
 		return response.Failure(err.Error())
 	}
@@ -130,7 +130,7 @@ func (p *TPushJobLogControl) QueryJobLogs() *response.TResponse {
 		resultData = append(resultData, *ToCommonPushJobLog(&log))
 	}
 	result.ArrData = resultData
-	result.Total = pageBuffer.Total
+	result.Total = pgeBuffer.Total
 
 	return response.Success(&result)
 }

@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
 	"github.com/drkisler/dataPedestal/common/commonStatus"
-	"github.com/drkisler/dataPedestal/common/enMap"
 	"github.com/drkisler/dataPedestal/common/pushJob"
 	"github.com/drkisler/dataPedestal/plugin/pluginBase"
 	ctl "github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/module"
-	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/worker"
+	//"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/worker"
+	dsModel "github.com/drkisler/dataPedestal/universal/dataSource/module"
+	"github.com/drkisler/dataPedestal/universal/databaseDriver"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/google/uuid"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,13 +23,11 @@ import (
 
 type TWorkerJob struct {
 	pluginBase.TBasePlugin
-	JobUUID   uuid.UUID
-	JobID     int32
-	workerJob worker.IPushWorker
-	//clickHouseClient *clickHouse.TClickHouseClient
+	JobUUID uuid.UUID
+	JobID   int32
+	//workerJob     worker.IPushWorker
 	msgClient     *messager.TMessageClient
-	SourceDbConn  string //datasource
-	DestDbConn    string //数据中心的数据库
+	DataSource    *dsModel.TDataSource
 	ReplyURL      string
 	ConnectBuffer int
 	SkipHour      []int
@@ -35,23 +35,10 @@ type TWorkerJob struct {
 	Enabled       bool //是否启用
 }
 
-func NewWorkerJob(job *module.TPushJob, replyUrl string) (*TWorkerJob, error) {
+func NewWorkerJob(job *module.TPushJob, replyUrl string, dataSource *dsModel.TDataSource) (*TWorkerJob, error) {
 	var err error
 	var skipHour []int
-	var workerJob worker.IPushWorker
-	var connOption map[string]string
-	strConn := job.SourceDbConn
-	if connOption, err = enMap.StringToMap(&strConn); err != nil {
-		return nil, err
-	}
-	if workerJob, err = NewWorker(connOption, job.ConnectBuffer); err != nil {
-		return nil, err
-	}
-
-	strConn = job.DestDbConn
-	if connOption, err = enMap.StringToMap(&strConn); err != nil {
-		return nil, err
-	}
+	//var workerJob worker.IPushWorker
 	if skipHour, err = func(source string) ([]int, error) {
 		if source == "" {
 			return []int{}, nil
@@ -76,20 +63,24 @@ func NewWorkerJob(job *module.TPushJob, replyUrl string) (*TWorkerJob, error) {
 	}
 
 	return &TWorkerJob{
-		JobID:         job.JobID,
-		workerJob:     workerJob,
-		SourceDbConn:  job.SourceDbConn,
-		DestDbConn:    job.DestDbConn,
-		ConnectBuffer: job.ConnectBuffer,
-		TBasePlugin:   pluginBase.TBasePlugin{TStatus: commonStatus.NewStatus(), IsDebug: job.IsDebug == commonStatus.STYES},
-		SkipHour:      skipHour,
-		Enabled:       job.Status == commonStatus.STENABLED,
-		msgClient:     MsgClient,
-		ReplyURL:      replyUrl,
+		JobID: job.JobID,
+		//workerJob:   workerJob,
+		DataSource:  dataSource,
+		TBasePlugin: pluginBase.TBasePlugin{TStatus: commonStatus.NewStatus(), IsDebug: job.IsDebug == commonStatus.STYES},
+		SkipHour:    skipHour,
+		Enabled:     job.Status == commonStatus.STENABLED,
+		msgClient:   MsgClient,
+		ReplyURL:    replyUrl,
 	}, nil
 }
 
-func (wj *TWorkerJob) Run() {
+func (wj *TWorkerJob) Run(driverDir string) {
+	dbOp, err := databaseDriver.NewDriverOperation(driverDir, wj.DataSource)
+	if err != nil {
+		logService.LogWriter.WriteError(fmt.Sprintf("初始化数据库操作失败：%s", err.Error()), false)
+		return
+	}
+	defer dbOp.FreeDriver()
 	//开关
 	wj.SetRunning(true)
 	defer wj.SetRunning(false)
@@ -100,7 +91,6 @@ func (wj *TWorkerJob) Run() {
 	}()
 	// 启动任务日志
 	var iStartTime int64
-	var err error
 	var logErr error
 	var jobLog ctl.TPushJobLogControl
 	jobLog.JobID = wj.JobID
@@ -127,7 +117,7 @@ func (wj *TWorkerJob) Run() {
 		return
 	}
 
-	if err = wj.PushTables(); err != nil {
+	if err = wj.PushTables(dbOp); err != nil {
 		if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
 			logService.LogWriter.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()), false)
 		}
@@ -138,7 +128,7 @@ func (wj *TWorkerJob) Run() {
 	}
 }
 
-func (wj *TWorkerJob) PushTable(tableID int32) (int64, error) {
+func (wj *TWorkerJob) PushTable(tableID int32, dbOperator *databaseDriver.DriverOperation) (int64, error) {
 	var tbl ctl.TPushTableControl
 	var err error
 	var total int64
@@ -148,26 +138,42 @@ func (wj *TWorkerJob) PushTable(tableID int32) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("初始化表ID[%d]失败：%s", tableID, err.Error())
 	}
+	// insert into tableName (col1,col2,...) select col1,col2,... from tableName where lastRun < now() - interval '1' hour
+	re := regexp.MustCompile(`(?i)(insert\s+into\s+[^(]+$[^)]+$)\s*(select\s+.*)`)
+	matches := re.FindStringSubmatch(tbl.SelectSql)
 
-	strSQL := tbl.SelectSql
+	if len(matches) != 3 {
+		return 0, fmt.Errorf("解析SQL语句失败：%s", tbl.SelectSql)
+	}
+	strInsertSql := matches[1]
+	strSelectSql := matches[2]
 
-	client, err := clickHouseSQL.GetClickHouseClient(nil)
+	//strings.TrimSpace(matches[1]), strings.TrimSpace(matches[2])
+
+	client, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return 0, fmt.Errorf("获取ClickHouse客户端失败：%s", err.Error())
 	}
-	rows, err := client.QuerySQL(strSQL, tbl.LastRun)
+	rows, err := client.QuerySQL(strSelectSql, tbl.LastRun)
 	if err != nil {
 		return 0, err
 	}
 
-	if total, err = wj.workerJob.WriteData(tbl.TPushTable.TableCode, tbl.Buffer, rows); err != nil {
-		return 0, fmt.Errorf("写入数据失败：%s", err.Error())
+	hr := dbOperator.PushData(strInsertSql, tbl.Buffer, rows)
+	if hr.HandleCode < 0 {
+		return 0, fmt.Errorf("数据写入失败：%s", hr.HandleMsg)
 	}
+	total = int64(hr.HandleCode)
 
+	/*
+		if total, err = wj.workerJob.WriteData(tbl.TPushTable.TableCode, tbl.Buffer, rows); err != nil {
+			return 0, fmt.Errorf("写入数据失败：%s", err.Error())
+		}
+	*/
 	return total, nil
 }
 
-func (wj *TWorkerJob) PushTables() error {
+func (wj *TWorkerJob) PushTables(dbOperator *databaseDriver.DriverOperation) error {
 	var tblCtl ctl.TPushTableControl
 	var iStartTime int64
 	var err error
@@ -198,7 +204,7 @@ func (wj *TWorkerJob) PushTables() error {
 			if !wj.IsRunning() {
 				return nil
 			}
-			if tableLog.RecordCount, err = wj.PushTable(tbl.TableID); err != nil {
+			if tableLog.RecordCount, err = wj.PushTable(tbl.TableID, dbOperator); err != nil {
 				if logErr = tableLog.StopTableLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
 					logService.LogWriter.WriteError(fmt.Sprintf("记录表[%d]错误信息%s失败：%s", tbl.TableID, err.Error(), logErr.Error()), false)
 				}

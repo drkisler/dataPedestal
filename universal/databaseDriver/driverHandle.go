@@ -1,4 +1,4 @@
-package main
+package databaseDriver
 
 /*
 #cgo linux LDFLAGS: -ldl
@@ -19,6 +19,7 @@ typedef uintptr_t (*is_connected_fn)(driver_handle);
 typedef uintptr_t (*push_data_fn)(driver_handle, char*, int, uintptr_t);
 typedef uintptr_t (*pull_data_fn)(driver_handle, char*, char*, char*, int, int64_t, uintptr_t);
 typedef uintptr_t (*convert_table_ddl_fn)(driver_handle, char*);
+typedef uintptr_t (*get_table_ddl_fn)(driver_handle, char*);
 typedef uintptr_t (*get_quote_flag_fn)(driver_handle);
 
 void* load_library(const char* path) {
@@ -89,6 +90,11 @@ uintptr_t call_convert_table_ddl(void* fn, driver_handle handle, char* tableName
     return f(handle, tableName);
 }
 
+uintptr_t call_get_table_ddl(void* fn, driver_handle handle, char* tableName) {
+    get_table_ddl_fn f = (get_table_ddl_fn)fn;
+    return f(handle, tableName);
+}
+
 uintptr_t call_get_quote_flag(void* fn, driver_handle handle) {
     get_quote_flag_fn f = (get_quote_flag_fn)fn;
     return f(handle);
@@ -102,17 +108,9 @@ import "C"
 import (
 	"database/sql"
 	"fmt"
-	"github.com/drkisler/dataPedestal/universal/databaseDriver"
+	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
 	"unsafe"
 )
-
-/*
-type Response struct {
-	Success bool
-	Message string
-	Data    interface{}
-}
-*/
 
 type DriverLib struct {
 	handle            unsafe.Pointer
@@ -126,6 +124,7 @@ type DriverLib struct {
 	pushDataFn        unsafe.Pointer
 	pullDataFn        unsafe.Pointer
 	convertTableDDLFn unsafe.Pointer
+	getTableDDLFn     unsafe.Pointer
 	getQuoteFlagFn    unsafe.Pointer
 }
 
@@ -155,6 +154,7 @@ func LoadDriverLib(libPath string) (*DriverLib, error) {
 		{"PushData", &lib.pushDataFn},
 		{"PullData", &lib.pullDataFn},
 		{"ConvertTableDDL", &lib.convertTableDDLFn},
+		{"GetTableDDL", &lib.getTableDDLFn},
 		{"GetQuoteFlag", &lib.getQuoteFlagFn},
 	}
 
@@ -187,7 +187,7 @@ func (l *DriverLib) DestroyDriver(handle C.driver_handle) {
 }
 
 func (l *DriverLib) OpenConnect(handle C.driver_handle, connectJson string,
-	maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) *databaseDriver.HandleResult {
+	maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) *HandleResult {
 	cConnectJson := C.CString(connectJson)
 	defer C.free(unsafe.Pointer(cConnectJson))
 
@@ -198,7 +198,7 @@ func (l *DriverLib) OpenConnect(handle C.driver_handle, connectJson string,
 	return parseResponse(result)
 }
 
-func (l *DriverLib) GetColumns(handle C.driver_handle, tableName string) *databaseDriver.HandleResult {
+func (l *DriverLib) GetColumns(handle C.driver_handle, tableName string) *HandleResult {
 	cTableName := C.CString(tableName)
 	defer C.free(unsafe.Pointer(cTableName))
 
@@ -206,12 +206,12 @@ func (l *DriverLib) GetColumns(handle C.driver_handle, tableName string) *databa
 	return parseResponse(result)
 }
 
-func (l *DriverLib) GetTables(handle C.driver_handle) *databaseDriver.HandleResult {
+func (l *DriverLib) GetTables(handle C.driver_handle) *HandleResult {
 	result := C.call_get_tables(l.getTablesFn, handle)
 	return parseResponse(result)
 }
 
-func (l *DriverLib) CheckSQLValid(handle C.driver_handle, strSQL, filterVal string) *databaseDriver.HandleResult {
+func (l *DriverLib) CheckSQLValid(handle C.driver_handle, strSQL, filterVal string) *HandleResult {
 	cSQL := C.CString(strSQL)
 	cFilterVal := C.CString(filterVal)
 	defer C.free(unsafe.Pointer(cSQL))
@@ -221,12 +221,23 @@ func (l *DriverLib) CheckSQLValid(handle C.driver_handle, strSQL, filterVal stri
 	return parseResponse(result)
 }
 
-func (l *DriverLib) IsConnected(handle C.driver_handle) *databaseDriver.HandleResult {
+func (l *DriverLib) IsConnected(handle C.driver_handle) *HandleResult {
 	result := C.call_is_connected(l.isConnectedFn, handle)
 	return parseResponse(result)
 }
 
-func (l *DriverLib) PushData(handle C.driver_handle, strSQL string, batch int, rows *sql.Rows) *databaseDriver.HandleResult {
+func (l *DriverLib) PullData(handle C.driver_handle, strSQL, filterVal, destTable string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) *HandleResult {
+	cSQL := C.CString(strSQL)
+	defer C.free(unsafe.Pointer(cSQL))
+	cFilterVal := C.CString(filterVal)
+	defer C.free(unsafe.Pointer(cFilterVal))
+	cDestTable := C.CString(destTable)
+	defer C.free(unsafe.Pointer(cDestTable))
+	result := C.call_pull_data(l.pullDataFn, handle, cSQL, cFilterVal, cDestTable, C.int(batch), C.int64_t(iTimestamp), C.uintptr_t(uintptr(unsafe.Pointer(clickClient))))
+	return parseResponse(result)
+}
+
+func (l *DriverLib) PushData(handle C.driver_handle, strSQL string, batch int, rows *sql.Rows) *HandleResult {
 	cSQL := C.CString(strSQL)
 	defer C.free(unsafe.Pointer(cSQL))
 
@@ -235,7 +246,7 @@ func (l *DriverLib) PushData(handle C.driver_handle, strSQL string, batch int, r
 	return parseResponse(result)
 }
 
-func (l *DriverLib) ConvertTableDDL(handle C.driver_handle, tableName string) *databaseDriver.HandleResult {
+func (l *DriverLib) ConvertTableDDL(handle C.driver_handle, tableName string) *HandleResult {
 	cTableName := C.CString(tableName)
 	defer C.free(unsafe.Pointer(cTableName))
 
@@ -243,52 +254,29 @@ func (l *DriverLib) ConvertTableDDL(handle C.driver_handle, tableName string) *d
 	return parseResponse(result)
 }
 
-func (l *DriverLib) GetQuoteFlag(handle C.driver_handle) *databaseDriver.HandleResult {
+func (l *DriverLib) GetTableDDL(handle C.driver_handle, tableName string) *HandleResult {
+	cTableName := C.CString(tableName)
+	defer C.free(unsafe.Pointer(cTableName))
+
+	result := C.call_get_table_ddl(l.getTableDDLFn, handle, cTableName)
+	return parseResponse(result)
+}
+
+func (l *DriverLib) GetQuoteFlag(handle C.driver_handle) *HandleResult {
 	result := C.call_get_quote_flag(l.getQuoteFlagFn, handle)
 	return parseResponse(result)
 }
 
 // parseResponse converts the C uintptr_t response to a Go Response struct
-func parseResponse(ptr C.uintptr_t) *databaseDriver.HandleResult {
+func parseResponse(ptr C.uintptr_t) *HandleResult {
 	// Convert the response based on your TResponse structure
 	// This is a placeholder - you'll need to implement the actual conversion
 	// based on your response.TResponse structure
 
-	return (*databaseDriver.HandleResult)(unsafe.Pointer(uintptr(ptr)))
+	return (*HandleResult)(unsafe.Pointer(uintptr(ptr)))
 
 }
 
-func main() {
-	// Example usage
-	lib, err := LoadDriverLib("./mysqlDriver.so")
-	if err != nil {
-		fmt.Printf("Error loading library: %v\n", err)
-		return
-	}
-	defer lib.Close()
-
-	driver := lib.CreateDriver()
-	if driver == 0 {
-		fmt.Println("Failed to create driver")
-		return
-	}
-	defer lib.DestroyDriver(driver)
-
-	// Connect to database
-	resp := lib.OpenConnect(driver, `{"host":"192.168.110.130:3306","dbname":"sanyu","user":"sanyu","password":"sanyu"}`, 10, 10, 3600, 5)
-	if resp.HandleCode < 0 {
-		fmt.Printf("Failed to connect: %s\n", resp.HandleMsg)
-		return
-	}
-
-	// Get tables
-	tablesResp := lib.GetTables(driver)
-	if tablesResp.HandleCode < 0 {
-		fmt.Printf("Tables: %v\n", tablesResp.HandleMsg)
-	}
-	fmt.Println(tablesResp.HandleMsg) //.([]tableInfo.TableInfo)
-	//data := tablesResp.Data.ArrData
-	//fmt.Printf("Tables: %v\n", data.([]tableInfo.TableInfo))
-
-	fmt.Println("OK!")
+func LoadDriver(libPath string) (*DriverLib, error) {
+	return LoadDriverLib(libPath)
 }

@@ -22,31 +22,19 @@ import (
 )
 
 // go build -buildmode=plugin -o mysql.so mysql.go
-
-type TDBDriver struct {
-	driverName string
-	schema     string
-	db         *sqlx.DB
-	connected  bool
+type TMySQLDriver struct {
+	databaseDriver.TDBDriver
 }
 
 var notStringTypes = []string{"UNSIGNED TINYINT", "TINYINT", "UNSIGNED SMALLINT", "SMALLINT", "UNSIGNED INT",
 	"UNSIGNED MEDIUMINT", "INT", "MEDIUMINT", "UNSIGNED BIGINT", "BIGINT", "FLOAT", "DOUBLE", "DATE", "DATETIME", "TIMESTAMP"}
 
 // NewDbDriver creates a new database driver instance.
-func NewDbDriver(fileName string) (databaseDriver.IDbDriver, error) {
-	arrTmp := strings.Split(fileName, ".")
-	if len(arrTmp) != 2 {
-		return nil, fmt.Errorf("invalid file name: %s", fileName)
-	}
-	if arrTmp[0] != "mysql" {
-		return nil, fmt.Errorf("invalid db driver name: %s", fileName)
-	}
-	dbDriver := &TDBDriver{driverName: "mysql", connected: false}
-	return dbDriver, nil
+func NewDbDriver() databaseDriver.IDbDriver {
+	return &TMySQLDriver{databaseDriver.TDBDriver{DriverName: "mysql", Connected: false}}
 }
 
-func (driver *TDBDriver) OpenConnect(connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) error {
+func (driver *TMySQLDriver) OpenConnect(connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) error {
 	var connOptions map[string]string
 	if err := json.Unmarshal([]byte(connectJson), &connOptions); err != nil {
 		return err
@@ -87,44 +75,44 @@ func (driver *TDBDriver) OpenConnect(connectJson string, maxIdleTime, maxOpenCon
 	if err != nil {
 		return err
 	}
-	driver.schema = schema
+	driver.Schema = schema
 
-	driver.db, err = sqlx.Open(driver.driverName, strConnect)
+	driver.Db, err = sqlx.Open(driver.DriverName, strConnect)
 	if err != nil {
 		return err
 	}
-	driver.db.SetConnMaxIdleTime(time.Duration(maxIdleTime) * time.Minute)
-	driver.db.SetMaxOpenConns(maxOpenConnections)
-	driver.db.SetConnMaxLifetime(time.Duration(connMaxLifetime) * time.Minute)
-	driver.db.SetMaxIdleConns(maxIdleConnections)
-	if err = driver.db.Ping(); err != nil {
+	driver.Db.SetConnMaxIdleTime(time.Duration(maxIdleTime) * time.Minute)
+	driver.Db.SetMaxOpenConns(maxOpenConnections)
+	driver.Db.SetConnMaxLifetime(time.Duration(connMaxLifetime) * time.Minute)
+	driver.Db.SetMaxIdleConns(maxIdleConnections)
+	if err = driver.Db.Ping(); err != nil {
 		return err
 	}
-	driver.connected = true
+	driver.Connected = true
 	return nil
 }
 
-func (driver *TDBDriver) NewConnect(connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) (databaseDriver.IDbDriver, error) {
-	newDriver := &TDBDriver{driverName: "mysql", connected: false}
+func (driver *TMySQLDriver) NewConnect(connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) (databaseDriver.IDbDriver, error) {
+	newDriver := &TMySQLDriver{databaseDriver.TDBDriver{DriverName: "mysql", Connected: false}}
 	if err := newDriver.OpenConnect(connectJson, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections); err != nil {
 		return nil, err
 	}
 	return newDriver, nil
 }
 
-func (driver *TDBDriver) CloseConnect() error {
-	if driver.connected {
-		driver.connected = false
-		return driver.db.Close()
+func (driver *TMySQLDriver) CloseConnect() error {
+	if driver.Connected {
+		driver.Connected = false
+		return driver.Db.Close()
 	}
 	return nil
 }
 
-func (driver *TDBDriver) IsConnected() bool {
-	return driver.connected
+func (driver *TMySQLDriver) IsConnected() bool {
+	return driver.Connected
 }
 
-func (driver *TDBDriver) CheckSQLValid(strSQL, strFilterVal string) ([]tableInfo.ColumnInfo, error) {
+func (driver *TMySQLDriver) CheckSQLValid(strSQL, strFilterVal string) ([]tableInfo.ColumnInfo, error) {
 	// select * from sourceTable where filterVal 字段名需要与clickhouse表中字段名一致
 	if !genService.IsSafeSQL(strSQL + strFilterVal) {
 		return nil, fmt.Errorf("unsafe sql")
@@ -140,7 +128,7 @@ func (driver *TDBDriver) CheckSQLValid(strSQL, strFilterVal string) ([]tableInfo
 			arrValues = append(arrValues, item.Value)
 		}
 	}
-	rows, err := driver.db.Query(fmt.Sprintf("select "+
+	rows, err := driver.Db.Query(fmt.Sprintf("select "+
 		"* from (%s) t limit 0", strSQL), arrValues...)
 	if err != nil {
 		return nil, err
@@ -174,7 +162,7 @@ func (driver *TDBDriver) CheckSQLValid(strSQL, strFilterVal string) ([]tableInfo
 	}
 	return cols, nil
 }
-func (driver *TDBDriver) GetColumns(tableName string) ([]tableInfo.ColumnInfo, error) {
+func (driver *TMySQLDriver) GetColumns(tableName string) ([]tableInfo.ColumnInfo, error) {
 	iPos := strings.Index(tableName, ".")
 	schema := ""
 	if iPos > 0 {
@@ -182,7 +170,7 @@ func (driver *TDBDriver) GetColumns(tableName string) ([]tableInfo.ColumnInfo, e
 		tableName = tableName[iPos+1:]
 	}
 	if schema == "" {
-		schema = driver.schema
+		schema = driver.Schema
 	}
 	//获取字段名词，字段类型，是否主键，字段类型转换为常见的数据类型
 	strSQL := "select column_name column_code," +
@@ -193,12 +181,12 @@ func (driver *TDBDriver) GetColumns(tableName string) ([]tableInfo.ColumnInfo, e
 		" when data_type = 'date' then 'date' when data_type = 'datetime' then 'datetime' when data_type = 'timestamp' then 'timestamp' " +
 		" else 'string' " +
 		"end date_type " +
-		"from INFORMATION_SCHEMA.COLUMNS where table_schema=$1 and table_name=$%2 " +
+		"from INFORMATION_SCHEMA.COLUMNS where table_schema=? and table_name=? " +
 		"order by ordinal_position"
 
 	//"select column_name column_code,coalesce(column_comment,'') column_name,if(column_key='PRI','是','否') is_key " +
 	//"from information_schema.`COLUMNS` where table_schema=? and table_name=? order by ordinal_position"
-	rows, err := driver.db.Query(strSQL, schema, tableName)
+	rows, err := driver.Db.Query(strSQL, schema, tableName)
 	if err != nil {
 		return nil, err
 
@@ -218,10 +206,10 @@ func (driver *TDBDriver) GetColumns(tableName string) ([]tableInfo.ColumnInfo, e
 	}
 	return data, nil
 }
-func (driver *TDBDriver) GetTables() ([]tableInfo.TableInfo, error) {
+func (driver *TMySQLDriver) GetTables() ([]tableInfo.TableInfo, error) {
 	strSQL := "select table_name table_code,coalesce(table_comment,'') table_comment " +
-		"from information_schema.tables where table_schema=$1"
-	rows, err := driver.db.Query(strSQL, driver.schema)
+		"from information_schema.tables where table_schema=?"
+	rows, err := driver.Db.Query(strSQL, driver.Schema)
 	if err != nil {
 		return nil, err
 
@@ -240,7 +228,7 @@ func (driver *TDBDriver) GetTables() ([]tableInfo.TableInfo, error) {
 	}
 	return data, nil
 }
-func (driver *TDBDriver) PullData(strSQL, filterVal, destTable string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) (int64, error) {
+func (driver *TMySQLDriver) PullData(strSQL, filterVal, destTable string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) (int64, error) {
 	var paramValues []interface{}
 	var filterValues []queryFilter.FilterValue
 	var err error
@@ -253,22 +241,49 @@ func (driver *TDBDriver) PullData(strSQL, filterVal, destTable string, batch int
 	for _, item := range filterValues {
 		paramValues = append(paramValues, item.Value)
 	}
-	rows, err = driver.db.Query(strSQL, paramValues...)
+	rows, err = driver.Db.Query(strSQL, paramValues...)
 	if err != nil {
 		return 0, err
 	}
+
 	defer func() {
 		_ = rows.Close()
 	}()
 	return loadDataToClickHouse(rows, destTable, batch, iTimestamp, clickClient)
 }
-func (driver *TDBDriver) PushData(insertSQL string, batch int, rows *sql.Rows) (int64, error) { //作为函数参数
+func (driver *TMySQLDriver) PushData(insertSQL string, batch int, rows *sql.Rows) (int64, error) { //作为函数参数
 	if rows == nil {
 		return 0, fmt.Errorf("data is nil")
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
+	strTableName, err := databaseDriver.ParseDestinationTable(insertSQL)
+	if err != nil {
+		return -1, err
+	}
+	strGetTablePrimaryKeySQL := "SELECT COUNT(*) " +
+		"FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS " +
+		"WHERE TABLE_SCHEMA = ? " +
+		"AND TABLE_NAME = ? " +
+		"AND CONSTRAINT_TYPE = 'PRIMARY KEY'"
+	keyRows := driver.Db.QueryRow(strGetTablePrimaryKeySQL, driver.Schema, strTableName)
+	if keyRows == nil {
+		return -1, fmt.Errorf("获取主键失败")
+	}
+	var iTablePrimaryKeyCount int
+	if err = keyRows.Scan(&iTablePrimaryKeyCount); err != nil {
+		return -1, err
+	}
+	if iTablePrimaryKeyCount == 0 {
+		// 没有主键的表，插入前先要清空数据
+		strTruncateSQL := fmt.Sprintf("TRUNCATE "+
+			"TABLE %s", strTableName)
+		if _, err = driver.Db.Exec(strTruncateSQL); err != nil {
+			return -1, err
+		}
+	}
+
 	strCols, err := databaseDriver.ParseInsertFields(insertSQL)
 	if err != nil {
 		return -1, err
@@ -289,10 +304,7 @@ func (driver *TDBDriver) PushData(insertSQL string, batch int, rows *sql.Rows) (
 	if len(dataTypes) != iLenCol {
 		return -1, fmt.Errorf("字段数与数据列数不匹配")
 	}
-	strTableName, err := databaseDriver.ParseDestinationTable(insertSQL)
-	if err != nil {
-		return -1, err
-	}
+
 	valueArgs := make([]any, 0, batch*iLenCol)
 	iRowNum := 0
 	totalCount := int64(0)
@@ -319,7 +331,7 @@ func (driver *TDBDriver) PushData(insertSQL string, batch int, rows *sql.Rows) (
 	}
 	return totalCount, nil
 }
-func (driver *TDBDriver) ConvertTableDDL(tableName string) (*string, error) {
+func (driver *TMySQLDriver) ConvertTableDDL(tableName string) (*string, error) {
 	Cols, err := driver.GetColumns(tableName)
 	if err != nil {
 		return nil, err
@@ -330,7 +342,7 @@ func (driver *TDBDriver) ConvertTableDDL(tableName string) (*string, error) {
 			KeyColumns = append(KeyColumns, col.ColumnCode)
 		}
 	}
-	data, err := driver.db.Query(fmt.Sprintf("select "+
+	data, err := driver.Db.Query(fmt.Sprintf("select "+
 		"* from %s limit 0", tableName))
 	if err != nil {
 		return nil, err
@@ -472,15 +484,15 @@ func (driver *TDBDriver) ConvertTableDDL(tableName string) (*string, error) {
 	return &result, nil
 }
 
-func (driver *TDBDriver) GetQuoteFlag() string {
+func (driver *TMySQLDriver) GetQuoteFlag() string {
 	return "`"
 }
 
-func (driver *TDBDriver) GetSourceTableDDL(tableName string) (*string, error) {
+func (driver *TMySQLDriver) GetSourceTableDDL(tableName string) (*string, error) {
 	if strings.Index(tableName, "`") < 0 {
 		tableName = fmt.Sprintf("%s%s%s", driver.GetQuoteFlag(), tableName, driver.GetQuoteFlag())
 	}
-	rows, err := driver.db.Query(fmt.Sprintf("SHOW CREATE TABLE %s", tableName))
+	rows, err := driver.Db.Query(fmt.Sprintf("SHOW CREATE TABLE %s", tableName))
 	if err != nil {
 		return nil, err
 	}
@@ -499,8 +511,8 @@ func (driver *TDBDriver) GetSourceTableDDL(tableName string) (*string, error) {
 	return &ddl, nil
 }
 
-func (driver *TDBDriver) GetSchema() string {
-	return driver.schema
+func (driver *TMySQLDriver) GetSchema() string {
+	return driver.Schema
 }
 
 func loadDataToClickHouse(rows *sql.Rows, tableName string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) (int64, error) {
@@ -792,14 +804,14 @@ func loadDataToClickHouse(rows *sql.Rows, tableName string, batch int, iTimestam
 	}
 	return totalCount, nil
 }
-func (driver *TDBDriver) loadDataToMySQL(toTableName, toColumns, params string, rowCount int, valueArgs []any) error {
+func (driver *TMySQLDriver) loadDataToMySQL(toTableName, toColumns, params string, rowCount int, valueArgs []any) error {
 	var arrParams []string
 	for i := 0; i < rowCount; i++ {
 		arrParams = append(arrParams, params)
 	}
 	replaceSQL := fmt.Sprintf("replace into %s(%s) values %s", toTableName, toColumns, strings.Join(arrParams, ","))
 
-	tx, err := driver.db.Begin()
+	tx, err := driver.Db.Begin()
 	if err != nil {
 		return err
 	}

@@ -8,7 +8,6 @@ import (
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/dataPedestal/host/module"
-	"github.com/drkisler/dataPedestal/initializers"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/gin-gonic/gin"
 	"strings"
@@ -31,22 +30,6 @@ func GetTempConfig(data []byte) []byte {
 		plugin.PluginConfig = string(data[36:])
 	}
 	result, _ := json.Marshal(plugin.GetPluginTmpCfg())
-	return result
-}
-
-// UnloadPlugin 卸载插件
-func UnloadPlugin(data []byte) []byte {
-	var plugin control.TPluginControl
-	plugin.PluginUUID = string(data)
-	result, _ := json.Marshal(plugin.UnloadPlugin())
-	return result
-}
-
-// LoadPlugin 加载插件
-func LoadPlugin(data []byte) []byte {
-	var plugin control.TPluginControl
-	plugin.PluginUUID = string(data)
-	result, _ := json.Marshal(plugin.LoadPlugin(initializers.HostConfig.DBConnection))
 	return result
 }
 
@@ -81,9 +64,9 @@ func SetLicense(data []byte) []byte {
 		result, _ := json.Marshal(resp)
 		return result
 	}
-	plugins := module.GetPluginList()
+	mapPlugin := module.GetPluginList()
 
-	item, ok := plugins.Get(string(data[:36]))
+	item, ok := mapPlugin.Get(string(data[:36]))
 	if !ok {
 		resp := response.Failure(fmt.Sprintf("插件%s不存在", string(data[:36])))
 		result, _ := json.Marshal(resp)

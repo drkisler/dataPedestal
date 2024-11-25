@@ -1,7 +1,6 @@
 package service
 
 import (
-	"github.com/drkisler/dataPedestal/common/enMap"
 	"github.com/drkisler/dataPedestal/common/response"
 	ctl "github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/control"
 )
@@ -95,33 +94,31 @@ func GetSourceConnOption(_ int32, params map[string]any) response.TResponse {
 	return (*myPlugin).GetSourceConnOption(params)
 }
 
-func GetSourceQuoteFlag(_ int32, params map[string]any) response.TResponse {
+func GetSourceQuoteFlag(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetSourceQuoteFlag(params)
+	return (*myPlugin).GetSourceQuoteFlag(userID, params)
 }
 
-func GetDatabaseType(_ int32, params map[string]any) response.TResponse {
-	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).GetDatabaseType(params)
-}
-
+/*
 func GetDestConnOption(_ int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
 	return (*myPlugin).GetDestConnOption(params)
 }
+*/
 
-func CheckDestConnect(_ int32, params map[string]any) response.TResponse {
-	connOption, err := enMap.ConvertToStrMap(params)
-	if err != nil {
-		return *response.Failure(err.Error())
+/*
+	func CheckDestConnect(_ int32, params map[string]any) response.TResponse {
+		connOption, err := enMap.ConvertToStrMap(params)
+		if err != nil {
+			return *response.Failure(err.Error())
+		}
+		myPlugin := PluginServ.(*TMyPlugin)
+		return (*myPlugin).CheckDestConnect(connOption)
 	}
+*/
+func CheckJobLoaded(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckDestConnect(connOption)
-}
-
-func CheckJobLoaded(_ int32, params map[string]any) response.TResponse {
-	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).CheckJobLoaded(params)
+	return (*myPlugin).CheckJobLoaded(userID, params)
 }
 
 func CheckJob(userID int32, params map[string]any) response.TResponse {
@@ -137,7 +134,7 @@ func OnLineJob(userID int32, params map[string]any) response.TResponse {
 	return (*myPlugin).OnLineJob(userID, params)
 }
 
-func OffLineJob(_ int32, params map[string]any) response.TResponse {
+func OffLineJob(userID int32, params map[string]any) response.TResponse {
 	myPlugin := PluginServ.(*TMyPlugin)
-	return (*myPlugin).OffLineJob(params)
+	return (*myPlugin).OffLineJob(userID, params)
 }

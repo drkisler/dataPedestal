@@ -35,6 +35,44 @@ func NewLogWriter(strLocate string) *TLogWriter {
 	return &TLogWriter{logCtl: &logger, mu: &mutex, logDir: dir}
 }
 
+func ConsoleInfo(info string) {
+	exe, _ := os.Executable()
+	dir := filepath.Join(filepath.Dir(exe), "logs")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Fatal().Err(err).Msg("无法创建日志目录")
+	}
+
+	logFileName := fmt.Sprintf("%s/%s%s", dir, time.Now().Format("2006-01-02"), ".log")
+	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal().Err(err).Msg("无法打开日志文件")
+	}
+	defer func() {
+		_ = logFile.Close()
+	}()
+	log.Logger = zerolog.New(logFile).With().Timestamp().Logger()
+	log.Info().Msg(info)
+	_ = logFile.Sync()
+	_ = logFile.Close()
+}
+
+func ConsoleError(msg string) {
+	dir := "./logs"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Fatal().Err(err).Msg("无法创建日志目录")
+	}
+	logFileName := fmt.Sprintf("%s/%s%s", dir, time.Now().Format("2006-01-02"), ".log")
+	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal().Err(err).Msg("无法打开日志文件")
+	}
+	defer func() {
+		_ = logFile.Close()
+	}()
+	log.Logger = zerolog.New(logFile).With().Timestamp().Logger()
+	log.Error().Msg(msg)
+}
+
 func (lw *TLogWriter) WriteLocal(info string) {
 	// 设置日志文件名格式
 	logFileName := time.Now().Format("2006-01-02") + ".log"

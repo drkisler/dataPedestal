@@ -8,12 +8,14 @@ type PluginRPCServer struct {
 	Impl IPlugin
 }
 
-func (s *PluginRPCServer) Load(config string, resp *response.TResponse) error {
-	*resp = s.Impl.Load(config)
-	return nil
-}
-func (s *PluginRPCServer) Run(args interface{}, resp *response.TResponse) error {
-	*resp = s.Impl.Run()
+/*
+	func (s *PluginRPCServer) Load(config string, resp *response.TResponse) error {
+		*resp = s.Impl.Load(config)
+		return nil
+	}
+*/
+func (s *PluginRPCServer) Run(config string, resp *response.TResponse) error {
+	*resp = s.Impl.Run(config)
 	return nil
 }
 func (s *PluginRPCServer) Running(args interface{}, resp *response.TResponse) error {

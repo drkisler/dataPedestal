@@ -1,6 +1,7 @@
 package clickHouseSQL
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -14,66 +15,67 @@ var once sync.Once
 var clickHouseClient *TClickHouseSQL = nil
 
 type TWriteError func(info string, printConsole bool)
+type TConnOption struct {
+	Host     string `json:"host"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Database string `json:"dbname"`
+	Cluster  string `json:"cluster"`
+}
 type TClickHouseSQL struct {
-	//pool        driver.Conn
-	//mutex       sync.RWMutex
-	conn        *sql.DB
-	isConnected bool
-	connOption  map[string]string
-	writeError  TWriteError
+	//conn        *sql.DB
+	//isConnected bool
+	connOption TConnOption //map[string]string
+	writeError TWriteError
 }
 
-func GetClickHouseClient(connectOption map[string]string) (*TClickHouseSQL, error) {
+func GetClickHouseSQLClient(connectOption map[string]string) (*TClickHouseSQL, error) {
 	var err error
 	once.Do(
 		func() {
 			if clickHouseClient == nil {
-				clickHouseClient = &TClickHouseSQL{}
-				if connectOption == nil {
-					err = fmt.Errorf("connectOption is nil")
-					return
-				}
-				clickHouseClient.connOption = connectOption
-				err = clickHouseClient.Connect()
+				clickHouseClient, err = getClickHouseDriver(connectOption)
 			}
 		})
 	return clickHouseClient, err
 }
 
-func (client *TClickHouseSQL) Connect() error {
-	var option struct {
-		Host     string `json:"host"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-		Database string `json:"dbname"`
-		Cluster  string `json:"cluster"`
-	}
+func getClickHouseDriver(connectOption map[string]string) (*TClickHouseSQL, error) {
 	var ok bool
-	if option.Host, ok = client.connOption["host"]; !ok {
-		client.writeError("can not find host in connectStr", false)
-		return fmt.Errorf("can not find host in connectStr")
+	var option TConnOption
+	if option.Host, ok = connectOption["host"]; !ok {
+		return nil, fmt.Errorf("can not find host in connectStr")
 	}
-	if option.User, ok = client.connOption["user"]; !ok {
-		return fmt.Errorf("can not find user in connectStr")
+	if option.User, ok = connectOption["user"]; !ok {
+		return nil, fmt.Errorf("can not find user in connectStr")
 	}
-	if option.Password, ok = client.connOption["password"]; !ok {
-		return fmt.Errorf("can not find password in connectStr")
+	if option.Password, ok = connectOption["password"]; !ok {
+		return nil, fmt.Errorf("can not find password in connectStr")
 	}
-	if option.Database, ok = client.connOption["dbname"]; !ok {
-		return fmt.Errorf("can not find dbname in connectStr")
+	if option.Database, ok = connectOption["dbname"]; !ok {
+		return nil, fmt.Errorf("can not find dbname in connectStr")
 	}
-	if option.Cluster, ok = client.connOption["cluster"]; !ok {
-		return fmt.Errorf("can not find cluster name in connectStr")
+	if option.Cluster, ok = connectOption["cluster"]; !ok {
+		return nil, fmt.Errorf("can not find cluster name in connectStr")
 	}
+
+	driver := &TClickHouseSQL{
+		connOption: option,
+	}
+	return driver, nil
+}
+
+func (client *TClickHouseSQL) createConn() (*sql.DB, error) {
 	conn := clickhouse.OpenDB(&clickhouse.Options{ // clickhouse.Open 返回 driver.Conn 接口   clickhouse.OpenDB 返回 *sql.DB 对象
-		Addr: strings.Split(option.Host, ","), //host1:9000,host2:9000
+		Addr: strings.Split(client.connOption.Host, ","), //host1:9000,host2:9000
 		Auth: clickhouse.Auth{
-			Database: option.Database,
-			Username: option.User,
-			Password: option.Password,
+			Database: client.connOption.Database,
+			Username: client.connOption.User,
+			Password: client.connOption.Password,
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60,
+			"keep_alive_timeout": 60, // 添加keep-alive超时设置
 		},
 		DialTimeout: time.Second * 30,
 		Compression: &clickhouse.Compression{
@@ -85,12 +87,14 @@ func (client *TClickHouseSQL) Connect() error {
 	})
 	conn.SetMaxIdleConns(5)
 	conn.SetMaxOpenConns(10)
-	conn.SetConnMaxLifetime(time.Hour)
-	client.isConnected = true
-	return nil
+	conn.SetConnMaxLifetime(2 * time.Second)
+	if err := conn.Ping(); err != nil {
+		return nil, err
+	}
+	return conn, nil
 }
 func (client *TClickHouseSQL) GetClusterName() string {
-	return client.connOption["cluster"]
+	return client.connOption.Cluster
 }
 
 func (client *TClickHouseSQL) SetWriteError(writeError TWriteError) {
@@ -98,85 +102,32 @@ func (client *TClickHouseSQL) SetWriteError(writeError TWriteError) {
 }
 
 func (client *TClickHouseSQL) GetDatabaseName() string {
-	return client.connOption["dbname"]
-}
-
-func (client *TClickHouseSQL) Disconnect() error {
-	client.isConnected = false
-	return client.conn.Close()
-}
-
-func (client *TClickHouseSQL) IsConnected() bool {
-	return client.isConnected
-}
-
-func (client *TClickHouseSQL) HealthCheck() error {
-	return client.conn.Ping()
-}
-
-// StartHealthCheck starts a background goroutine to periodically check the health of the connection pool.
-func (client *TClickHouseSQL) StartHealthCheck(interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	go func() {
-		for range ticker.C {
-			if err := client.HealthCheck(); err != nil {
-				client.writeError(fmt.Sprintf("Health check failed: %v", err), false)
-				if err = client.Reconnect(); err != nil {
-					client.writeError(fmt.Sprintf("Reconnection failed: %v", err), false)
-				}
-			}
-		}
-	}()
-}
-
-func (client *TClickHouseSQL) Reconnect() error {
-	if err := client.Disconnect(); err != nil {
-		return fmt.Errorf("failed to disconnect: %w", err)
-	}
-	return client.Connect()
+	return client.connOption.Database
 }
 
 func (client *TClickHouseSQL) ExecuteSQL(query string, args ...interface{}) error {
-	_, err := client.conn.Exec(query, args...)
+	conn, err := client.createConn()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = conn.ExecContext(ctx, query, args...)
 	return err
 }
 
 func (client *TClickHouseSQL) QuerySQL(query string, args ...interface{}) (*sql.Rows, error) {
-	return client.conn.Query(query, args...)
-}
-
-func (client *TClickHouseSQL) BeginTransaction() (*sql.Tx, error) {
-	return client.conn.Begin()
-}
-
-/*
-
-func main() {
-	chm := NewClickHouseManager()
-	if err := chm.Connect(); err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+	conn, err := client.createConn()
+	if err != nil {
+		return nil, err
 	}
 	defer func() {
-		if err := chm.Disconnect(); err != nil {
-			fmt.Println(err.Error())
-		}
+		_ = conn.Close()
 	}()
-
-	chm.StartHealthCheck(1 * time.Minute)
-
-	// 使用连接执行查询
-	ctx := context.Background()
-	err := chm.ExecuteSQL(ctx, "SELECT 1")
-	if err != nil {
-		log.Printf("Query failed: %v", err)
-	}
-	if err = chm.Reconnect(); err != nil {
-		fmt.Println(err.Error())
-	}
-	fmt.Println("done")
-	// 保持服务运行
-	select {}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return conn.QueryContext(ctx, query, args...)
 }
-
-
-*/

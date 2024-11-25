@@ -121,13 +121,13 @@ func (p *TPushTableLogControl) QueryTableLogs() *response.TResponse {
 		tblLogPageBuffer.Store(p.OperatorID, pageBuffer.NewPageBuffer(p.OperatorID, p.ToString(), int64(p.PageSize), ids))
 	}
 	value, _ = tblLogPageBuffer.Load(p.OperatorID)
-	pageBuffer := value.(pageBuffer.PageBuffer)
-	if pageBuffer.Total == 0 {
+	pgeBuffer := value.(pageBuffer.PageBuffer)
+	if pgeBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
 		return response.Success(&result)
 	}
-	ids, err := pageBuffer.GetPageIDs(int64(p.PageIndex - 1))
+	ids, err := pgeBuffer.GetPageIDs(int64(p.PageIndex - 1))
 	if err != nil {
 		return response.Failure(err.Error())
 	}
@@ -140,7 +140,7 @@ func (p *TPushTableLogControl) QueryTableLogs() *response.TResponse {
 		resultData = append(resultData, *ToCommonPushTableLog(&log))
 	}
 	result.ArrData = resultData
-	result.Total = pageBuffer.Total
+	result.Total = pgeBuffer.Total
 
 	return response.Success(&result)
 }

@@ -1,12 +1,12 @@
 package databaseDriver
 
+import "C"
 import (
 	"database/sql"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
 	"github.com/drkisler/dataPedestal/common/tableInfo"
-	"os"
-	"plugin"
+	"github.com/jmoiron/sqlx"
 	"regexp"
 	"strconv"
 	"strings"
@@ -26,6 +26,26 @@ type IDbDriver interface {
 	GetSchema() string
 	IsConnected() bool
 	NewConnect(connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) (IDbDriver, error)
+}
+
+type TDBDriver struct {
+	DriverName string
+	Schema     string
+	Db         *sqlx.DB
+	Connected  bool
+}
+type HandleResult struct {
+	HandleCode int32
+	HandleMsg  string
+}
+
+func (handle *HandleResult) HandleFailed(msg string) {
+	handle.HandleCode = -1
+	handle.HandleMsg = msg
+}
+func (handle *HandleResult) HandleSuccess(code int32, msg string) {
+	handle.HandleCode = code
+	handle.HandleMsg = msg
 }
 
 func ValidateIPPortFormat(address string) error {
@@ -83,6 +103,7 @@ func ParseDestinationTable(sql string) (string, error) {
 	return matches[1], nil
 }
 
+/*
 func OpenDbDriver(flePath, fileName string) (IDbDriver, error) {
 	pluginFile := flePath + string(os.PathSeparator) + fileName
 	if _, err := os.Stat(pluginFile); os.IsNotExist(err) {
@@ -100,5 +121,6 @@ func OpenDbDriver(flePath, fileName string) (IDbDriver, error) {
 	if !ok {
 		return nil, fmt.Errorf("无效的 NewDbDriver 函数类型")
 	}
-	return newDbDriver(flePath)
+	return newDbDriver(fileName)
 }
+*/

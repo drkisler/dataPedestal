@@ -3,7 +3,11 @@ package control
 import (
 	"github.com/drkisler/dataPedestal/common/license"
 	"github.com/drkisler/dataPedestal/common/response"
+	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/universal/dataSource/module"
+	"github.com/drkisler/dataPedestal/universal/databaseDriver"
+	"os"
+	"path/filepath"
 )
 
 type TDataSource = module.TDataSource
@@ -44,9 +48,12 @@ func (dsc *TDataSourceControl) DeleteDataSource() *response.TResponse {
 }
 
 func (dsc *TDataSourceControl) CheckConnectString() *response.TResponse {
-	if err := dsc.TDataSource.CheckConnectString(); err != nil {
+	ds := dsc.TDataSource
+	dbOp, err := databaseDriver.NewDriverOperation(filepath.Join(os.Getenv("FilePath"), initializers.PortalCfg.DbDriverDir), &ds)
+	if err != nil {
 		return response.Failure(err.Error())
 	}
+	defer dbOp.FreeDriver()
 	return response.Success(nil)
 }
 

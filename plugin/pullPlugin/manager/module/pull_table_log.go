@@ -42,6 +42,7 @@ func (tableLog *TPullTableLog) StopTableLog(errInfo string) error {
 	if errInfo == "" {
 		status = "completed"
 	}
+
 	strSQL := fmt.Sprintf("UPDATE "+
 		"%s.pull_table_log SET stop_time =$1, status =$2, error_info =$3,record_count=$4 WHERE job_id =$5 and table_id= $6 and start_time =$7", dbs.GetSchema())
 	return dbs.ExecuteSQL(context.Background(), strSQL, stopTime, status, errInfo, tableLog.RecordCount, tableLog.JobID, tableLog.TableID, tableLog.StartTime)

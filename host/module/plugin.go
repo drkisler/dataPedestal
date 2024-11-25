@@ -51,9 +51,19 @@ func GetPluginList() syncMap.ReadOnlyMap {
 	return &result
 }
 
-// AddPlugin 将插件添加进插件列表
+// AddPlugin 将插件添加进插件列表或修改插件信息
 func (p *TPlugin) AddPlugin() {
-	pluginMap.Store(p.PluginUUID, p)
+	value, ok := pluginMap.Load(p.PluginUUID)
+	if !ok {
+		pluginMap.Store(p.PluginUUID, p)
+		return
+	}
+	plugin := value.(*TPlugin)
+	plugin.PluginFileName = p.PluginFileName
+	plugin.RunType = p.RunType
+	plugin.PluginConfig = p.PluginConfig
+	plugin.SerialNumber = p.SerialNumber
+
 }
 
 // RemovePlugin 从插件列表中删除插件
@@ -79,6 +89,34 @@ func (p *TPlugin) InitByUUID() error {
 	return nil
 }
 
+func (p *TPlugin) InitPluginFromDB() error {
+	storage, err := metaDataBase.GetPgServ()
+	if err != nil {
+		return err
+	}
+	strSQL := fmt.Sprintf("select "+
+		"plugin_uuid, plugin_name, plugin_type ,plugin_file_name, plugin_config, serial_number, license_code, product_code, run_type "+
+		"from %s.plugins "+
+		"where plugin_uuid = $1", storage.GetSchema())
+	rows, err := storage.QuerySQL(strSQL, p.PluginUUID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	rowCnt := 0
+	for rows.Next() {
+		err = rows.Scan(&p.PluginUUID, &p.PluginName, &p.PluginType, &p.PluginFileName, &p.PluginConfig, &p.SerialNumber, &p.LicenseCode, &p.ProductCode, &p.RunType)
+		if err != nil {
+			return err
+		}
+		rowCnt++
+	}
+	if rowCnt <= 0 {
+		return fmt.Errorf("plugin %s not found", p.PluginUUID)
+	}
+	return nil
+}
+
 func (p *TPlugin) SetLicenseCode(productCode, licenseCode string) error {
 	value, ok := pluginMap.Load(p.PluginUUID)
 	if !ok {
@@ -92,16 +130,16 @@ func (p *TPlugin) SetLicenseCode(productCode, licenseCode string) error {
 
 // GetAutoRunPlugins 获取自动运行的插件
 func GetAutoRunPlugins() []TPlugin {
-	var plugins []TPlugin
+	var arrPlugins []TPlugin
 	pluginMap.Range(func(_, value interface{}) bool {
 		plugin := value.(*TPlugin)
 		if plugin.RunType == "自动启动" &&
 			plugin.LicenseCode != "" &&
 			plugin.PluginConfig != "" &&
 			plugin.PluginFileName != "" {
-			plugins = append(plugins, *plugin)
+			arrPlugins = append(arrPlugins, *plugin)
 		}
 		return true
 	})
-	return plugins
+	return arrPlugins
 }

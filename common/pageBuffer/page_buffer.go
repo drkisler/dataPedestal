@@ -47,12 +47,17 @@ func (pg *PageBuffer) GetPageIDs(pageIndex int64) (*string, error) {
 		return nil, fmt.Errorf("page index %d is out of range[0, %d]", pageIndex, len(pg.Page))
 	}
 	page := pg.Page[pageIndex]
-	var sb strings.Builder
-
-	for _, v := range page {
-		sb.WriteString(strconv.Itoa(int(v)))
-		sb.WriteString(",")
+	result := ""
+	if len(page) == 0 {
+		return nil, fmt.Errorf("page index %d is empty", pageIndex)
 	}
-	result := sb.String()
+	var sb strings.Builder
+	sb.Grow(len(page) * 10) // 预估字符串长度
+	sb.WriteString(strconv.FormatInt(page[0], 10))
+	for _, v := range page[1:] {
+		sb.WriteString(",")
+		sb.WriteString(strconv.Itoa(int(v)))
+	}
+	result = sb.String()
 	return &result, nil
 }

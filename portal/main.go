@@ -56,16 +56,16 @@ func createAndStartGinService() {
 	user.POST("/checkUser", usrServ.CheckUser)
 	plugin := r.Group("/plugin")
 	plugin.Use(genService.SetHeader, utils.AuthMiddleware, Logger())
-	plugin.POST("/delete", service.DeletePlugin)                               // 删除插件
-	plugin.POST("/add", service.AddPlugin)                                     // 新增插件
-	plugin.POST("/alter", service.AlterPlugin)                                 // 修改插件
-	plugin.POST("/get", service.QueryPlugin)                                   // 获取插件列表，含插件运行状态
-	plugin.POST("/setRunType", service.SetRunType)                             // 设置运行放松
-	plugin.POST("/upload", service.Upload)                                     // 上传插件
-	plugin.GET("/download", service.Download)                                  // 下载插件
-	plugin.POST("/updateConfig", service.UpdateConfig)                         // 修改配置
-	plugin.POST("/loadPlugin", service.LoadPlugin)                             // 加载插件
-	plugin.POST("/unloadPlugin", service.UnloadPlugin)                         // 卸载插件
+	plugin.POST("/delete", service.DeletePlugin)       // 删除插件
+	plugin.POST("/add", service.AddPlugin)             // 新增插件
+	plugin.POST("/alter", service.AlterPlugin)         // 修改插件
+	plugin.POST("/get", service.QueryPlugin)           // 获取插件列表，含插件运行状态
+	plugin.POST("/setRunType", service.SetRunType)     // 设置运行方式
+	plugin.POST("/upload", service.Upload)             // 上传插件
+	plugin.GET("/download", service.Download)          // 下载插件
+	plugin.POST("/updateConfig", service.UpdateConfig) // 修改配置
+	//plugin.POST("/loadPlugin", service.LoadPlugin)                             // 加载插件
+	//plugin.POST("/unloadPlugin", service.UnloadPlugin)                         // 卸载插件
 	plugin.POST("/runPlugin", service.RunPlugin)                               // 运行插件
 	plugin.POST("/stopPlugin", service.StopPlugin)                             // 停止插件
 	plugin.POST("/getTempConfig", service.GetTempConfig)                       // 获取模板
@@ -83,7 +83,7 @@ func createAndStartGinService() {
 	dataSource.POST("/addDataSource", dsServ.AddDataSource)                   // 新增数据源
 	dataSource.POST("/updateDataSource", dsServ.UpdateDataSource)             // 修改数据源
 	dataSource.POST("/queryDataSource", dsServ.QueryDataSource)               // 获取数据源列表
-	dataSource.POST("/getDataSourceNames", dsServ.GetDataSourceNames)         // 获取数据源名称列表
+	dataSource.GET("/getDataSourceNames", dsServ.GetDataSourceNames)          // 获取数据源名称列表
 	dataSource.POST("/getDataBaseDrivers", dsServ.GetDataBaseDrivers)         // 获取数据库驱动列表
 	dataSource.POST("/getConnectStringByName", dsServ.GetConnectStringByName) // 获取连接字符串
 	dataSource.POST("/getOptionsByDriverName", dsServ.GetOptionsByDriverName) // 获取数据库驱动连接选项
@@ -149,6 +149,10 @@ func (serv *TManagerDaemon) Manage() (string, error) {
 	return managerName + " exited", nil
 }
 func main() {
+	//str, _ := license.EncryptAES("1P@ssw0rd!", license.GetDefaultKey())
+	//fmt.Println(str)
+	//str, _ = license.DecryptAES("64DnJBov/BOAjgtKOsCkp94m/p5Z/zL1Iw==", license.GetDefaultKey())
+	//fmt.Println(str)
 	logService.LogWriter = logService.NewLogWriter("portal")
 	file, err := os.Executable()
 	if err != nil {

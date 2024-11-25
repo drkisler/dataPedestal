@@ -63,20 +63,20 @@ func (pc *TPullTableControl) QueryTables() *response.TResponse {
 		tablePageBuffer.Store(pc.OperatorID, pageBuffer.NewPageBuffer(pc.OperatorID, pc.ToString(), int64(pc.PageSize), ids))
 	}
 	value, _ = tablePageBuffer.Load(pc.OperatorID)
-	pageBuffer := value.(pageBuffer.PageBuffer)
-	if pageBuffer.Total == 0 {
+	pgeBuffer := value.(pageBuffer.PageBuffer)
+	if pgeBuffer.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
 		return response.Success(&result)
 	}
-	ids, err := pageBuffer.GetPageIDs(int64(pc.PageIndex - 1))
+	ids, err := pgeBuffer.GetPageIDs(int64(pc.PageIndex - 1))
 	if err != nil {
 		return response.Failure(err.Error())
 	}
 	if result.ArrData, err = pc.TPullTable.GetTables(ids); err != nil {
 		return response.Failure(err.Error())
 	}
-	result.Total = pageBuffer.Total
+	result.Total = pgeBuffer.Total
 	return response.Success(&result)
 }
 func (pc *TPullTableControl) SetFilterValue() *response.TResponse {

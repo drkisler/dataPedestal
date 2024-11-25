@@ -2,9 +2,7 @@ package module
 
 import (
 	"fmt"
-	"github.com/drkisler/dataPedestal/common/genService"
 	"github.com/drkisler/dataPedestal/universal/metaDataBase"
-	"plugin"
 )
 
 type TDataSource struct {
@@ -141,29 +139,28 @@ func (ds *TDataSource) QueryDataSource(key string, pageSize int32, pageIndex int
 	return dataSources, rowCnt, nil
 }
 
-func (ds *TDataSource) GetDataSourceNames() ([]string, int64, error) {
+func (ds *TDataSource) GetDataSourceNames() (map[int32]string, int64, error) {
 	storage, err := metaDataBase.GetPgServ()
 	if err != nil {
 		return nil, -1, err
 	}
-	if ds.DatabaseDriver == "" {
-		return nil, -1, fmt.Errorf("database driver not set")
-	}
-	strSQL := fmt.Sprintf("SELECT distinct "+
-		"ds_name FROM %s.data_source WHERE user_id = $1 and database_driver= $2", storage.GetSchema())
-	rows, err := storage.QuerySQL(strSQL, ds.UserID, ds.DatabaseDriver)
+
+	strSQL := fmt.Sprintf("SELECT ds_id,"+
+		"ds_name FROM %s.data_source WHERE user_id = $1", storage.GetSchema())
+	rows, err := storage.QuerySQL(strSQL, ds.UserID)
 	if err != nil {
 		return nil, -1, err
 	}
 	defer rows.Close()
-	var dsNames []string
+	dsNames := make(map[int32]string)
 	var rowCnt int64
 	for rows.Next() {
 		var dsName string
-		if err = rows.Scan(&dsName); err != nil {
+		var dsId int32
+		if err = rows.Scan(&dsId, &dsName); err != nil {
 			return nil, -1, err
 		}
-		dsNames = append(dsNames, dsName)
+		dsNames[dsId] = dsName
 		rowCnt++
 	}
 	return dsNames, rowCnt, nil
@@ -247,37 +244,32 @@ func (ds *TDataSource) GetDataBaseDrivers() ([]string, int64, error) {
 	return dbDrivers, rowCnt, nil
 }
 
-func (ds *TDataSource) CheckConnectString() error {
+/*
+func (ds *TDataSource) CheckConnectString(fileDir string) error {
 	if (ds.ConnectString == "") || (ds.DatabaseDriver == "") {
 		return fmt.Errorf("database driver and connect string must be set")
 	}
-	pluginFile := genService.GenFilePath("lib", fmt.Sprintf("%s.so", ds.DatabaseDriver))
-	p, err := plugin.Open(pluginFile)
+	//dbDriverFile := filepath.Join(fileDir, fmt.Sprintf("%sDriver.so", ds.DatabaseDriver))
+	dbDriverFile := genService.GenFilePath(fileDir, fmt.Sprintf("%sDriver.so", ds.DatabaseDriver))
+	if _, err := os.Stat(dbDriverFile); os.IsNotExist(err) {
+		return fmt.Errorf("plugin file %s not found", dbDriverFile)
+	}
+	lib, err := databaseDriver.LoadDriver(dbDriverFile)
 	if err != nil {
 		return err
 	}
-	openConnectSym, err := p.Lookup("Connect")
-	if err != nil {
-		return err
+	defer lib.Close()
+	driver := lib.CreateDriver()
+	if driver == 0 {
+		return fmt.Errorf("failed to create driver")
 	}
-	openConnectFunc, ok := openConnectSym.(func(connectStr string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) error)
-	if !ok {
-		return fmt.Errorf("无效的Connect函数类型")
-	}
-	closeConnect, err := p.Lookup("Close")
-	if err != nil {
-		return err
-	}
-	closeFunc, ok := closeConnect.(func() error)
-	if !ok {
-		return fmt.Errorf("无效的Close函数类型")
-	}
-	if err = openConnectFunc(ds.ConnectString, int(ds.MaxIdleTime), int(ds.MaxOpenConnections), int(ds.ConnMaxLifetime), int(ds.MaxIdleConnections)); err != nil {
-		return err
-	}
-	if err = closeFunc(); err != nil {
-		return err
-	}
+	defer lib.DestroyDriver(driver)
 
+	// Connect to database
+	resp := lib.OpenConnect(driver, ds.ConnectString, int(ds.MaxIdleTime), int(ds.MaxOpenConnections), int(ds.ConnMaxLifetime), int(ds.MaxIdleConnections))
+	if resp.HandleCode < 0 {
+		return fmt.Errorf("failed to connect: %s", resp.HandleMsg)
+	}
 	return nil
 }
+*/

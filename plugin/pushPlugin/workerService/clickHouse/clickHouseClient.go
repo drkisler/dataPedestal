@@ -10,7 +10,7 @@ import (
 
 func CheckTableExists(tableName string) (bool, error) {
 	var cnt uint64
-	conn, err := clickHouseSQL.GetClickHouseClient(nil)
+	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return false, err
 	}
@@ -33,7 +33,7 @@ func CheckTableExists(tableName string) (bool, error) {
 
 }
 func GetTableNames() ([]tableInfo.TableInfo, error) {
-	conn, err := clickHouseSQL.GetClickHouseClient(nil)
+	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func GetTableNames() ([]tableInfo.TableInfo, error) {
 }
 
 func GetTableColumns(tableName *string) ([]tableInfo.ColumnInfo, error) {
-	conn, err := clickHouseSQL.GetClickHouseClient(nil)
+	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func GetTableColumns(tableName *string) ([]tableInfo.ColumnInfo, error) {
 }
 
 func ReadData(selectSQL, insertSQL string, BatchSize int, WriteData func(insertSQL string, batch int, data *sql.Rows) (int64, error), args ...any) (int64, error) {
-	conn, err := clickHouseSQL.GetClickHouseClient(nil)
+	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return -1, err
 	}
@@ -110,7 +110,7 @@ func ReadData(selectSQL, insertSQL string, BatchSize int, WriteData func(insertS
 
 // GetSQLColumns 获取SQL语句中的列信息
 func GetSQLColumns(strSQL string, args ...any) ([]tableInfo.ColumnInfo, error) {
-	conn, err := clickHouseSQL.GetClickHouseClient(nil)
+	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return nil, err
 	}

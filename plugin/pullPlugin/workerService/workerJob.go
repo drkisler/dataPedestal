@@ -10,6 +10,7 @@ import (
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
+	dsModel "github.com/drkisler/dataPedestal/universal/dataSource/module"
 	"github.com/drkisler/dataPedestal/universal/databaseDriver"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/drkisler/dataPedestal/universal/messager"
@@ -22,30 +23,22 @@ import (
 
 type TWorkerJob struct {
 	pluginBase.TBasePlugin
-	JobUUID   uuid.UUID
-	JobID     int32
-	sourceDB  databaseDriver.IDbDriver
-	msgClient *messager.TMessageClient
-	ReplyURL  string
-	//KeepConnect bool
-
-	SkipHour  []int
-	isWorking bool //实时的工作状态
-	Enabled   bool //是否启用
+	JobUUID      uuid.UUID
+	JobID        int32
+	DataSource   *dsModel.TDataSource
+	DBDriverFile string //  databaseDriver.IDbDriver
+	msgClient    *messager.TMessageClient
+	ReplyURL     string
+	SkipHour     []int
+	isWorking    bool //实时的工作状态
+	Enabled      bool //是否启用
 }
 
-func NewWorkerJob(job *module.TPullJob, replyUrl string, newDbDriver func(string, string, int, int, int, int) (databaseDriver.IDbDriver, error)) (*TWorkerJob, error) {
+//newDbDriver func(string, string, int, int, int, int) (*databaseDriver.DriverLib, error)
+
+func NewWorkerJob(job *module.TPullJob, replyUrl string, dataSource *dsModel.TDataSource) (*TWorkerJob, error) {
 	var skipHour []int
-	var dbSource databaseDriver.IDbDriver
-	ds, err := job.GetDataSource()
-	if err != nil {
-		return nil, err
-	}
-
-	if dbSource, err = newDbDriver(ds.DatabaseDriver, ds.ConnectString, int(ds.MaxIdleTime), int(ds.MaxOpenConnections), int(ds.ConnMaxLifetime), int(ds.MaxIdleConnections)); err != nil {
-		return nil, err
-	}
-
+	var err error
 	if skipHour, err = func(source string) ([]int, error) {
 		if source == "" {
 			return []int{}, nil
@@ -71,28 +64,31 @@ func NewWorkerJob(job *module.TPullJob, replyUrl string, newDbDriver func(string
 
 	return &TWorkerJob{
 		JobID:       job.JobID,
-		sourceDB:    dbSource,
+		DataSource:  dataSource,
 		TBasePlugin: pluginBase.TBasePlugin{TStatus: commonStatus.NewStatus(), IsDebug: job.IsDebug == commonStatus.STYES},
 		SkipHour:    skipHour,
 		Enabled:     job.Status == commonStatus.STENABLED,
 		msgClient:   MsgClient,
 		ReplyURL:    replyUrl,
+		//LoadDBDriverFn: loadDBDriverFn,
 	}, nil
 }
 
-func (wj *TWorkerJob) Run() {
-	//开关
+func (wj *TWorkerJob) Run(driverDir string) {
+
+	dbOp, err := databaseDriver.NewDriverOperation(driverDir, wj.DataSource)
+	if err != nil {
+		logService.LogWriter.WriteError(fmt.Sprintf("初始化数据库操作失败：%s", err.Error()), false)
+		return
+	}
+	defer dbOp.FreeDriver()
 	wj.SetRunning(true)
 	defer wj.SetRunning(false)
 	// 工作状态
 	wj.isWorking = true
-	defer func() {
-		wj.isWorking = false
-		_ = wj.sourceDB.CloseConnect()
-	}()
 	// 启动任务日志
 	var iStartTime int64
-	var err error
+
 	var logErr error
 	var jobLog ctl.PullJobLogControl
 	jobLog.JobID = wj.JobID
@@ -119,7 +115,7 @@ func (wj *TWorkerJob) Run() {
 	if slices.Contains[[]int, int](wj.SkipHour, time.Now().In(loc).Hour()) {
 		return
 	}
-	if err = wj.PullTables(); err != nil {
+	if err = wj.PullTables(dbOp); err != nil {
 		if logErr = jobLog.StopJobLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
 			logService.LogWriter.WriteError(fmt.Sprintf("记录任务错误信息%s失败：%s", err.Error(), logErr.Error()), false)
 		}
@@ -131,7 +127,7 @@ func (wj *TWorkerJob) Run() {
 	}
 }
 
-func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64) (int64, error) {
+func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64, dbOperator *databaseDriver.DriverOperation) (int64, error) {
 	var tbl ctl.TPullTableControl
 	var err error
 	var total int64
@@ -143,43 +139,91 @@ func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64) (int64, error) 
 	}
 
 	strSQL, strVals := tbl.SelectSql, tbl.FilterVal
-	clickHouseClient, err := clickHouseLocal.GetClickHouseDriver(nil)
+	clickHouseClient, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
 	if err != nil {
 		return 0, fmt.Errorf("获取ClickHouse驱动失败：%s", err.Error())
 	}
 
-	clickDB, err := clickHouseSQL.GetClickHouseClient(nil)
+	clickDB, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return 0, err
 	}
 
 	// strVals == "" 全量抽取,数据抽取前先清空目标表，需要将表数据备份
 	if strVals == "" {
-		tx, transErr := clickDB.BeginTransaction()
-		if transErr != nil {
-			return 0, fmt.Errorf("开启事务失败：%s", transErr.Error())
-		}
-		if _, err = tx.Exec(fmt.Sprintf("CREATE TEMPORARY TABLE IF NOT EXISTS temp_%s as select * from %s", tbl.DestTable, tbl.DestTable)); err != nil {
-			return 0, err
-		}
-		if err = clickHouse.ClearTableData(tbl.DestTable); err != nil {
-			_ = tx.Rollback()
-			return 0, fmt.Errorf("清空数据失败：%s", err.Error())
-		}
-		if total, err = wj.sourceDB.PullData(strSQL, strVals, tbl.DestTable, tbl.Buffer, iStartTime, clickHouseClient); err != nil {
-			if _, rollbackErr := tx.Exec(fmt.Sprintf("INSERT "+
-				"INTO %s select * from temp_%s", tbl.DestTable, tbl.DestTable)); rollbackErr != nil {
-				_ = tx.Rollback()
-				return 0, fmt.Errorf("回滚失败：%s", rollbackErr.Error())
+		// 创建临时表
+		strTmpTableName := "temp_" + tbl.DestTable
+		if (clickDB.GetClusterName() == "") || (clickDB.GetClusterName() == "default") {
+			// 单机环境
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("DROP "+
+				"TABLE IF EXISTS %s ", strTmpTableName)); err != nil {
+				return 0, err
 			}
-			_ = tx.Rollback()
-			return 0, fmt.Errorf("读取数据失败：%s", err.Error())
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s as %s WITH NO DATA", strTmpTableName, tbl.DestTable)); err != nil {
+				return 0, err
+			}
+
+		} else {
+			// 集群环境
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("DROP "+
+				"TABLE IF EXISTS %s ON CLUSTER %s", strTmpTableName, clickDB.GetClusterName())); err != nil {
+				return 0, err
+			}
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s ON CLUSTER %s as %s WITH NO DATA", strTmpTableName, clickDB.GetClusterName(), tbl.DestTable)); err != nil {
+				return 0, err
+			}
 		}
-		_ = tx.Commit()
+		// 写入数据到临时表
+
+		hr := dbOperator.PullData(strSQL, strVals, strTmpTableName, tbl.Buffer, iStartTime, clickHouseClient)
+		if hr.HandleCode < 0 {
+			return 0, fmt.Errorf("写入数据失败：%s", hr.HandleMsg)
+		}
+		total = int64(hr.HandleCode)
+		// 清空目标表，将临时表数据插入目标表
+		if (clickDB.GetClusterName() == "") || (clickDB.GetClusterName() == "default") {
+			// 单机环境
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("TRUNCATE "+
+				"TABLE %s", tbl.DestTable)); err != nil {
+				return 0, err
+			}
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("INSERT "+
+				"INTO %s select * from temp_%s", tbl.DestTable, tbl.DestTable)); err != nil {
+				return 0, err
+			}
+		} else {
+			// 集群环境
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("TRUNCATE "+
+				"TABLE %s ON CLUSTER %s", tbl.DestTable, clickDB.GetClusterName())); err != nil {
+				return 0, err
+			}
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("INSERT "+
+				"INTO %s ON CLUSTER %s select * from temp_%s", tbl.DestTable, clickDB.GetClusterName(), tbl.DestTable)); err != nil {
+				return 0, err
+			}
+		}
+		// 删除临时表
+		if (clickDB.GetClusterName() == "") || (clickDB.GetClusterName() == "default") {
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("DROP "+
+				"TABLE IF EXISTS temp_%s", tbl.DestTable)); err != nil {
+				return 0, err
+			}
+		} else {
+			// 集群环境
+			if err = clickDB.ExecuteSQL(fmt.Sprintf("DROP "+
+				"TABLE IF EXISTS temp_%s ON CLUSTER %s", tbl.DestTable, clickDB.GetClusterName())); err != nil {
+				return 0, err
+			}
+		}
+
 	} else {
-		if total, err = wj.sourceDB.PullData(strSQL, strVals, tbl.DestTable, tbl.Buffer, iStartTime, clickHouseClient); err != nil { // .ReadData(&strSQL, &strVals)
-			return 0, fmt.Errorf("读取数据失败：%s", err.Error())
+		// 增量抽取,数据抽取前不清空目标表，直接插入数据,需要更新过滤值
+		hr := dbOperator.PullData(strSQL, strVals, tbl.DestTable, tbl.Buffer, iStartTime, clickHouseClient)
+		if hr.HandleCode < 0 {
+			return 0, fmt.Errorf("读取数据失败：%s", hr.HandleMsg)
 		}
+		total = int64(hr.HandleCode)
+
 		if err = clickHouse.ClearDuplicateData(tbl.DestTable, tbl.FilterCol); err != nil {
 			return -1, err
 		}
@@ -194,7 +238,7 @@ func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64) (int64, error) 
 	return total, nil
 }
 
-func (wj *TWorkerJob) PullTables() error {
+func (wj *TWorkerJob) PullTables(dbOperator *databaseDriver.DriverOperation) error {
 	var tblCtl ctl.TPullTableControl
 	var iStartTime int64
 	var err error
@@ -221,7 +265,7 @@ func (wj *TWorkerJob) PullTables() error {
 			if !wj.IsRunning() {
 				return nil
 			}
-			if tableLog.RecordCount, err = wj.PullTable(tbl.TableID, iStartTime); err != nil {
+			if tableLog.RecordCount, err = wj.PullTable(tbl.TableID, iStartTime, dbOperator); err != nil {
 				if logErr := tableLog.StopTableLog(iStartTime, fmt.Sprintf("拉取数据失败：%s", err.Error())); logErr != nil {
 					logService.LogWriter.WriteError(fmt.Sprintf("记录表[%d]错误信息%s失败：%s", tbl.TableID, err.Error(), logErr.Error()), false)
 				}

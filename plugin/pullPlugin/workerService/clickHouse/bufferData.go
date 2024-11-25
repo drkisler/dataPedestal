@@ -677,45 +677,42 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColIPv6).Nullable()
 	case proto.ColumnTypeDateTime:
-		value, ok := val.(time.Time)
-		if !ok {
-			return errors.Errorf("%v is not the type time.Time", val)
+		value, err := convertToTime(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColDateTime).Append(value)
-		//bd.Data = new(proto.ColDateTime)
 	case proto.ColumnTypeNullable.Sub(proto.ColumnTypeDateTime):
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, ok := val.(time.Time)
-			if !ok {
-				return errors.Errorf("%v is not the type time.Time", val)
+			value, err := convertToTime(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.NewNullable[time.Time](value))
 		}
-		//bd.Data = new(proto.ColDateTime).Nullable()
 	case proto.ColumnTypeDateTime64:
-		value, ok := val.(time.Time)
-		if !ok {
-			return errors.Errorf("%v is not the type time.Time", val)
+		value, err := convertToTime(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColDateTime64).Append(value)
-		//bd.Data = new(proto.ColDateTime64).WithPrecision(proto.PrecisionMicro)
 	case proto.ColumnTypeNullable.Sub(proto.ColumnTypeDateTime64):
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, ok := val.(time.Time)
-			if !ok {
-				return errors.Errorf("%v is not the type time.Time", val)
+			value, err := convertToTime(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.NewNullable[time.Time](value))
 		}
 		//bd.Data = proto.NewColNullable[time.Time](new(proto.ColDateTime64).WithPrecision(proto.PrecisionMicro))
 	case proto.ColumnTypeDate:
-		value, ok := val.(time.Time)
-		if !ok {
-			return errors.Errorf("%v is not the type time.Time", val)
+		value, err := convertToTime(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColDate).Append(value)
 		//bd.Data = new(proto.ColDate)
@@ -723,18 +720,18 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, ok := val.(time.Time)
-			if !ok {
-				return errors.Errorf("%v is not the type time.Time", val)
+			value, err := convertToTime(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.NewNullable[time.Time](value))
 		}
 
 		//bd.Data = new(proto.ColDate).Nullable()
 	case proto.ColumnTypeDate32:
-		value, ok := val.(time.Time)
-		if !ok {
-			return errors.Errorf("%v is not the type time.Time", val)
+		value, err := convertToTime(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColDate32).Append(value)
 		//bd.Data = new(proto.ColDate32)
@@ -742,9 +739,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, ok := val.(time.Time)
-			if !ok {
-				return errors.Errorf("%v is not the type time.Time", val)
+			value, err := convertToTime(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.NewNullable[time.Time](value))
 		}
@@ -1104,4 +1101,56 @@ func (bd *TBufferData) Reset() {
 	case proto.ColumnTypeInterval:
 		bd.Data.(*proto.ColInterval).Reset()
 	}
+}
+
+func convertToTime(val interface{}) (time.Time, error) {
+	// 首先尝试类型断言
+	if timeVal, ok := val.(time.Time); ok {
+		return timeVal, nil
+	}
+	// 尝试多种常见的时间格式
+	layouts := []string{
+		"2006-01-02 15:04:05.999999", // 微秒格式
+		"2006-01-02 15:04:05.9999",   // 4位小数秒
+		"2006-01-02 15:04:05.999",    // 毫秒格式
+		time.RFC3339Nano,             // 2006-01-02T15:04:05.999999999Z07:00
+		time.RFC3339,                 // 2006-01-02T15:04:05Z07:00
+		"2006-01-02 15:04:05",        // 标准日期时间格式
+		"2006-01-02",                 // 仅日期格式
+		time.RFC822,                  // 02 Jan 06 15:04 MST
+		time.RFC850,                  // Monday, 02-Jan-06 15:04:05 MST
+	}
+	// 尝试从字符串转换
+	if strVal, ok := val.(string); ok {
+
+		for _, layout := range layouts {
+			if t, err := time.Parse(layout, strVal); err == nil {
+				return t, nil
+			}
+		}
+		return time.Time{}, errors.Errorf("无法将字符串 '%s' 解析为时间格式", strVal)
+	}
+
+	// 尝试从 []uint8 ([]byte) 转换
+	if byteVal, ok := val.([]uint8); ok {
+		strVal := string(byteVal)
+		for _, layout := range layouts {
+			if t, err := time.Parse(layout, strVal); err == nil {
+				return t, nil
+			}
+		}
+		return time.Time{}, errors.Errorf("无法将 []uint8 '%s' 解析为时间格式", strVal)
+	}
+
+	// 尝试从 Unix 时间戳转换
+	switch v := val.(type) {
+	case int64:
+		return time.Unix(v, 0), nil
+	case int:
+		return time.Unix(int64(v), 0), nil
+	case float64:
+		return time.Unix(int64(v), 0), nil
+	}
+
+	return time.Time{}, errors.Errorf("不支持将类型 %T 转换为 time.Time", val)
 }
