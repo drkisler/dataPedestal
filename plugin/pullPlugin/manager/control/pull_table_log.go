@@ -7,6 +7,7 @@ import (
 	"github.com/drkisler/dataPedestal/common/pullJob"
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	"github.com/vmihailenco/msgpack/v5"
 	"sync"
 	"time"
 )
@@ -141,7 +142,11 @@ func (p *PullTableLogControl) QueryTableLogs() *response.TResponse {
 	for _, log := range logs {
 		resultData = append(resultData, *ToCommonPullTableLog(&log))
 	}
-	result.ArrData = resultData
+	var arrData []byte
+	if arrData, err = msgpack.Marshal(resultData); err != nil {
+		return response.Failure(err.Error())
+	}
+	result.ArrData = arrData
 	result.Total = pgeBuffer.Total
 
 	return response.Success(&result)

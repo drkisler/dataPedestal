@@ -1,0 +1,42 @@
+{
+  "test_configs": {
+    "default": {
+      "is_debug": false,
+      "server_port": 8904,
+      "plugin_name": "pullData",
+      "db_connection": "user=postgres password=InfoC0re host=192.168.110.130 port=5432 dbname=postgres sslmode=disable pool_max_conns=10 schema=enjoyor",
+      "clickhouse_cfg": "host=192.168.110.129:9000 user=default password=Enjoy0r dbname=default cluster=default",
+      "db_driver_dir": "/home/kisler/go/output/host/dbDriver",
+      "host_reply_url": "ipc:///tmp/ReqRep.ipc",
+      "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
+      "host_pub_url": "ipc:///tmp/PubSub.ipc"
+    },
+  },
+
+  "test_operations": {
+    "getSourceTables": {
+      "user_id": 1,
+      "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
+      "params": {
+        "page_size": 50,
+        "page_index": 1,
+        "job_name": "测试",
+      }
+    },
+    "checkJobTable": {
+      "user_id": 1,
+      "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
+      "params": {
+        "job_name": "测试",
+        "table_id": 1,
+      }
+    },
+    "getTableScript": {
+      "user_id": 1,
+      "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
+      "params": {
+        "source_table": "CASE"
+      }
+    }
+  }
+}

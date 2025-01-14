@@ -10,6 +10,7 @@ import (
 	"github.com/drkisler/dataPedestal/host/module"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/gin-gonic/gin"
+	"github.com/vmihailenco/msgpack/v5"
 	"strings"
 )
 
@@ -126,6 +127,11 @@ func PluginApi(ctx *gin.Context) {
 		ginContext.Reply(response.Failure(err.Error()))
 		return
 	}
+	if userID == 0 {
+		logService.LogWriter.WriteError("PluginApi check request error: user id is 0", false)
+		ginContext.Reply(response.Failure("user id is 0"))
+		return
+	}
 	plugin.OperatorID, plugin.OperatorCode = userID, userCode
 	strUUID := ctx.Param("uuid")
 	if strUUID == "" {
@@ -146,6 +152,18 @@ func PluginApi(ctx *gin.Context) {
 	operate.Params = params
 
 	result := plugin.CallPluginAPI(&operate)
+
+	if result.Data != nil {
+		if result.Data.Total > 0 {
+			var arrData interface{}
+			if err = msgpack.Unmarshal(result.Data.ArrData.([]byte), &arrData); err != nil {
+				ginContext.Reply(response.Failure("unmarshal data error: " + err.Error()))
+				return
+			}
+			result.Data.ArrData = arrData
+		}
+	}
+
 	if IsDebug {
 		strJson, _ := json.Marshal(result)
 		logService.LogWriter.WriteInfo(fmt.Sprintf("PluginApi %s %s %s %s", plugin.PluginUUID, plugin.OperatorCode, api, strJson), false)

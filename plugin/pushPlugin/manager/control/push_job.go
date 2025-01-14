@@ -6,6 +6,7 @@ import (
 	"github.com/drkisler/dataPedestal/common/pageBuffer"
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/module"
+	"github.com/vmihailenco/msgpack/v5"
 	"slices"
 	"sync"
 )
@@ -29,6 +30,7 @@ func ParsePushJobControl(data map[string]any) (*TPushJobControl, error) {
 		return nil, err
 	}
 	result.UserID = result.OperatorID*/
+
 	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
 		return nil, err
 	}
@@ -119,14 +121,14 @@ func (job *TPushJobControl) GetJobs(onlineIDs []int32) *response.TResponse {
 		jobPageBuffer.Store(job.OperatorID, pageBuffer.NewPageBuffer(job.OperatorID, job.ToString(), int64(job.PageSize), ids))
 	}
 	value, _ = jobPageBuffer.Load(job.OperatorID)
-	pageBuffer := value.(pageBuffer.PageBuffer)
-	if pageBuffer.Total == 0 {
+	pageBuff := value.(pageBuffer.PageBuffer)
+	if pageBuff.Total == 0 {
 		result.Total = 0
 		result.ArrData = nil
 		return response.Success(&result)
 	}
 
-	ids, err := pageBuffer.GetPageIDs(int64(job.PageIndex - 1))
+	ids, err := pageBuff.GetPageIDs(int64(job.PageIndex - 1))
 	if err != nil {
 		return response.Failure(err.Error())
 	}
@@ -141,8 +143,12 @@ func (job *TPushJobControl) GetJobs(onlineIDs []int32) *response.TResponse {
 			jobs[iIndex].LoadStatus = "loaded"
 		}
 	}
-	result.ArrData = jobs
-	result.Total = pageBuffer.Total
+	var arrData []byte
+	if arrData, err = msgpack.Marshal(jobs); err != nil {
+		return response.Failure(err.Error())
+	}
+	result.ArrData = arrData
+	result.Total = pageBuff.Total
 	return response.Success(&result)
 }
 

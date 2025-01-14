@@ -6,6 +6,7 @@ import (
 	"github.com/drkisler/dataPedestal/common/pageBuffer"
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	"github.com/vmihailenco/msgpack/v5"
 	"slices"
 	"sync"
 )
@@ -136,8 +137,12 @@ func (job *TPullJobControl) GetJobs(onlineIDs []int32) *response.TResponse {
 			jobs[iIndex].LoadStatus = "loaded"
 		}
 	}
-	result.ArrData = jobs
 
+	var arrData []byte
+	if arrData, err = msgpack.Marshal(jobs); err != nil {
+		return response.Failure(err.Error())
+	}
+	result.ArrData = arrData
 	result.Total = pgeBuffer.Total
 	return response.Success(&result)
 }

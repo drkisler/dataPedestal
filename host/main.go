@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/genService"
 	"github.com/drkisler/dataPedestal/common/plugins"
-	"github.com/drkisler/dataPedestal/common/pullJob"
-	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/dataPedestal/host/service"
 	"github.com/drkisler/dataPedestal/initializers"
@@ -22,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -77,22 +76,23 @@ func createAndStartServ() {
 	go func() {
 		_ = srv.ListenAndServe()
 	}()
+	control.RunPlugins()
+
 	logService.LogWriter.WriteInfo(fmt.Sprintf("插件托管服务启动成功，监听端口：%d", initializers.HostConfig.ServicePort), true)
 	quit := make(chan os.Signal)
-	signal.Notify(quit, os.Interrupt)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	control.StopPlugins()
 	_ = srv.Shutdown(ctx)
-	logService.LogWriter.WriteInfo(fmt.Sprintf("插件托管服务已停止"), true)
 }
 func main() {
-	//gob.Register([]common.TLogInfo{})
 	gob.Register(plugins.TPluginOperate{})
-	gob.Register([]pullJob.TPullJob{})
-	gob.Register([]pullJob.TPullTable{})
-	gob.Register([]tableInfo.ColumnInfo{})
-	gob.Register([]tableInfo.TableInfo{})
+	//gob.Register([]pullJob.TPullJob{})
+	//gob.Register([]pullJob.TPullTable{})
+	//gob.Register([]tableInfo.ColumnInfo{})
+	//gob.Register([]tableInfo.TableInfo{})
 	file, err := os.Executable()
 	if err != nil {
 		fmt.Printf("获取可执行文件路径失败：%s", err.Error())
@@ -180,10 +180,6 @@ func main() {
 	go service.PublishServer.Start()
 	defer service.PublishServer.Stop()
 	// endregion
-	// region 自动启动相关插件
-	control.RunPlugins()
-	defer control.StopPlugins()
-	// endregion
 
 	// region 启动系统服务
 	srv, err := daemon.New(managerName, serverDesc, daemon.SystemDaemon)
@@ -199,4 +195,6 @@ func main() {
 	}
 	//logService.LogWriter.WriteInfo(fmt.Sprintf("启动系统服务成功：%s", status), true)
 	// endregion
+
+	logService.LogWriter.WriteInfo(fmt.Sprintf("插件托管服务已停止"), true)
 }

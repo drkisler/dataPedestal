@@ -7,6 +7,7 @@ import (
 
 type PluginImplement struct {
 	Impl IPlugin
+	//Codec *MsgpackCodec
 }
 
 func (imp *PluginImplement) Server(*plugin.MuxBroker) (interface{}, error) {

@@ -14,6 +14,7 @@ import (
 var once sync.Once
 var clickHouseClient *TClickHouseSQL = nil
 
+type RowsHandler func(*sql.Rows) error
 type TWriteError func(info string, printConsole bool)
 type TConnOption struct {
 	Host     string `json:"host"`
@@ -75,7 +76,7 @@ func (client *TClickHouseSQL) createConn() (*sql.DB, error) {
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60,
-			"keep_alive_timeout": 60, // 添加keep-alive超时设置
+			//"keep_alive_timeout": 60, // 添加keep-alive超时设置
 		},
 		DialTimeout: time.Second * 30,
 		Compression: &clickhouse.Compression{
@@ -87,7 +88,7 @@ func (client *TClickHouseSQL) createConn() (*sql.DB, error) {
 	})
 	conn.SetMaxIdleConns(5)
 	conn.SetMaxOpenConns(10)
-	conn.SetConnMaxLifetime(2 * time.Second)
+	conn.SetConnMaxLifetime(20 * time.Minute)
 	if err := conn.Ping(); err != nil {
 		return nil, err
 	}
@@ -113,21 +114,32 @@ func (client *TClickHouseSQL) ExecuteSQL(query string, args ...interface{}) erro
 	defer func() {
 		_ = conn.Close()
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	_, err = conn.ExecContext(ctx, query, args...)
 	return err
 }
 
-func (client *TClickHouseSQL) QuerySQL(query string, args ...interface{}) (*sql.Rows, error) {
+func (client *TClickHouseSQL) QuerySQL(query string, handler RowsHandler, args ...interface{}) error {
 	conn, err := client.createConn()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() {
 		_ = conn.Close()
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	return conn.QueryContext(ctx, query, args...)
+	rows, err := conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		_ = conn.Close()
+		return err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	if err = handler(rows); err != nil {
+		return err
+	}
+	return rows.Err()
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// TPushJobLog 存储用
 type TPushJobLog struct {
 	JobID     int32
 	StartTime int64

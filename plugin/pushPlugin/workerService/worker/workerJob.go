@@ -1,6 +1,7 @@
-package workerService
+package worker
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
 	"github.com/drkisler/dataPedestal/common/commonStatus"
@@ -147,29 +148,22 @@ func (wj *TWorkerJob) PushTable(tableID int32, dbOperator *databaseDriver.Driver
 	}
 	strInsertSql := matches[1]
 	strSelectSql := matches[2]
-
-	//strings.TrimSpace(matches[1]), strings.TrimSpace(matches[2])
-
 	client, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return 0, fmt.Errorf("获取ClickHouse客户端失败：%s", err.Error())
 	}
-	rows, err := client.QuerySQL(strSelectSql, tbl.LastRun)
-	if err != nil {
+	if err = client.QuerySQL(strSelectSql,
+		func(rows *sql.Rows) error {
+			hr := dbOperator.PushData(strInsertSql, tbl.Buffer, rows)
+			if hr.HandleCode < 0 {
+				return fmt.Errorf("数据写入失败：%s", hr.HandleMsg)
+			}
+			total = int64(hr.HandleCode)
+			return nil
+		},
+		tbl.LastRun); err != nil {
 		return 0, err
 	}
-
-	hr := dbOperator.PushData(strInsertSql, tbl.Buffer, rows)
-	if hr.HandleCode < 0 {
-		return 0, fmt.Errorf("数据写入失败：%s", hr.HandleMsg)
-	}
-	total = int64(hr.HandleCode)
-
-	/*
-		if total, err = wj.workerJob.WriteData(tbl.TPushTable.TableCode, tbl.Buffer, rows); err != nil {
-			return 0, fmt.Errorf("写入数据失败：%s", err.Error())
-		}
-	*/
 	return total, nil
 }
 

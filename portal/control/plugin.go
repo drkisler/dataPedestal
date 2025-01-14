@@ -67,6 +67,12 @@ func (c *TPluginControl) DeletePlugin() *response.TResponse {
 
 func (c *TPluginControl) PublishPlugin(hostInfo *TActiveHost) *response.TResponse {
 	var err error
+	if err = c.InitByUUID(); err != nil {
+		return response.Failure(err.Error())
+	}
+	if c.PluginName == "" {
+		return response.Failure("Plugin name is empty")
+	}
 	filePath := genService.GenFilePath(initializers.PortalCfg.PluginDir,
 		c.PluginUUID, c.PluginFileName)
 	// 获取插件序列号

@@ -94,7 +94,7 @@ func (pj *TPullJob) InitJobByName() error {
 		cnt++
 	}
 	if cnt == 0 {
-		return fmt.Errorf("job_name %s不存在", pj.JobName)
+		return fmt.Errorf(" user_id %d, job_name %s不存在", pj.JobID, pj.JobName)
 	}
 	return nil
 }
@@ -135,6 +135,10 @@ func (pj *TPullJob) DeleteJob() error {
 			"from %s.pull_table where job_id= $1 ", dbs.GetSchema()),
 		fmt.Sprintf("delete "+
 			"from %s.pull_job where job_id= $1 ", dbs.GetSchema()),
+		fmt.Sprintf("delete "+
+			"from %s.pull_job_log where job_id= $1 ", dbs.GetSchema()),
+		fmt.Sprintf("delete "+
+			"from %s.pull_table_log where job_id= $1 ", dbs.GetSchema()),
 	}
 	for _, sql := range deleteSQLs {
 		if _, err = tx.Exec(ctx, sql, pj.JobID); err != nil {

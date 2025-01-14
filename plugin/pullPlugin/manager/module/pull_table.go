@@ -153,10 +153,37 @@ func (pt *TPullTable) DeleteTable() error {
 	if err != nil {
 		return err
 	}
+	ctx := context.Background()
+	conn, err := dbs.GetConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	deleteSQLs := []string{
+		fmt.Sprintf("delete "+
+			"from %s.pull_table where job_id= $1 and table_id= $2 ", dbs.GetSchema()),
+		fmt.Sprintf("delete "+
+			"from %s.pull_table_log where job_id= $1 and table_id= $2 ", dbs.GetSchema()),
+	}
+	for _, sql := range deleteSQLs {
+		if _, err = tx.Exec(ctx, sql, pt.JobID, pt.TableID); err != nil {
+			return err // 发生错误则返回
+		}
+	}
 
-	strSQL := fmt.Sprintf("delete "+
-		"from %s.pull_table where job_id=$1 and table_id= $2 ", dbs.GetSchema())
-	return dbs.ExecuteSQL(context.Background(), strSQL, pt.JobID, pt.TableID)
+	if err = tx.Commit(ctx); err != nil {
+		return err // 提交失败
+	}
+	return nil
 }
 
 func (pt *TPullTable) SetTableStatus() error {

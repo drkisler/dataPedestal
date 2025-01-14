@@ -85,6 +85,10 @@ func NewPlugin(serialNumber, pluginFile string) (*TPluginRequester, error) {
 			//grpc.WithTimeout(30 * time.Second),
 			//grpc.WithBlock(),
 		},
+		//AllowedProtocols: []plugin.Protocol{
+		//	plugin.ProtocolGRPC,
+		//},
+		//Managed: true,
 	})
 	rpcClient, err := client.Client()
 	if err != nil {
@@ -116,9 +120,9 @@ func IndexPlugin(UUID, pluginFile string) (*TPluginRequester, error) {
 }
 
 func StopPlugins() {
-	for _, item := range pluginList {
-		item.ImpPlugin.Stop()
-		item.Close()
+	for index := range pluginList {
+		pluginList[index].ImpPlugin.Stop()
+		pluginList[index].Close()
 	}
 }
 

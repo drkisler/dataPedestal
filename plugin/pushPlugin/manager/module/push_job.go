@@ -92,7 +92,7 @@ func (pj *TPushJob) InitJobByName() error {
 		cnt++
 	}
 	if cnt == 0 {
-		return fmt.Errorf("JobName %s不存在", pj.JobName)
+		return fmt.Errorf(" userID (%d), JobName (%s) 不存在", pj.UserID, pj.JobName)
 	}
 	return nil
 }
@@ -117,10 +117,42 @@ func (pj *TPushJob) DeleteJob() error {
 	if err != nil {
 		return err
 	}
+	ctx := context.Background()
+	conn, err := dbs.GetConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	deleteSQLs := []string{
+		fmt.Sprintf("delete "+
+			"from %s.push_table where job_id= $1 ", dbs.GetSchema()),
+		fmt.Sprintf("delete "+
+			"from %s.push_job where job_id= $1 ", dbs.GetSchema()),
+		fmt.Sprintf("delete "+
+			"from %s.push_job_log where job_id= $1 ", dbs.GetSchema()),
+		fmt.Sprintf("delete "+
+			"from %s.push_table_log where job_id= $1 ", dbs.GetSchema()),
+	}
+	for _, sql := range deleteSQLs {
+		if _, err = tx.Exec(ctx, sql, pj.JobID); err != nil {
+			return err // 发生错误则返回
+		}
+	}
 
-	strSQL := fmt.Sprintf("delete "+
-		"from %s.push_job where job_id= $1 ", dbs.GetSchema())
-	return dbs.ExecuteSQL(context.Background(), strSQL, pj.JobID)
+	if err = tx.Commit(ctx); err != nil {
+		return err // 提交失败
+	}
+	return nil
+
 }
 
 func (pj *TPushJob) GetJobs(ids *string) ([]pushJob.TPushJob, error) {

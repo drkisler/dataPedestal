@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/enMap"
 	"github.com/drkisler/dataPedestal/common/pageBuffer"
+	"github.com/drkisler/dataPedestal/common/pullJob"
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/module"
+	"github.com/vmihailenco/msgpack/v5"
 	"sync"
 )
 
@@ -73,9 +75,16 @@ func (pc *TPullTableControl) QueryTables() *response.TResponse {
 	if err != nil {
 		return response.Failure(err.Error())
 	}
-	if result.ArrData, err = pc.TPullTable.GetTables(ids); err != nil {
+	var resultData []pullJob.TPullTable
+	if resultData, err = pc.TPullTable.GetTables(ids); err != nil {
 		return response.Failure(err.Error())
 	}
+
+	var arrData []byte
+	if arrData, err = msgpack.Marshal(resultData); err != nil {
+		return response.Failure(err.Error())
+	}
+	result.ArrData = arrData
 	result.Total = pgeBuffer.Total
 	return response.Success(&result)
 }

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/license"
 	"github.com/drkisler/dataPedestal/common/plugins"
-	"github.com/drkisler/dataPedestal/common/pullJob"
-	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/service"
 	"github.com/hashicorp/go-plugin"
 	"log"
@@ -18,11 +16,6 @@ import (
 func main() {
 	// 注册gob序列化类型
 	gob.Register(plugins.TPluginOperate{})
-	gob.Register([]pullJob.TPullJob{})
-	gob.Register([]pullJob.TPullTable{})
-	gob.Register([]tableInfo.ColumnInfo{})
-	gob.Register([]tableInfo.TableInfo{})
-	// license校验
 	file, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
@@ -160,7 +153,9 @@ func main() {
 		MagicCookieValue: service.SerialNumber,
 	}
 	pluginMap := map[string]plugin.Plugin{
-		service.SerialNumber: &plugins.PluginImplement{Impl: service.PluginServ},
+		service.SerialNumber: &plugins.PluginImplement{
+			Impl: service.PluginServ,
+		},
 	}
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,

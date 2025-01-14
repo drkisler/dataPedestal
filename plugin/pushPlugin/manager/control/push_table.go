@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/enMap"
 	"github.com/drkisler/dataPedestal/common/pageBuffer"
+	"github.com/drkisler/dataPedestal/common/pushJob"
 	"github.com/drkisler/dataPedestal/common/response"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/module"
+	"github.com/vmihailenco/msgpack/v5"
 	"sync"
 )
 
@@ -57,7 +59,7 @@ func (pc *TPushTableControl) GetSourceTableDDL() *response.TResponse {
 
 // fmt.Sprintf("%s:%s", pt.TableCode, pt.TableName)
 func (pc *TPushTableControl) ToString() string {
-	return fmt.Sprintf("pageSize:%d,tableCode:%s,TableName:%s", pc.PageSize, pc.TableCode, pc.SourceTable)
+	return fmt.Sprintf("pageSize:%d,tableCode:%s,TableName:%s", pc.PageSize, pc.DestTable, pc.SourceTable)
 }
 
 func (pc *TPushTableControl) QueryTables() *response.TResponse {
@@ -82,22 +84,30 @@ func (pc *TPushTableControl) QueryTables() *response.TResponse {
 	if err != nil {
 		return response.Failure(err.Error())
 	}
-	if result.ArrData, err = pc.TPushTable.GetTables(ids); err != nil {
+	var resultData []pushJob.TPushTable
+	if resultData, err = pc.TPushTable.GetTables(ids); err != nil {
 		return response.Failure(err.Error())
 	}
+	var arrData []byte
+	if arrData, err = msgpack.Marshal(resultData); err != nil {
+		return response.Failure(err.Error())
+	}
+	result.ArrData = arrData
 	result.Total = pgeBuffer.Total
 
 	return response.Success(&result)
 }
-func (pc *TPushTableControl) SetSourceUpdated() *response.TResponse {
-	var err error
-	PushTable := pc.TPushTable
-	if err = PushTable.SetSourceUpdateTime(); err != nil {
-		return response.Failure(err.Error())
-	}
-	return response.Success(nil)
-}
 
+/*
+	func (pc *TPushTableControl) SetSourceUpdated() *response.TResponse {
+		var err error
+		PushTable := pc.TPushTable
+		if err = PushTable.SetSourceUpdateTime(); err != nil {
+			return response.Failure(err.Error())
+		}
+		return response.Success(nil)
+	}
+*/
 func (pc *TPushTableControl) AlterTableStatus() *response.TResponse {
 	var err error
 	PushTable := pc.TPushTable
@@ -118,6 +128,18 @@ func (pc *TPushTableControl) SetLastRun(iStartTime int64) error {
 	return PushTable.SetLastRun(iStartTime)
 }
 
+/*
+	func ParseInsertFields(sql string) (string, error) {
+		// 正则表达式匹配 INSERT INTO 语句中的字段列表
+		re := regexp.MustCompile(`(?i)INSERT\s+INTO\s+\w+\s*\(([^)]+)\)`)
+		matches := re.FindStringSubmatch(sql)
+		if len(matches) < 2 {
+			return "", fmt.Errorf("无法找到插入字段列表")
+		}
+		return matches[1], nil
+
+}
+*/
 func ParsePushTableControl(data map[string]any) (*TPushTableControl, *TPushJob, error) {
 	var err error
 	var result TPushTableControl
@@ -127,13 +149,13 @@ func ParsePushTableControl(data map[string]any) (*TPushTableControl, *TPushJob, 
 	if result.JobName == "" {
 		return nil, nil, fmt.Errorf("require job_name")
 	}
-	if result.OperatorID, err = enMap.GetInt32ValueFromMap("operator_id", data); err != nil {
-		return nil, nil, err
-	}
+	//if result.OperatorID, err = enMap.GetInt32ValueFromMap("operator_id", data); err != nil {
+	//	return nil, nil, err
+	//}
 
 	var job TPushJob
 	job.JobName = result.JobName
-	job.UserID = result.OperatorID
+	job.UserID = data["operator_id"].(int32)
 	if err = job.InitJobByName(); err != nil {
 		return nil, nil, err
 	}
@@ -141,7 +163,7 @@ func ParsePushTableControl(data map[string]any) (*TPushTableControl, *TPushJob, 
 	if result.TableID, err = enMap.GetInt32ValueFromMap("table_id", data); err != nil {
 		return nil, nil, err
 	}
-	if result.TableCode, err = enMap.GetStringValueFromMap("table_code", data); err != nil {
+	if result.DestTable, err = enMap.GetStringValueFromMap("dest_table", data); err != nil {
 		return nil, nil, err
 	}
 	if result.SourceTable, err = enMap.GetStringValueFromMap("source_table", data); err != nil {
@@ -150,7 +172,19 @@ func ParsePushTableControl(data map[string]any) (*TPushTableControl, *TPushJob, 
 	if result.SelectSql, err = enMap.GetStringValueFromMap("select_sql", data); err != nil {
 		return nil, nil, err
 	}
-	if result.SourceUpdated, err = enMap.GetInt64ValueFromMap("source_updated", data); err != nil {
+	/*
+		if result.SelectSql != "" {
+			var cols string
+			if cols, err = ParseInsertFields(result.SelectSql); err != nil {
+				return nil, nil, err
+			}
+			result.InsertCol = cols
+		}
+	*/
+	if result.FilterCol, err = enMap.GetStringValueFromMap("filter_col", data); err != nil {
+		return nil, nil, err
+	}
+	if result.FilterVal, err = enMap.GetStringValueFromMap("filter_val", data); err != nil {
 		return nil, nil, err
 	}
 	if result.KeyCol, err = enMap.GetStringValueFromMap("key_col", data); err != nil {

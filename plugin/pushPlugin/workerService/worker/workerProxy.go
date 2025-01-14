@@ -1,13 +1,15 @@
-package workerService
+package worker
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/commonStatus"
+	"github.com/drkisler/dataPedestal/common/genService"
 	"github.com/drkisler/dataPedestal/common/license"
+	"github.com/drkisler/dataPedestal/common/queryFilter"
 	"github.com/drkisler/dataPedestal/common/tableInfo"
-	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
-	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/clickHouse"
+	ctl "github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/control"
+	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/clickHouse"
 	"github.com/drkisler/dataPedestal/universal/dataSource/module"
 	"github.com/drkisler/dataPedestal/universal/databaseDriver"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
@@ -23,8 +25,6 @@ import (
 
 // TCheckFunc 用于异步在线测试任务和表
 type TCheckFunc = func()
-
-// type TNewWorker = func(connectOption map[string]string, connectBuffer int) (worker.IPullWorker, error)
 
 type TWorkerProxy struct {
 	SignChan  chan int
@@ -48,7 +48,7 @@ func NewWorkerProxy(replyMsgUrl string, dbDriverDir string) (*TWorkerProxy, erro
 	var scheduler gocron.Scheduler
 	var wg sync.WaitGroup
 	var ch = make(chan int)
-	chkChan := make(chan TCheckFunc, 2)
+	chkChan := make(chan TCheckFunc)
 	status := commonStatus.NewStatus()
 	var runJob = make(map[int32]*TWorkerJob)
 	if scheduler, err = gocron.NewScheduler(); err != nil {
@@ -68,7 +68,7 @@ func NewWorkerProxy(replyMsgUrl string, dbDriverDir string) (*TWorkerProxy, erro
 
 /*
 	func SendInfo(info string) {
-		if _, err := msgClient.Send("tcp://192.168.110.129:8902", messager.OperateShowMessage, []byte(info)); err != nil {
+		if _, err := msgClient.Send("tcp://192.168.110.129:8902", message.OperateShowMessage, []byte(info)); err != nil {
 			fmt.Println(err.Error())
 		}
 	}
@@ -102,20 +102,19 @@ func (pw *TWorkerProxy) Start() []error {
 	// 启动scheduler
 	for _, job := range jobs {
 		var workerJob *TWorkerJob
-		var pullJob gocron.Job
+		var pushJob gocron.Job
 		var ds *module.TDataSource
 		if ds, err = job.GetDataSource(); err != nil {
 			logService.LogWriter.WriteError(fmt.Sprintf("get data source failed, jobID:%d, err:%s", job.JobID, err.Error()), false)
 			errs = append(errs, fmt.Errorf("get data source failed, jobID:%d, err:%s", job.JobID, err.Error()))
 			continue
 		}
-
 		if workerJob, err = NewWorkerJob(&job, pw.replyURL, ds); err != nil {
 			logService.LogWriter.WriteError(fmt.Sprintf("create new worker job failed, jobID:%d, err:%s", job.JobID, err.Error()), false)
 			errs = append(errs, fmt.Errorf("create new worker job failed, jobID:%d, err:%s", job.JobID, err.Error()))
 			continue
 		}
-		if pullJob, err = pw.scheduler.NewJob(
+		if pushJob, err = pw.scheduler.NewJob(
 			gocron.CronJob(job.CronExpression, len(strings.Split(job.CronExpression, " ")) > 5),
 			gocron.NewTask(workerJob.Run, pw.DriverDir),
 			gocron.WithSingletonMode(gocron.LimitModeReschedule),
@@ -124,14 +123,13 @@ func (pw *TWorkerProxy) Start() []error {
 			errs = append(errs, fmt.Errorf("create pull job schedule failed, jobID:%d, err:%s", job.JobID, err.Error()))
 			continue
 		}
-		workerJob.JobUUID = pullJob.ID()
+		workerJob.JobUUID = pushJob.ID()
 		pw.jobs[job.JobID] = workerJob
 	}
 	pw.scheduler.Start()
 	pw.status.SetRunning(true)
 	pw.StartCheckPool()
 	return errs
-
 }
 
 // GetOnlineJobID 获取在线任务ID用于前端展示任务状态(online/offline)
@@ -145,7 +143,7 @@ func (pw *TWorkerProxy) GetOnlineJobID() []int32 {
 
 // CheckJob 测试任务运行
 func (pw *TWorkerProxy) CheckJob(userID int32, jobName string) error {
-	var job ctl.TPullJob
+	var job ctl.TPushJob
 	var workerJob *TWorkerJob
 	var err error
 	job.JobName = jobName
@@ -168,7 +166,7 @@ func (pw *TWorkerProxy) CheckJob(userID int32, jobName string) error {
 }
 
 func (pw *TWorkerProxy) CheckJobTable(userID int32, jobName string, tableID int32) error {
-	var job ctl.TPullJob
+	var job ctl.TPushJob
 	var workerJob *TWorkerJob
 
 	var err error
@@ -186,7 +184,7 @@ func (pw *TWorkerProxy) CheckJobTable(userID int32, jobName string, tableID int3
 	}
 	workerJob.SkipHour = []int{}
 	pw.CheckChan <- func() {
-		var tableLog ctl.PullTableLogControl
+		var tableLog ctl.TPushTableLogControl
 		tableLog.JobID = job.JobID
 		tableLog.TableID = tableID
 		dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
@@ -195,23 +193,22 @@ func (pw *TWorkerProxy) CheckJobTable(userID int32, jobName string, tableID int3
 			return
 		}
 		defer dbOp.FreeDriver()
-
 		var iStartTime int64
 		if iStartTime, err = tableLog.StartTableLog(); err != nil {
 			logService.LogWriter.WriteError(fmt.Sprintf("start table log failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
 		}
-		var tableControl ctl.TPullTableControl
-		tableControl.JobID = job.JobID
-		tableControl.TableID = tableID
-		if err = tableControl.SetLastRun(iStartTime); err != nil {
+		var tblInfo ctl.TPushTableControl
+		tblInfo.JobID = job.JobID
+		tblInfo.TableID = tableID
+		if err = tblInfo.SetLastRun(iStartTime); err != nil {
 			_ = tableLog.StopTableLog(iStartTime, err.Error())
 			logService.LogWriter.WriteError(fmt.Sprintf("set last run failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
 		}
-		if tableLog.RecordCount, err = workerJob.PullTable(tableID, iStartTime, dbOp); err != nil {
+		if tableLog.RecordCount, err = workerJob.PushTable(tableID, dbOp); err != nil {
 			_ = tableLog.StopTableLog(iStartTime, err.Error())
-			logService.LogWriter.WriteError(fmt.Sprintf("pull table failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
+			logService.LogWriter.WriteError(fmt.Sprintf("push table failed, jobID:%d, tableID:%d, err:%s", job.JobID, tableID, err.Error()), false)
 			return
 		}
 		_ = tableLog.StopTableLog(iStartTime, "")
@@ -224,7 +221,7 @@ func (pw *TWorkerProxy) OnLineJob(userID int32, jobName string) error {
 	var ok bool
 	var err error
 	var workerJob *TWorkerJob
-	var job ctl.TPullJob
+	var job ctl.TPushJob
 	job.JobName = jobName
 	job.UserID = userID
 	if err = job.InitJobByName(); err != nil {
@@ -243,7 +240,7 @@ func (pw *TWorkerProxy) OnLineJob(userID int32, jobName string) error {
 		}
 		pw.jobs[job.JobID] = workerJob
 	}
-	pullJob, err := pw.scheduler.NewJob(
+	pushJob, err := pw.scheduler.NewJob(
 		gocron.CronJob(job.CronExpression, len(strings.Split(job.CronExpression, " ")) > 5),
 		gocron.NewTask(workerJob.Run, pw.DriverDir),
 		gocron.WithSingletonMode(gocron.LimitModeReschedule),
@@ -251,12 +248,12 @@ func (pw *TWorkerProxy) OnLineJob(userID int32, jobName string) error {
 	if err != nil {
 		return err
 	}
-	pw.jobs[job.JobID].JobUUID = pullJob.ID()
+	pw.jobs[job.JobID].JobUUID = pushJob.ID()
 	return nil
 }
 
 func (pw *TWorkerProxy) CheckJobLoaded(userID int32, jobName string) (bool, error) {
-	var job ctl.TPullJob
+	var job ctl.TPushJob
 	job.JobName = jobName
 	job.UserID = userID
 	if err := job.InitJobByName(); err != nil {
@@ -270,7 +267,7 @@ func (pw *TWorkerProxy) CheckJobLoaded(userID int32, jobName string) (bool, erro
 
 // OffLineJob 下线指定任务
 func (pw *TWorkerProxy) OffLineJob(userID int32, jobName string) error {
-	var job ctl.TPullJob
+	var job ctl.TPushJob
 	job.JobName = jobName
 	job.UserID = userID
 	if err := job.InitJobByName(); err != nil {
@@ -290,6 +287,7 @@ func (pw *TWorkerProxy) OffLineJob(userID int32, jobName string) error {
 	pw.jobs[job.JobID].Enabled = false
 	delete(pw.jobs, job.JobID)
 	return nil
+
 }
 
 // StopScheduler 停止scheduler
@@ -331,7 +329,99 @@ func (pw *TWorkerProxy) GetSourceQuoteFlag(userID int32, dsID int32) (string, er
 	return hr.HandleMsg, nil
 }
 
-func (pw *TWorkerProxy) GetSourceTables(userID int32, dsID int32) ([]tableInfo.TableInfo, error) {
+func (pw *TWorkerProxy) GetSourceTables(_ map[string]string) ([]tableInfo.TableInfo, error) {
+	return clickHouse.GetTableNames()
+}
+
+func (pw *TWorkerProxy) GetTableDDL(tableName string) (*string, error) {
+	return clickHouse.GetTableDDL(tableName)
+}
+
+func (pw *TWorkerProxy) GetTableColumns(_ map[string]string, tableCode *string) ([]tableInfo.ColumnInfo, error) {
+	return clickHouse.GetTableColumns(tableCode)
+}
+
+/*
+// GetSourceTableDDL 获取源表DDL(不是clickhouse的),用于生成目标表
+
+	func (pw *TWorkerProxy) GetSourceTableDDL(tableInfo map[string]string, _ *string) (*string, error) {
+		var sourceTable ctl.TPushTableControl
+		var funcGetIDs = func(tableInfo map[string]string) (int32, int32, error) {
+			strJobID, ok := tableInfo["job_id"]
+			if !ok {
+				return 0, 0, fmt.Errorf("job_id not found")
+			}
+			strTableID, ok := tableInfo["table_id"]
+			if !ok {
+				return 0, 0, fmt.Errorf("table_id not found")
+			}
+			jobID, err := strconv.ParseInt(strJobID, 10, 32)
+			if err != nil {
+				return 0, 0, fmt.Errorf("job_id not int")
+			}
+			tableID, err := strconv.ParseInt(strTableID, 10, 32)
+			if err != nil {
+				return 0, 0, fmt.Errorf("table_id not int")
+			}
+			return int32(jobID), int32(tableID), nil
+		}
+		var err error
+		if sourceTable.JobID, sourceTable.TableID, err = funcGetIDs(tableInfo); err != nil {
+			return nil, err
+		}
+		if err = sourceTable.InitTableByID(); err != nil {
+			return nil, err
+		}
+		var strDDL string
+		strDDL, err = sourceTable.TPushTable.GetSourceTableDDL()
+		if err != nil {
+			return nil, err
+		}
+		return &strDDL, nil
+	}
+*/
+func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
+	return clickHouse.GetConnOptions(), nil
+}
+
+// CheckSQLValid select * from table where id =?
+func (pw *TWorkerProxy) CheckSQLValid(_ map[string]string, sql, filterVal *string) ([]tableInfo.ColumnInfo, error) {
+	var strFilter string
+	var err error
+	if filterVal != nil {
+		strFilter = *filterVal
+	}
+	if !genService.IsSafeSQL(*sql + strFilter) {
+		return nil, fmt.Errorf("unsafe sql")
+	}
+	var arrValues []interface{}
+	var filters []queryFilter.FilterValue
+
+	if strFilter != "" {
+		if filters, err = queryFilter.JSONToFilterValues(&strFilter); err != nil {
+			return nil, err
+		}
+		for _, item := range filters {
+			arrValues = append(arrValues, item.Value)
+		}
+	}
+	return clickHouse.GetSQLColumns(*sql, arrValues...)
+}
+
+func (pw *TWorkerProxy) CheckDestConnect(userID int32, dsID int32) error {
+	ds, err := pw.initDataSource(userID, dsID)
+	if err != nil {
+		return err
+	}
+	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
+	if err != nil {
+		return err
+	}
+	defer dbOp.FreeDriver()
+	return nil
+}
+
+func (pw *TWorkerProxy) GetDestTables(userID int32, dsID int32) ([]tableInfo.TableInfo, error) {
 	ds, err := pw.initDataSource(userID, dsID)
 	if err != nil {
 		return nil, err
@@ -345,161 +435,9 @@ func (pw *TWorkerProxy) GetSourceTables(userID int32, dsID int32) ([]tableInfo.T
 	if hr.HandleCode < 0 {
 		return nil, fmt.Errorf("get tables failed: %s", hr.HandleMsg)
 	}
-	if hr.HandleCode == 0 {
-		return nil, fmt.Errorf("no tables found")
-	}
 	var tables []tableInfo.TableInfo
 	if err = json.Unmarshal([]byte(hr.HandleMsg), &tables); err != nil {
 		return nil, err
 	}
 	return tables, nil
-
 }
-
-func (pw *TWorkerProxy) GetTableColumns(userID int32, dsID int32, tableName string) ([]tableInfo.ColumnInfo, error) {
-	ds, err := pw.initDataSource(userID, dsID)
-	if err != nil {
-		return nil, err
-	}
-	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
-	if err != nil {
-		return nil, err
-	}
-	defer dbOp.FreeDriver()
-	hr := dbOp.GetColumns(tableName)
-	if hr.HandleCode < 0 {
-		return nil, fmt.Errorf("get columns from %s failed: %s", tableName, hr.HandleMsg)
-	}
-	var columns []tableInfo.ColumnInfo
-	if err = json.Unmarshal([]byte(hr.HandleMsg), &columns); err != nil {
-		return nil, err
-	}
-	return columns, nil
-}
-
-func (pw *TWorkerProxy) GetSourceTableDDL(userID int32, dsID int32, tableName string) (*string, error) {
-	ds, err := pw.initDataSource(userID, dsID)
-	if err != nil {
-		return nil, err
-	}
-	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
-	if err != nil {
-		return nil, err
-	}
-	defer dbOp.FreeDriver()
-	hr := dbOp.GetTableDDL(tableName)
-	if hr.HandleCode < 0 {
-		return nil, fmt.Errorf("get table %s ddl failed: %s", tableName, hr.HandleMsg)
-	}
-	var ddl string
-	ddl = hr.HandleMsg
-	return &ddl, nil
-}
-
-func (pw *TWorkerProxy) GenTableScript(userID int32, dsID int32, tableName string) (*string, error) {
-	ds, err := pw.initDataSource(userID, dsID)
-	if err != nil {
-		return nil, err
-	}
-	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
-	if err != nil {
-		return nil, err
-	}
-	defer dbOp.FreeDriver()
-	hr := dbOp.ConvertTableDDL(tableName)
-	if hr.HandleCode < 0 {
-		return nil, fmt.Errorf("convert table %s ddl failed: %s", tableName, hr.HandleMsg)
-	}
-	var ddl string
-	ddl = hr.HandleMsg
-	return &ddl, nil
-}
-
-func (pw *TWorkerProxy) CheckSQLValid(userID int32, dsID int32, strSQL, filterVal string) ([]tableInfo.ColumnInfo, error) {
-	ds, err := pw.initDataSource(userID, dsID)
-	if err != nil {
-		return nil, err
-	}
-	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
-	if err != nil {
-		return nil, err
-	}
-	defer dbOp.FreeDriver()
-	hr := dbOp.CheckSQLValid(strSQL, filterVal)
-	if hr.HandleCode < 0 {
-		return nil, fmt.Errorf("check sql %s %s valid failed: %s", strSQL, filterVal, hr.HandleMsg)
-	}
-	var columns []tableInfo.ColumnInfo
-	if err = json.Unmarshal([]byte(hr.HandleMsg), &columns); err != nil {
-		return nil, err
-	}
-	return columns, nil
-}
-
-func (pw *TWorkerProxy) CheckSourceConnect(dbDriver, connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) error {
-	var ds module.TDataSource
-	ds.DatabaseDriver = dbDriver
-	ds.ConnectString = connectJson
-	ds.MaxIdleTime = int32(maxIdleTime)
-	ds.MaxOpenConnections = int32(maxOpenConnections)
-	ds.ConnMaxLifetime = int32(connMaxLifetime)
-	ds.MaxIdleConnections = int32(maxIdleConnections)
-	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, &ds)
-	if err != nil {
-		return err
-	}
-	defer dbOp.FreeDriver()
-	return nil
-}
-
-/*
-	func (pw *TWorkerProxy) NewSourceConnect(dbDriver, connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) (databaseDriver.IDbDriver, error) {
-		lib, ok := pw.dbDrivers[dbDriver]
-		if !ok {
-			return nil, fmt.Errorf("db driver %s not found", dbDriver)
-		}
-		handle, err := lib.CreateDriver() //   NewConnect(connectJson, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections)
-		if err != nil {
-			lib.Close()
-			return nil, err
-		}
-		lib.OpenConnect(handle, connectJson, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections)
-
-		return connect, nil
-	}
-*/
-func (pw *TWorkerProxy) GetDestTables() ([]tableInfo.TableInfo, error) {
-	return clickHouse.GetTableNames()
-}
-
-/*
-func (pw *TWorkerProxy) LoadDbDriver(ds *module.TDataSource) (lib *databaseDriver.DriverLib, handle C.driver_handle, err error) {
-	driverFileName, ok := pw.dbDrivers[ds.DatabaseDriver]
-	if !ok {
-		return nil, nil, fmt.Errorf("db driver %s not found", ds.DatabaseDriver)
-	}
-	if _, err = os.Stat(driverFileName); os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("db driver file %s not found", ds.DatabaseDriver)
-	}
-	if lib, err = databaseDriver.LoadDriver(pw.dbDrivers[ds.DatabaseDriver]); err != nil {
-		return nil, nil, fmt.Errorf("db driver %s load failed: %s", ds.DatabaseDriver, err.Error())
-	}
-	handle = lib.CreateDriver()
-	if handle == 0 {
-		lib.Close()
-		return nil, nil, fmt.Errorf("db driver %s create driver failed", ds.DatabaseDriver)
-	}
-	hr := lib.OpenConnect(handle, ds.ConnectString,
-		int(ds.MaxIdleTime),
-		int(ds.MaxOpenConnections),
-		int(ds.ConnMaxLifetime),
-		int(ds.MaxIdleConnections))
-	if hr.HandleCode < 0 {
-		lib.DestroyDriver(handle)
-		lib.Close()
-		return nil, nil, fmt.Errorf("db driver %s open connect failed: %s", ds.DatabaseDriver, hr.HandleMsg)
-	}
-	return lib, handle, nil
-
-}
-*/

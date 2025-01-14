@@ -267,7 +267,15 @@ func (driver *TMySQLDriver) PushData(insertSQL string, batch int, rows *sql.Rows
 		"WHERE TABLE_SCHEMA = ? " +
 		"AND TABLE_NAME = ? " +
 		"AND CONSTRAINT_TYPE = 'PRIMARY KEY'"
-	keyRows := driver.Db.QueryRow(strGetTablePrimaryKeySQL, driver.Schema, strTableName)
+	var keyRows *sql.Row
+	if strings.Index(strTableName, ".") > 0 {
+		schema := strTableName[:strings.Index(strTableName, ".")]
+		tableName := strTableName[strings.Index(strTableName, ".")+1:]
+		keyRows = driver.Db.QueryRow(strGetTablePrimaryKeySQL, schema, tableName)
+	} else {
+		keyRows = driver.Db.QueryRow(strGetTablePrimaryKeySQL, driver.Schema, strTableName)
+	}
+	//keyRows = driver.Db.QueryRow(strGetTablePrimaryKeySQL, driver.Schema, strTableName)
 	if keyRows == nil {
 		return -1, fmt.Errorf("获取主键失败")
 	}

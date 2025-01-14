@@ -1,4 +1,4 @@
-package workerService
+package worker
 
 import (
 	"fmt"
