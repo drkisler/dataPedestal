@@ -6,7 +6,12 @@ type TableInfo struct {
 }
 type ColumnInfo struct {
 	ColumnCode string `json:"column_code,omitempty" msgpack:"column_code,omitempty"`
-	ColumnName string `json:"column_name,omitempty" msgpack:"column_name,omitempty"`
+	AliasName  string `json:"alias_name,omitempty" msgpack:"alias_name,omitempty"`
 	IsKey      string `json:"is_key,omitempty" msgpack:"is_key,omitempty"`
 	DataType   string `json:"data_type,omitempty" msgpack:"data_type,omitempty"`
+	MaxLength  int    `json:"max_length,omitempty" msgpack:"max_length,omitempty"`
+	Precision  int    `json:"precision,omitempty" msgpack:"precision,omitempty"`
+	Scale      int    `json:"scale,omitempty" msgpack:"scale,omitempty"`
+	IsNullable string `json:"is_nullable,omitempty" msgpack:"is_nullable,omitempty"`
+	Comment    string `json:"comment,omitempty" msgpack:"comment,omitempty"`
 }

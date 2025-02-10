@@ -15,7 +15,6 @@ import (
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/drkisler/dataPedestal/universal/messager"
 	"github.com/google/uuid"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -139,22 +138,14 @@ func (wj *TWorkerJob) PushTable(tableID int32, dbOperator *databaseDriver.Driver
 	if err != nil {
 		return 0, fmt.Errorf("初始化表ID[%d]失败：%s", tableID, err.Error())
 	}
-	// insert into tableName (col1,col2,...) select col1,col2,... from tableName where lastRun < now() - interval '1' hour
-	re := regexp.MustCompile(`(?i)(insert\s+into\s+[^(]+$[^)]+$)\s*(select\s+.*)`)
-	matches := re.FindStringSubmatch(tbl.SelectSql)
 
-	if len(matches) != 3 {
-		return 0, fmt.Errorf("解析SQL语句失败：%s", tbl.SelectSql)
-	}
-	strInsertSql := matches[1]
-	strSelectSql := matches[2]
 	client, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
 		return 0, fmt.Errorf("获取ClickHouse客户端失败：%s", err.Error())
 	}
-	if err = client.QuerySQL(strSelectSql,
+	if err = client.QuerySQL(tbl.SelectSql,
 		func(rows *sql.Rows) error {
-			hr := dbOperator.PushData(strInsertSql, tbl.Buffer, rows)
+			hr := dbOperator.PushData(tbl.DestTable, tbl.Buffer, rows)
 			if hr.HandleCode < 0 {
 				return fmt.Errorf("数据写入失败：%s", hr.HandleMsg)
 			}

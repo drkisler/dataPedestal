@@ -1,22 +1,20 @@
 package databaseDriver
 
-/*
-#include <stdint.h>
-typedef uintptr_t driver_handle;
-*/
-import "C"
 import (
 	"database/sql"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/universal/dataSource/module"
+	"github.com/drkisler/dataPedestal/universal/databaseDriver/driverInterface"
 	"os"
 	"path/filepath"
 )
 
+// 数据库驱动本平台应用封装，非必须，便于统一使用
+
 type DriverOperation struct {
-	lib    *DriverLib
-	handle C.driver_handle
+	lib *DriverLib
 }
 
 // NewDriverOperation creates a new driver operation instance.dbDriverDir is the full path to the directory where the driver library is located.
@@ -29,62 +27,66 @@ func NewDriverOperation(dbDriverDir string, ds *module.TDataSource) (*DriverOper
 	if err != nil {
 		return nil, err
 	}
-	handle := lib.CreateDriver()
-	if handle == 0 {
+	lib.CreateDriver()
+	if lib.driverHandle == 0 {
 		lib.Close()
 		return nil, fmt.Errorf("db driver %s create driver failed", ds.DatabaseDriver)
 	}
-	hr := lib.OpenConnect(handle, ds.ConnectString,
+	hr := lib.OpenConnect(ds.ConnectString,
 		int(ds.MaxIdleTime),
 		int(ds.MaxOpenConnections),
 		int(ds.ConnMaxLifetime),
 		int(ds.MaxIdleConnections))
 	if hr.HandleCode < 0 {
-		lib.DestroyDriver(handle)
+		lib.DestroyDriver()
 		lib.Close()
 		return nil, fmt.Errorf("db driver %s open connect failed: %s", ds.DatabaseDriver, hr.HandleMsg)
 	}
-	return &DriverOperation{lib: lib, handle: handle}, nil
+	return &DriverOperation{lib: lib}, nil
 }
 
 func (op *DriverOperation) FreeDriver() {
-	op.lib.DestroyDriver(op.handle)
+	op.lib.DestroyDriver()
 	op.lib.Close()
 }
 
-func (op *DriverOperation) GetColumns(tableName string) *HandleResult {
-	return op.lib.GetColumns(op.handle, tableName)
+func (op *DriverOperation) GetColumns(tableName string) *driverInterface.HandleResult {
+	return op.lib.GetColumns(tableName)
 }
 
-func (op *DriverOperation) GetTables() *HandleResult {
-	return op.lib.GetTables(op.handle)
+func (op *DriverOperation) GetTables() *driverInterface.HandleResult {
+	return op.lib.GetTables()
 }
 
-func (op *DriverOperation) CheckSQLValid(strSQL, filterVal string) *HandleResult {
-	return op.lib.CheckSQLValid(op.handle, strSQL, filterVal)
+func (op *DriverOperation) CheckSQLValid(strSQL, filterVal string) *driverInterface.HandleResult {
+	return op.lib.CheckSQLValid(strSQL, filterVal)
 }
 
-func (op *DriverOperation) IsConnected() *HandleResult {
-	return op.lib.IsConnected(op.handle)
+func (op *DriverOperation) IsConnected() *driverInterface.HandleResult {
+	return op.lib.IsConnected()
 }
 
-func (op *DriverOperation) PullData(strSQL, filterVal, destTable string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) *HandleResult {
-	return op.lib.PullData(op.handle, strSQL, filterVal, destTable, batch, iTimestamp, clickClient)
+func (op *DriverOperation) PullData(strSQL, filterVal, destTable string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) *driverInterface.HandleResult {
+	return op.lib.PullData(strSQL, filterVal, destTable, batch, iTimestamp, clickClient)
 }
 
 // PushData strSQL : insert into table_name (col1, col2,...)
-func (op *DriverOperation) PushData(strSQL string, batch int, rows *sql.Rows) *HandleResult {
-	return op.lib.PushData(op.handle, strSQL, batch, rows)
+func (op *DriverOperation) PushData(strSQL string, batch int, rows *sql.Rows) *driverInterface.HandleResult {
+	return op.lib.PushData(strSQL, batch, rows)
 }
 
-func (op *DriverOperation) ConvertTableDDL(tableName string) *HandleResult {
-	return op.lib.ConvertTableDDL(op.handle, tableName)
+func (op *DriverOperation) ConvertToClickHouseDDL(tableName string) *driverInterface.HandleResult {
+	return op.lib.ConvertToClickHouseDDL(tableName)
 }
-
-func (op *DriverOperation) GetTableDDL(tableName string) *HandleResult {
-	return op.lib.GetTableDDL(op.handle, tableName)
+func (op *DriverOperation) ConvertFromClickHouseDDL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
+	return op.lib.ConvertFromClickHouseDDL(tableName, columns)
 }
-
-func (op *DriverOperation) GetQuoteFlag() *HandleResult {
-	return op.lib.GetQuoteFlag(op.handle)
+func (op *DriverOperation) GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
+	return op.lib.GenerateInsertToClickHouseSQL(tableName, columns)
+}
+func (op *DriverOperation) GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
+	return op.lib.GenerateInsertFromClickHouseSQL(tableName, columns)
+}
+func (op *DriverOperation) GetQuoteFlag() *driverInterface.HandleResult {
+	return op.lib.GetQuoteFlag()
 }

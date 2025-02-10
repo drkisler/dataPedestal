@@ -92,8 +92,10 @@ extern uintptr_t CheckSQLValid(driver_handle handle, char* sql, char* filterVal)
 extern uintptr_t IsConnected(driver_handle handle);
 extern uintptr_t PushData(driver_handle handle, char* strSQL, int batch, uintptr_t rowsPtr);
 extern uintptr_t PullData(driver_handle handle, char* strSQL, char* filterVal, char* destTable, int batch, int64_t timestamp, uintptr_t clickClientPtr);
-extern uintptr_t ConvertTableDDL(driver_handle handle, char* tableName);
-extern uintptr_t GetTableDDL(driver_handle handle, char* tableName);
+extern uintptr_t ConvertToClickHouseDDL(driver_handle handle, char* tableName);
+extern uintptr_t ConvertFromClickHouseDDL(driver_handle handle, char* tableName, uintptr_t columns);
+extern uintptr_t GenerateInsertToClickHouseSQL(driver_handle handle, char* tableName, uintptr_t columns);
+extern uintptr_t GenerateInsertFromClickHouseSQL(driver_handle handle, char* tableName, uintptr_t columns);
 extern uintptr_t GetQuoteFlag(driver_handle handle);
 
 #ifdef __cplusplus

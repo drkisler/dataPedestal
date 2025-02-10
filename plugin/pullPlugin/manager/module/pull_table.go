@@ -21,10 +21,10 @@ func (pt *TPullTable) AddTable() (int64, error) {
 	strSQL := fmt.Sprintf("with cet_table as(select table_id from %s.pull_table where job_id=$1), cet_id as "+
 		"(select min(a.table_id)+1 id from (select table_id from cet_table union all select 0) a left join cet_table b on a.table_id+1=b.table_id "+
 		"where b.table_id is null)insert "+
-		"into %s.pull_table(job_id,table_id,table_code,table_name,dest_table,source_ddl,select_sql,filter_col,filter_val,key_col,buffer,status) "+
+		"into %s.pull_table(job_id,table_id,table_code,table_name,dest_table,select_sql,filter_col,filter_val,key_col,buffer,status) "+
 		"select $2,id,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12 "+
 		"from cet_id returning table_id", dbs.GetSchema(), dbs.GetSchema())
-	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.JobID, pt.TableCode, pt.TableName, pt.DestTable, pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
+	rows, err := dbs.QuerySQL(strSQL, pt.JobID, pt.JobID, pt.TableCode, pt.TableName, pt.DestTable, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol, pt.Buffer, pt.Status)
 	if err != nil {
 		return -1, err
 	}
@@ -142,9 +142,9 @@ func (pt *TPullTable) AlterTable() error {
 		return err
 	}
 	strSQL := fmt.Sprintf("update"+
-		" %s.pull_table set table_code=$1,table_name=$2,dest_table=$3,source_ddl=$4,select_sql=$5,filter_col=$6,filter_val=$7,key_col=$8,buffer=$9,status=$10 "+
+		" %s.pull_table set table_code=$1,table_name=$2,dest_table=$3,select_sql=$5,filter_col=$6,filter_val=$7,key_col=$8,buffer=$9,status=$10 "+
 		"where job_id=$11 and table_id= $12 ", dbs.GetSchema())
-	return dbs.ExecuteSQL(context.Background(), strSQL, pt.TableCode, pt.TableName, pt.DestTable, pt.SourceDDL, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol,
+	return dbs.ExecuteSQL(context.Background(), strSQL, pt.TableCode, pt.TableName, pt.DestTable, pt.SelectSql, pt.FilterCol, pt.FilterVal, pt.KeyCol,
 		pt.Buffer, pt.Status, pt.JobID, pt.TableID)
 }
 

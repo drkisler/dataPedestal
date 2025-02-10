@@ -21,7 +21,7 @@ type TPullTable struct {
 	TableCode string `json:"table_code,omitempty" msgpack:"table_code,omitempty"` // 表名
 	TableName string `json:"table_name,omitempty" msgpack:"table_name,omitempty"` // 表中文名
 	DestTable string `json:"dest_table,omitempty" msgpack:"dest_table,omitempty"` // 目标表名
-	SourceDDL string `json:"source_ddl,omitempty" msgpack:"source_ddl,omitempty"` // 源表DDL
+	//SourceDDL string `json:"source_ddl,omitempty" msgpack:"source_ddl,omitempty"` // 源表DDL
 	SelectSql string `json:"select_sql,omitempty" msgpack:"select_sql,omitempty"` // 选择SQL
 	FilterCol string `json:"filter_col,omitempty" msgpack:"filter_col,omitempty"` // 过滤列
 	FilterVal string `json:"filter_val,omitempty" msgpack:"filter_val,omitempty"` // 过滤值

@@ -82,7 +82,7 @@ func (client *TClickHouseSQL) createConn() (*sql.DB, error) {
 		Compression: &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
 		},
-		Debug:                true,
+		Debug:                false,
 		BlockBufferSize:      10,
 		MaxCompressionBuffer: 10240,
 	})

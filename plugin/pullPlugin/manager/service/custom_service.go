@@ -18,20 +18,20 @@ var workerProxy *worker.TWorkerProxy
 func InitPlugin() {
 	PluginServ = CreateMyPullPlugin()
 	operateMap = make(map[string]TPluginFunc)
-	operateMap["deleteTable"] = DeleteTable         //删除抽取任务表,同时删除相关的日志
-	operateMap["addTable"] = AddTable               //添加抽取任务表
-	operateMap["alterTable"] = AlterTable           //修改抽取任务表
-	operateMap["getTables"] = GetPullTables         //获取抽取任务表清单
-	operateMap["setTableStatus"] = SetTableStatus   //设置抽取任务表状态
-	operateMap["getSourceTables"] = GetSourceTables //获取可抽取源表清单
-	operateMap["getDestTables"] = GetDestTables     //获取可写入目标表清单
-	operateMap["getTableColumn"] = GetTableColumns  //获取指定源表字段信息，目标表字段名称与源表字段名称一致，顺序不限
-	operateMap["getTableScript"] = GetTableScript   //获取指定源表的建表脚本，该脚本用于创建目标表，脚本已经经过初步的转换
-	operateMap["checkJobTable"] = CheckJobTable     //测试指定抽取任务表是否正确
-	operateMap["checkSQLValid"] = CheckSQLValid     //测试SQL是否正确，如果正确，并返回SQL字段信息，否则返回错误信息
-	operateMap["clearJobLog"] = ClearJobLog         //清空指定抽取任务日志
-	operateMap["deleteJobLog"] = DeleteJobLog       //删除指定抽取任务指定日志
-	operateMap["queryJobLogs"] = QueryJobLogs       //查询指定抽取任务运行日志
+	operateMap["deleteTable"] = DeleteTable                       //删除抽取任务表,同时删除相关的日志
+	operateMap["addTable"] = AddTable                             //添加抽取任务表
+	operateMap["alterTable"] = AlterTable                         //修改抽取任务表
+	operateMap["getTables"] = GetPullTables                       //获取抽取任务表清单
+	operateMap["setTableStatus"] = SetTableStatus                 //设置抽取任务表状态
+	operateMap["getSourceTables"] = GetSourceTables               //获取可抽取源表清单
+	operateMap["getDestTables"] = GetDestTables                   //获取可写入目标表清单
+	operateMap["getTableColumn"] = GetTableColumns                //获取指定源表字段信息，目标表字段名称与源表字段名称一致，顺序不限
+	operateMap["convertToClickHouseDDL"] = ConvertToClickHouseDDL //获取指定源表的建表脚本，该脚本用于创建目标表，脚本已经经过初步的转换
+	operateMap["checkJobTable"] = CheckJobTable                   //测试指定抽取任务表是否正确
+	operateMap["checkSQLValid"] = CheckSQLValid                   //测试SQL是否正确，如果正确，并返回SQL字段信息，否则返回错误信息
+	operateMap["clearJobLog"] = ClearJobLog                       //清空指定抽取任务日志
+	operateMap["deleteJobLog"] = DeleteJobLog                     //删除指定抽取任务指定日志
+	operateMap["queryJobLogs"] = QueryJobLogs                     //查询指定抽取任务运行日志
 
 	operateMap["addJob"] = AddJob       //添加抽取任务
 	operateMap["alterJob"] = AlterJob   //修改抽取任务
@@ -61,30 +61,34 @@ func DeleteTable(userID int32, params map[string]any) response.TResponse {
 }
 func AddTable(userID int32, params map[string]any) response.TResponse {
 	params["operator_id"] = userID
-	ptc, job, err := ctl.ParsePullTableControl(params)
+	ptc, _, err := ctl.ParsePullTableControl(params)
 	if err != nil {
 		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	var tableDDL *string
-	if tableDDL, err = workerProxy.GetSourceTableDDL(userID, job.DsID, ptc.TableCode); err != nil {
-		return *response.Failure(err.Error())
-	}
-	ptc.SourceDDL = *tableDDL
+	/*
+		var tableDDL *string
+		if tableDDL, err = workerProxy.GetSourceTableDDL(userID, job.DsID, ptc.TableCode); err != nil {
+			return *response.Failure(err.Error())
+		}
+		ptc.SourceDDL = *tableDDL
+	*/
 	return *(ptc.AppendTable())
 }
 func AlterTable(userID int32, params map[string]any) response.TResponse {
 	params["operator_id"] = userID
-	ptc, job, err := ctl.ParsePullTableControl(params)
+	ptc, _, err := ctl.ParsePullTableControl(params)
 	if err != nil {
 		return *response.Failure(err.Error())
 	}
 	ptc.OperatorID = userID
-	var tableDDL *string
-	if tableDDL, err = workerProxy.GetSourceTableDDL(userID, job.DsID, ptc.TableCode); err != nil {
-		return *response.Failure(err.Error())
-	}
-	ptc.SourceDDL = *tableDDL
+	/*
+		var tableDDL *string
+		if tableDDL, err = workerProxy.GetSourceTableDDL(userID, job.DsID, ptc.TableCode); err != nil {
+			return *response.Failure(err.Error())
+		}
+		ptc.SourceDDL = *tableDDL
+	*/
 	return *(ptc.ModifyTable())
 }
 func GetPullTables(userID int32, params map[string]any) response.TResponse {
@@ -172,7 +176,7 @@ func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 	}
 	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(cols))})
 }
-func GetTableScript(userID int32, params map[string]any) response.TResponse {
+func ConvertToClickHouseDDL(userID int32, params map[string]any) response.TResponse {
 	jobName, ok := params["job_name"]
 	if !ok {
 		return *response.Failure("jobName is empty")
@@ -190,7 +194,7 @@ func GetTableScript(userID int32, params map[string]any) response.TResponse {
 		return *response.Failure("tableName is empty")
 	}
 	strTableName := tableName.(string)
-	script, err := workerProxy.GenTableScript(userID, job.DsID, strTableName)
+	script, err := workerProxy.ConvertToClickHouseDDL(userID, job.DsID, strTableName)
 	if err != nil {
 		return *response.Failure(err.Error())
 	}

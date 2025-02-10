@@ -13,13 +13,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
-	"github.com/drkisler/dataPedestal/universal/databaseDriver"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
+	"github.com/drkisler/dataPedestal/universal/databaseDriver/driverInterface"
 	"sync"
 	"unsafe"
 )
 
+// 用于将数据库将数据库驱动封装成C语言的动态库，解决GO语言插件版本不一致的问题
+// go build -buildmode=c-shared -o libs/mysqlDriver.so mysql_driver.go mysql.go
+
 var (
-	drivers                     = make(map[C.driver_handle]databaseDriver.IDbDriver)
+	drivers                     = make(map[C.driver_handle]driverInterface.IDbDriver)
 	driverCount C.driver_handle = 1 // 从1开始，0作为无效句柄
 	mutex       sync.RWMutex
 )
@@ -46,7 +50,7 @@ func DestroyDriver(handle C.driver_handle) {
 
 //export OpenConnect
 func OpenConnect(handle C.driver_handle, connectJson *C.char, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections C.int) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -69,7 +73,7 @@ func OpenConnect(handle C.driver_handle, connectJson *C.char, maxIdleTime, maxOp
 
 //export GetColumns
 func GetColumns(handle C.driver_handle, tableName *C.char) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -93,7 +97,7 @@ func GetColumns(handle C.driver_handle, tableName *C.char) C.uintptr_t {
 
 //export GetTables
 func GetTables(handle C.driver_handle) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -115,7 +119,7 @@ func GetTables(handle C.driver_handle) C.uintptr_t {
 
 //export CheckSQLValid
 func CheckSQLValid(handle C.driver_handle, sql, filterVal *C.char) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -137,7 +141,7 @@ func CheckSQLValid(handle C.driver_handle, sql, filterVal *C.char) C.uintptr_t {
 
 //export IsConnected
 func IsConnected(handle C.driver_handle) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -150,7 +154,7 @@ func IsConnected(handle C.driver_handle) C.uintptr_t {
 
 //export PushData
 func PushData(handle C.driver_handle, strSQL *C.char, batch C.int, rowsPtr C.uintptr_t) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -168,7 +172,7 @@ func PushData(handle C.driver_handle, strSQL *C.char, batch C.int, rowsPtr C.uin
 
 //export PullData
 func PullData(handle C.driver_handle, strSQL, filterVal, destTable *C.char, batch C.int, timestamp C.int64_t, clickClientPtr C.uintptr_t) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -191,15 +195,15 @@ func PullData(handle C.driver_handle, strSQL, filterVal, destTable *C.char, batc
 	return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 }
 
-//export ConvertTableDDL
-func ConvertTableDDL(handle C.driver_handle, tableName *C.char) C.uintptr_t {
-	var result databaseDriver.HandleResult
+//export ConvertToClickHouseDDL
+func ConvertToClickHouseDDL(handle C.driver_handle, tableName *C.char) C.uintptr_t {
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	ddl, err := driver.ConvertTableDDL(C.GoString(tableName))
+	ddl, err := driver.ConvertToClickHouseDDL(C.GoString(tableName))
 	if err != nil {
 		result.HandleFailed(err.Error())
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
@@ -208,26 +212,63 @@ func ConvertTableDDL(handle C.driver_handle, tableName *C.char) C.uintptr_t {
 	return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 }
 
-//export GetTableDDL
-func GetTableDDL(handle C.driver_handle, tableName *C.char) C.uintptr_t {
-	var result databaseDriver.HandleResult
+//export ConvertFromClickHouseDDL
+func ConvertFromClickHouseDDL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t) C.uintptr_t {
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	ddl, err := driver.GetSourceTableDDL(C.GoString(tableName))
+	ptrResult, err := driver.ConvertFromClickHouseDDL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))))
 	if err != nil {
 		result.HandleFailed(err.Error())
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	result.HandleSuccess(0, *ddl)
+
+	result.HandleSuccess(0, *ptrResult)
+	return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+}
+
+//export GenerateInsertToClickHouseSQL
+func GenerateInsertToClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t) C.uintptr_t {
+	var result driverInterface.HandleResult
+	driver, ok := drivers[handle]
+	if !ok {
+		result.HandleFailed("driver not found")
+		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+	}
+	ptrResult, err := driver.GenerateInsertToClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))))
+	if err != nil {
+		result.HandleFailed(err.Error())
+		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+	}
+
+	result.HandleSuccess(0, *ptrResult)
+	return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+}
+
+//export GenerateInsertFromClickHouseSQL
+func GenerateInsertFromClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t) C.uintptr_t {
+	var result driverInterface.HandleResult
+	driver, ok := drivers[handle]
+	if !ok {
+		result.HandleFailed("driver not found")
+		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+	}
+	ptrResult, err := driver.GenerateInsertFromClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))))
+	if err != nil {
+		result.HandleFailed(err.Error())
+		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+	}
+
+	result.HandleSuccess(0, *ptrResult)
 	return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 }
 
 //export GetQuoteFlag
 func GetQuoteFlag(handle C.driver_handle) C.uintptr_t {
-	var result databaseDriver.HandleResult
+	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
@@ -239,5 +280,3 @@ func GetQuoteFlag(handle C.driver_handle) C.uintptr_t {
 }
 
 func main() {}
-
-// go build -buildmode=c-shared -o libs/mysqlDriver.so mysql_driver.go mysql.go

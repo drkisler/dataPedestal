@@ -377,7 +377,7 @@ func (pw *TWorkerProxy) GetTableColumns(userID int32, dsID int32, tableName stri
 	return columns, nil
 }
 
-func (pw *TWorkerProxy) GetSourceTableDDL(userID int32, dsID int32, tableName string) (*string, error) {
+func (pw *TWorkerProxy) ConvertToClickHouseDDL(userID int32, dsID int32, tableName string) (*string, error) {
 	ds, err := pw.initDataSource(userID, dsID)
 	if err != nil {
 		return nil, err
@@ -387,26 +387,7 @@ func (pw *TWorkerProxy) GetSourceTableDDL(userID int32, dsID int32, tableName st
 		return nil, err
 	}
 	defer dbOp.FreeDriver()
-	hr := dbOp.GetTableDDL(tableName)
-	if hr.HandleCode < 0 {
-		return nil, fmt.Errorf("get table %s ddl failed: %s", tableName, hr.HandleMsg)
-	}
-	var ddl string
-	ddl = hr.HandleMsg
-	return &ddl, nil
-}
-
-func (pw *TWorkerProxy) GenTableScript(userID int32, dsID int32, tableName string) (*string, error) {
-	ds, err := pw.initDataSource(userID, dsID)
-	if err != nil {
-		return nil, err
-	}
-	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
-	if err != nil {
-		return nil, err
-	}
-	defer dbOp.FreeDriver()
-	hr := dbOp.ConvertTableDDL(tableName)
+	hr := dbOp.ConvertToClickHouseDDL(tableName)
 	if hr.HandleCode < 0 {
 		return nil, fmt.Errorf("convert table %s ddl failed: %s", tableName, hr.HandleMsg)
 	}
