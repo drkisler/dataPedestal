@@ -231,14 +231,14 @@ func ConvertFromClickHouseDDL(handle C.driver_handle, tableName *C.char, columns
 }
 
 //export GenerateInsertToClickHouseSQL
-func GenerateInsertToClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t) C.uintptr_t {
+func GenerateInsertToClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t, filterCol *C.char) C.uintptr_t {
 	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	ptrResult, err := driver.GenerateInsertToClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))))
+	ptrResult, err := driver.GenerateInsertToClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))), C.GoString(filterCol))
 	if err != nil {
 		result.HandleFailed(err.Error())
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
@@ -249,14 +249,14 @@ func GenerateInsertToClickHouseSQL(handle C.driver_handle, tableName *C.char, co
 }
 
 //export GenerateInsertFromClickHouseSQL
-func GenerateInsertFromClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t) C.uintptr_t {
+func GenerateInsertFromClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t, filterCol *C.char) C.uintptr_t {
 	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	ptrResult, err := driver.GenerateInsertFromClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))))
+	ptrResult, err := driver.GenerateInsertFromClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))), C.GoString(filterCol))
 	if err != nil {
 		result.HandleFailed(err.Error())
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
@@ -279,4 +279,19 @@ func GetQuoteFlag(handle C.driver_handle) C.uintptr_t {
 	return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 }
 
+/*
+//export GetParamSign
+
+	func GetParamSign(handle C.driver_handle) C.uintptr_t {
+		var result driverInterface.HandleResult
+		driver, ok := drivers[handle]
+		if !ok {
+			result.HandleFailed("driver not found")
+			return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+		}
+		paramSign := driver.GetParamSign()
+		result.HandleSuccess(0, paramSign)
+		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+	}
+*/
 func main() {}

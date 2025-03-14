@@ -1,12 +1,15 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/response"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	ctl "github.com/drkisler/dataPedestal/plugin/pullPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pullPlugin/workerService/worker"
 	logService "github.com/drkisler/dataPedestal/universal/logAdmin/service"
 	"github.com/vmihailenco/msgpack/v5"
+	"strconv"
 )
 
 type TPluginFunc func(userID int32, params map[string]any) response.TResponse
@@ -21,17 +24,20 @@ func InitPlugin() {
 	operateMap["deleteTable"] = DeleteTable                       //删除抽取任务表,同时删除相关的日志
 	operateMap["addTable"] = AddTable                             //添加抽取任务表
 	operateMap["alterTable"] = AlterTable                         //修改抽取任务表
-	operateMap["getTables"] = GetPullTables                       //获取抽取任务表清单
+	operateMap["getPullTables"] = GetPullTables                   //获取抽取任务表清单
 	operateMap["setTableStatus"] = SetTableStatus                 //设置抽取任务表状态
 	operateMap["getSourceTables"] = GetSourceTables               //获取可抽取源表清单
 	operateMap["getDestTables"] = GetDestTables                   //获取可写入目标表清单
-	operateMap["getTableColumn"] = GetTableColumns                //获取指定源表字段信息，目标表字段名称与源表字段名称一致，顺序不限
+	operateMap["getSourceTableColumns"] = GetSourceTableColumns   //获取指定源表字段信息，目标表字段名称与源表字段名称一致，顺序不限
+	operateMap["getDestTableColumns"] = GetDestTableColumns       //获取指定目标表字段信息
 	operateMap["convertToClickHouseDDL"] = ConvertToClickHouseDDL //获取指定源表的建表脚本，该脚本用于创建目标表，脚本已经经过初步的转换
-	operateMap["checkJobTable"] = CheckJobTable                   //测试指定抽取任务表是否正确
-	operateMap["checkSQLValid"] = CheckSQLValid                   //测试SQL是否正确，如果正确，并返回SQL字段信息，否则返回错误信息
-	operateMap["clearJobLog"] = ClearJobLog                       //清空指定抽取任务日志
-	operateMap["deleteJobLog"] = DeleteJobLog                     //删除指定抽取任务指定日志
-	operateMap["queryJobLogs"] = QueryJobLogs                     //查询指定抽取任务运行日志
+
+	operateMap["generateInsertToClickHouseSQL"] = GenerateInsertToClickHouseSQL
+	operateMap["checkJobTable"] = CheckJobTable //测试指定抽取任务表是否正确
+	operateMap["checkSQLValid"] = CheckSQLValid //测试SQL是否正确，如果正确，并返回SQL字段信息，否则返回错误信息
+	operateMap["clearJobLog"] = ClearJobLog     //清空指定抽取任务日志
+	operateMap["deleteJobLog"] = DeleteJobLog   //删除指定抽取任务指定日志
+	operateMap["queryJobLogs"] = QueryJobLogs   //查询指定抽取任务运行日志
 
 	operateMap["addJob"] = AddJob       //添加抽取任务
 	operateMap["alterJob"] = AlterJob   //修改抽取任务
@@ -48,7 +54,8 @@ func InitPlugin() {
 	operateMap["queryTableLogs"] = QueryTableLogs //查询指定抽取任务表运行日志
 
 	operateMap["checkSourceConnection"] = CheckSourceConnect //测试源数据库连接是否正确
-	operateMap["getSourceQuoteFlag"] = GetSourceQuoteFlag    //获取源数据库引号标识符
+	operateMap["getDBQuoteFlag"] = GetDBQuoteFlag            //获取源数据库引号标识符
+	//operateMap["getDBParamSign"] = GetDBParamSign            //获取源数据库参数标识符
 }
 func DeleteTable(userID int32, params map[string]any) response.TResponse {
 	params["operator_id"] = userID
@@ -146,7 +153,7 @@ func GetDestTables(_ int32, _ map[string]any) response.TResponse {
 
 	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(tables))})
 }
-func GetTableColumns(userID int32, params map[string]any) response.TResponse {
+func GetSourceTableColumns(userID int32, params map[string]any) response.TResponse {
 	//connectStr, tableName *string
 	strJobName, ok := params["job_name"]
 	if !ok {
@@ -166,7 +173,7 @@ func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 	}
 	strTableName := tableName.(string)
 
-	cols, err := workerProxy.GetTableColumns(userID, job.DsID, strTableName)
+	cols, err := workerProxy.GetSourceTableColumns(userID, job.DsID, strTableName)
 	if err != nil {
 		return *response.Failure(err.Error())
 	}
@@ -176,6 +183,110 @@ func GetTableColumns(userID int32, params map[string]any) response.TResponse {
 	}
 	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(cols))})
 }
+
+func GetDestTableColumns(_ int32, params map[string]any) response.TResponse {
+	tableName, ok := params["table_name"]
+	if !ok {
+		return *response.Failure("tableName is empty")
+	}
+	strTableName := tableName.(string)
+	cols, err := workerProxy.GetDestTableColumns(nil, strTableName)
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+	var arrData []byte
+	if arrData, err = msgpack.Marshal(cols); err != nil {
+		return *response.Failure(err.Error())
+	}
+	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(cols))})
+}
+
+func GenerateInsertToClickHouseSQL(userID int32, params map[string]any) response.TResponse {
+	// 定义必需的参数
+	type requiredParams struct {
+		dsID       int32
+		tableName  string
+		filterCols string
+		columns    []tableInfo.ColumnInfo
+	}
+
+	// 辅助函数：从params中安全地获取并转换值
+	getInt32 := func(key string) (int32, error) {
+		val, ok := params[key]
+		if !ok {
+			return 0, fmt.Errorf("%s is required", key)
+		}
+		sVal, ok := val.(string)
+		if !ok {
+			return 0, fmt.Errorf("%s must be a number", key)
+		}
+		castVal, err := strconv.ParseInt(sVal, 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("%s must be a number", key)
+		}
+		return int32(castVal), nil
+	}
+
+	getString := func(key string) (string, error) {
+		val, ok := params[key]
+		if !ok {
+			return "", fmt.Errorf("%s is required", key)
+		}
+		sVal, ok := val.(string)
+		if !ok {
+			return "", fmt.Errorf("%s must be a string", key)
+		}
+		return sVal, nil
+	}
+
+	// 获取并验证所有必需参数
+	rp := requiredParams{}
+
+	// 获取并转换 ds_id
+	dsID, err := getInt32("ds_id")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+	rp.dsID = dsID
+
+	// 获取表名
+	rp.tableName, err = getString("table_name")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	// 获取过滤列
+	rp.filterCols, err = getString("filter_cols")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	// 获取并解析列信息
+	columnsStr, err := getString("columns")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	if err = json.Unmarshal([]byte(columnsStr), &rp.columns); err != nil {
+		return *response.Failure(fmt.Sprintf("failed to parse columns: %v", err))
+	}
+
+	// 调用工作函数生成SQL
+	sql, err := workerProxy.GenerateInsertToClickHouseSQL(
+		userID,
+		rp.dsID,
+		rp.tableName,
+		rp.columns,
+		rp.filterCols,
+	)
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	return *response.ReturnStr(*sql)
+
+}
+
 func ConvertToClickHouseDDL(userID int32, params map[string]any) response.TResponse {
 	jobName, ok := params["job_name"]
 	if !ok {
@@ -420,18 +531,31 @@ func CheckSourceConnect(_ int32, params map[string]any) response.TResponse {
 	return *response.Success(nil)
 }
 
-func GetSourceQuoteFlag(userID int32, params map[string]any) response.TResponse {
+func GetDBQuoteFlag(userID int32, params map[string]any) response.TResponse {
 	dbDriver, ok := params["ds_id"]
 	if !ok {
 		return *response.Failure("ds_id is empty")
 	}
-	strFlag, err := workerProxy.GetSourceQuoteFlag(userID, int32(dbDriver.(float64)))
+	strFlag, err := workerProxy.GetDBQuoteFlag(userID, int32(dbDriver.(float64)))
 	if err != nil {
 		return *response.Failure(err.Error())
 	}
 	return *response.ReturnStr(strFlag)
 }
 
+/*
+	func GetDBParamSign(userID int32, params map[string]any) response.TResponse {
+		dbDriver, ok := params["ds_id"]
+		if !ok {
+			return *response.Failure("ds_id is empty")
+		}
+		strFlag, err := workerProxy.GetDBParamSign(userID, int32(dbDriver.(float64)))
+		if err != nil {
+			return *response.Failure(err.Error())
+		}
+		return *response.ReturnStr(strFlag)
+	}
+*/
 func checkSQLValid(userID int32, dsID int32, sql, filterVal string) (resp response.TResponse) {
 	defer func() {
 		if err := recover(); err != nil {

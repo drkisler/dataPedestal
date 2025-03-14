@@ -28,6 +28,7 @@ func (pt *TPullTable) AddTable() (int64, error) {
 	if err != nil {
 		return -1, err
 	}
+
 	defer rows.Close()
 	var tableID int64
 	for rows.Next() {

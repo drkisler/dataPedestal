@@ -63,6 +63,7 @@ func GetTableNames() ([]tableInfo.TableInfo, error) {
 	return tables, nil
 }
 
+/*
 func GetTableDDL(tableName string) (*string, error) {
 	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
 	if err != nil {
@@ -95,6 +96,7 @@ func GetTableDDL(tableName string) (*string, error) {
 	}
 	return &ddl, nil
 }
+*/
 
 func GetTableColumns(tableName *string) ([]tableInfo.ColumnInfo, error) {
 	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
@@ -155,24 +157,6 @@ func GetTableColumns(tableName *string) ([]tableInfo.ColumnInfo, error) {
 	return columns, nil
 }
 
-/*
-func ReadData(selectSQL, insertSQL string, BatchSize int, WriteData func(insertSQL string, batch int, data *sql.Rows) (int64, error), args ...any) (int64, error) {
-	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
-	if err != nil {
-		return -1, err
-	}
-	iRows := int64(0)
-	if err = conn.QuerySQL(selectSQL,
-		func(rows *sql.Rows) error {
-			iRows, err = WriteData(insertSQL, BatchSize, rows)
-			return err
-		},
-		args...); err != nil {
-		return -1, err
-	}
-	return iRows, nil
-}
-*/
 // GetSQLColumns 获取SQL语句中的列信息
 func GetSQLColumns(strSQL string, args ...any) ([]tableInfo.ColumnInfo, error) {
 	conn, err := clickHouseSQL.GetClickHouseSQLClient(nil)
@@ -203,6 +187,10 @@ func GetSQLColumns(strSQL string, args ...any) ([]tableInfo.ColumnInfo, error) {
 		return nil, err
 	}
 	return columns, nil
+}
+
+func GetQuoteFlag() string {
+	return "`"
 }
 
 // connOption["host"], connOption["dbname"], connOption["user"], connOption["password"],connOption["cluster"]

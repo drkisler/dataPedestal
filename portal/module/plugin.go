@@ -26,12 +26,14 @@ func (p *TPlugin) PutPlugin() (string, error) {
 		return "", err
 	}
 	p.PluginUUID = uuid.New().String()
+	p.PluginConfig = `{"is_debug": false}`
+	p.RunType = "禁止启动"
 	strSQL := fmt.Sprintf("insert "+
-		"into %s.plugins(plugin_uuid,plugin_name,plugin_type,plugin_desc,plugin_file_name,plugin_config,plugin_version,"+
-		"host_uuid,host_name,host_ip,run_type,user_id)"+
-		"values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", storage.GetSchema())
-	return p.PluginUUID, storage.ExecuteSQL(context.Background(), strSQL, p.PluginUUID, p.PluginName, p.PluginType, p.PluginDesc, p.PluginFileName,
-		p.PluginConfig, p.PluginVersion, p.HostUUID, p.HostName, p.HostIP, p.RunType, p.UserID)
+		"into %s.plugins(plugin_uuid,plugin_name,plugin_type,plugin_desc,plugin_config,plugin_version,"+
+		"run_type,user_id)"+
+		"values($1,$2,$3,$4,$5,$6,$7,$8)", storage.GetSchema())
+	return p.PluginUUID, storage.ExecuteSQL(context.Background(), strSQL, p.PluginUUID, p.PluginName, p.PluginType, p.PluginDesc,
+		p.PluginConfig, p.PluginVersion, p.RunType, p.UserID)
 }
 
 func (p *TPlugin) ResetHost() error {
@@ -79,7 +81,7 @@ func (p *TPlugin) QueryPlugin(pageSize int32, pageIndex int32) ([]TPlugin, int, 
 	var rows pgx.Rows
 	var strSQL string
 	strSQL = fmt.Sprintf("select * "+
-		"from %s.plugins where user_id= $1 ", storage.GetSchema())
+		"from %s.plugins where user_id= $1 order by plugin_uuid", storage.GetSchema())
 	if p.PluginType != "全部插件" {
 		strSQL += fmt.Sprintf("and plugin_type = '%s' ", p.PluginType)
 	}
@@ -87,7 +89,7 @@ func (p *TPlugin) QueryPlugin(pageSize int32, pageIndex int32) ([]TPlugin, int, 
 		strSQL += fmt.Sprintf("and plugin_name like '%%%s%%' ", p.PluginName)
 	}
 	rows, err = storage.QuerySQL(fmt.Sprintf("select user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file_name, plugin_config, plugin_version,host_uuid,host_name,host_ip,run_type "+
-		"from (%s)t limit $2 offset ($3-1)*$4", strSQL), p.UserID, pageSize, pageIndex, pageSize)
+		"from (%s)t limit $2 offset ($3-1)*$4 ", strSQL), p.UserID, pageSize, pageIndex, pageSize)
 
 	if err != nil {
 		return nil, 0, err
@@ -141,12 +143,12 @@ func (p *TPlugin) ModifyPlugin() error {
 	if err != nil {
 		return err
 	}
-	strSQL := fmt.Sprintf("update "+
-		"%s.plugins set plugin_name=$1, plugin_type=$2, plugin_desc=$3, plugin_file_name=$4, plugin_config=$5, plugin_version=$6, host_uuid=$7,host_name=$8,host_ip=$9 ,run_type=$10 "+
-		" where plugin_uuid=$11", storage.GetSchema())
-	return storage.ExecuteSQL(context.Background(), strSQL, p.PluginName, p.PluginType, p.PluginDesc, p.PluginFileName, p.PluginConfig,
-		p.PluginVersion, p.HostUUID, p.HostName, p.HostIP, p.RunType, p.PluginUUID)
 
+	strSQL := fmt.Sprintf("update "+
+		"%s.plugins set plugin_name=$1, plugin_type=$2, plugin_desc=$3,plugin_version=$4"+
+		" where plugin_uuid=$5", storage.GetSchema())
+	return storage.ExecuteSQL(context.Background(), strSQL, p.PluginName, p.PluginType, p.PluginDesc,
+		p.PluginVersion, p.PluginUUID)
 }
 
 func (p *TPlugin) ModifyConfig() error {

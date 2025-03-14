@@ -14,6 +14,7 @@ type TUserControl struct {
 	OperatorCode string
 	PageSize     int32 `json:"page_size,omitempty"`
 	PageIndex    int32 `json:"page_index,omitempty"`
+
 	TUser
 }
 

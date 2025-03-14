@@ -224,7 +224,7 @@ func (wj *TWorkerJob) PullTable(tableID int32, iStartTime int64, dbOperator *dat
 		}
 		total = int64(hr.HandleCode)
 
-		if err = clickHouse.ClearDuplicateData(tbl.DestTable, tbl.FilterCol); err != nil {
+		if err = clickHouse.ClearDuplicateData(tbl.DestTable, tbl.KeyCol); err != nil {
 			return -1, err
 		}
 		tbl.FilterVal, err = clickHouse.GetMaxFilter(tbl.DestTable, &strVals)

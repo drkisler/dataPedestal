@@ -20,10 +20,10 @@ typedef uintptr_t (*push_data_fn)(driver_handle, char*, int, uintptr_t);
 typedef uintptr_t (*pull_data_fn)(driver_handle, char*, char*, char*, int, int64_t, uintptr_t);
 typedef uintptr_t (*convert_to_click_ddl_fn)(driver_handle, char*);
 typedef uintptr_t (*convert_from_click_ddl_fn)(driver_handle, char*, uintptr_t);
-typedef uintptr_t (*generate_insert_to_click_sql_fn)(driver_handle, char*, uintptr_t);
-typedef uintptr_t (*generate_insert_from_click_sql_fn)(driver_handle, char*, uintptr_t);
-
+typedef uintptr_t (*generate_insert_to_click_sql_fn)(driver_handle, char*, uintptr_t, char*);
+typedef uintptr_t (*generate_insert_from_click_sql_fn)(driver_handle, char*, uintptr_t, char*);
 typedef uintptr_t (*get_quote_flag_fn)(driver_handle);
+
 void* load_library(const char* path) {
     void* handle = dlopen(path, RTLD_LAZY);
     if (!handle) {
@@ -97,14 +97,14 @@ uintptr_t call_convert_from_click_ddl(void* fn, driver_handle handle, char* tabl
     return f(handle, tableName,columnsPtr);
 }
 
-uintptr_t call_generate_insert_to_click_sql(void* fn, driver_handle handle, char* tableName,uintptr_t columnsPtr) {
+uintptr_t call_generate_insert_to_click_sql(void* fn, driver_handle handle, char* tableName,uintptr_t columnsPtr,char* filterColumn) {
     generate_insert_to_click_sql_fn f = (generate_insert_to_click_sql_fn)fn;
-    return f(handle, tableName,columnsPtr);
+    return f(handle, tableName,columnsPtr,filterColumn);
 }
 
-uintptr_t call_generate_insert_from_click_sql(void* fn, driver_handle handle, char* tableName,uintptr_t columnsPtr) {
+uintptr_t call_generate_insert_from_click_sql(void* fn, driver_handle handle, char* tableName,uintptr_t columnsPtr,char* filterColumn) {
     generate_insert_from_click_sql_fn f = (generate_insert_from_click_sql_fn)fn;
-    return f(handle, tableName,columnsPtr);
+    return f(handle, tableName,columnsPtr,filterColumn);
 }
 
 uintptr_t call_get_quote_flag(void* fn, driver_handle handle) {
@@ -142,10 +142,9 @@ type DriverLib struct {
 	pullDataFn                        unsafe.Pointer
 	convertToClickDDLFn               unsafe.Pointer
 	convertFromClickDDLFn             unsafe.Pointer
-	GenerateInsertToClickHouseSQLFn   unsafe.Pointer
-	GenerateInsertFromClickHouseSQLFn unsafe.Pointer
-	//getTableDDLFn                     unsafe.Pointer
-	getQuoteFlagFn unsafe.Pointer
+	generateInsertToClickHouseSQLFn   unsafe.Pointer
+	generateInsertFromClickHouseSQLFn unsafe.Pointer
+	getQuoteFlagFn                    unsafe.Pointer
 }
 
 func LoadDriverLib(libPath string) (*DriverLib, error) {
@@ -175,9 +174,8 @@ func LoadDriverLib(libPath string) (*DriverLib, error) {
 		{"PullData", &lib.pullDataFn},
 		{"ConvertToClickHouseDDL", &lib.convertToClickDDLFn},
 		{"ConvertFromClickHouseDDL", &lib.convertFromClickDDLFn},
-		{"GenerateInsertToClickHouseSQL", &lib.GenerateInsertToClickHouseSQLFn},
-		{"GenerateInsertFromClickHouseSQL", &lib.GenerateInsertFromClickHouseSQLFn},
-		//{"GetTableDDL", &lib.getTableDDLFn},
+		{"GenerateInsertToClickHouseSQL", &lib.generateInsertToClickHouseSQLFn},
+		{"GenerateInsertFromClickHouseSQL", &lib.generateInsertFromClickHouseSQLFn},
 		{"GetQuoteFlag", &lib.getQuoteFlagFn},
 	}
 
@@ -285,19 +283,23 @@ func (l *DriverLib) ConvertFromClickHouseDDL(tableName string, columns *[]tableI
 	return parseResponse(result)
 }
 
-func (l *DriverLib) GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
+func (l *DriverLib) GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo, filterCol string) *driverInterface.HandleResult {
 	cTableName := C.CString(tableName)
 	defer C.free(unsafe.Pointer(cTableName))
 	columnsPtr := uintptr(unsafe.Pointer(columns))
-	result := C.call_generate_insert_to_click_sql(l.GenerateInsertToClickHouseSQLFn, l.driverHandle, cTableName, C.uintptr_t(columnsPtr))
+	cFilterCol := C.CString(filterCol)
+	defer C.free(unsafe.Pointer(cFilterCol))
+	result := C.call_generate_insert_to_click_sql(l.generateInsertToClickHouseSQLFn, l.driverHandle, cTableName, C.uintptr_t(columnsPtr), cFilterCol)
 	return parseResponse(result)
 }
 
-func (l *DriverLib) GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
+func (l *DriverLib) GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo, filterCol string) *driverInterface.HandleResult {
 	cTableName := C.CString(tableName)
 	defer C.free(unsafe.Pointer(cTableName))
 	columnsPtr := uintptr(unsafe.Pointer(columns))
-	result := C.call_generate_insert_from_click_sql(l.GenerateInsertFromClickHouseSQLFn, l.driverHandle, cTableName, C.uintptr_t(columnsPtr))
+	cFilterCol := C.CString(filterCol)
+	defer C.free(unsafe.Pointer(cFilterCol))
+	result := C.call_generate_insert_from_click_sql(l.generateInsertFromClickHouseSQLFn, l.driverHandle, cTableName, C.uintptr_t(columnsPtr), cFilterCol)
 	return parseResponse(result)
 }
 
@@ -306,10 +308,16 @@ func (l *DriverLib) GetQuoteFlag() *driverInterface.HandleResult {
 	return parseResponse(result)
 }
 
+/*
+func (l *DriverLib) GetParamSign() *driverInterface.HandleResult {
+	result := C.call_param_sign(l.getParamSignFn, l.driverHandle)
+	return parseResponse(result)
+}
+*/
+
 // parseResponse converts the C uintptr_t response to a Go Response struct
 func parseResponse(ptr C.uintptr_t) *driverInterface.HandleResult {
 	return (*driverInterface.HandleResult)(unsafe.Pointer(uintptr(ptr)))
-
 }
 
 func LoadDriver(libPath string) (*DriverLib, error) {

@@ -48,6 +48,7 @@ func (pc *TPushTableControl) RemoveTable() *response.TResponse {
 	return response.Success(nil)
 }
 
+/*
 func (pc *TPushTableControl) GetSourceTableDDL() *response.TResponse {
 	PushTable := pc.TPushTable
 	ddl, err := PushTable.GetSourceTableDDL()
@@ -56,6 +57,7 @@ func (pc *TPushTableControl) GetSourceTableDDL() *response.TResponse {
 	}
 	return response.ReturnStr(ddl)
 }
+*/
 
 // fmt.Sprintf("%s:%s", pt.TableCode, pt.TableName)
 func (pc *TPushTableControl) ToString() string {

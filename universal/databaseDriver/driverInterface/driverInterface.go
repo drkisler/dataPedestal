@@ -23,13 +23,17 @@ type IDbDriver interface {
 	PullData(strSQL, filterVal, destTable string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) (int64, error)
 	// PushData 从clickhouse中读取数据，并写入到数据库中
 	PushData(tableName string, batch int, rows *sql.Rows) (int64, error) //作为函数参数
+
 	ConvertToClickHouseDDL(tableName string) (*string, error)
 	ConvertFromClickHouseDDL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error)
-	// GenerateInsertToClickHouseSQL columns 用户选择查询的字段列表，只含有字段名
-	GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error)
-	// GenerateInsertFromClickHouseSQL columns 需要调用方处理用户选择的字段列表，并结合clickHouse获取的字段信息
-	GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error)
+
+	GenerateInsertFromClickHouseSQL(tableName string, clickColumns *[]tableInfo.ColumnInfo, filterCol string) (*string, error)
+	GenerateInsertToClickHouseSQL(tableName string, myColumns *[]tableInfo.ColumnInfo, filterCol string) (*string, error)
+
+	//GetParamSign() string
+
 	GetQuoteFlag() string
+
 	GetSchema() string
 	IsConnected() bool
 	NewConnect(connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) (IDbDriver, error)

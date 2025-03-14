@@ -1,11 +1,14 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/response"
+	"github.com/drkisler/dataPedestal/common/tableInfo"
 	ctl "github.com/drkisler/dataPedestal/plugin/pushPlugin/manager/control"
 	"github.com/drkisler/dataPedestal/plugin/pushPlugin/workerService/worker"
 	"github.com/vmihailenco/msgpack/v5"
+	"strconv"
 )
 
 var workerProxy *worker.TWorkerProxy
@@ -20,11 +23,14 @@ func InitPlugin() {
 	operateMap["deleteTable"] = DeleteTable
 	operateMap["addTable"] = AddTable
 	operateMap["alterTable"] = AlterTable
-	operateMap["getTables"] = GetPushTables
+	operateMap["getPushTables"] = GetPushTables
 	operateMap["setTableStatus"] = SetTableStatus
 	operateMap["getSourceTables"] = GetSourceTables
 	operateMap["getDestTables"] = GetDestTables
-	operateMap["getTableColumn"] = GetTableColumns
+	operateMap["getSourceTableColumns"] = GetSourceTableColumns
+	operateMap["getDestTableColumns"] = GetDestTableColumns
+	operateMap["generateInsertFromClickHouseSQL"] = GenerateInsertFromClickHouseSQL
+
 	operateMap["getTableScript"] = GetSourceTableDDL
 	operateMap["checkJobTable"] = CheckJobTable
 	operateMap["checkSQLValid"] = CheckSQLValid
@@ -163,13 +169,110 @@ func GetDestTables(userID int32, params map[string]any) response.TResponse {
 	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(tables))})
 }
 
-func GetTableColumns(_ int32, params map[string]any) response.TResponse {
+func GenerateInsertFromClickHouseSQL(userID int32, params map[string]any) response.TResponse {
+	// 定义必需的参数
+	type requiredParams struct {
+		dsID       int32
+		tableName  string
+		filterCols string
+		columns    []tableInfo.ColumnInfo
+	}
+
+	// 辅助函数：从params中安全地获取并转换值
+	getInt32 := func(key string) (int32, error) {
+		val, ok := params[key]
+		if !ok {
+			return 0, fmt.Errorf("%s is required", key)
+		}
+		sVal, ok := val.(string)
+		if !ok {
+			return 0, fmt.Errorf("%s must be a number", key)
+		}
+		castVal, err := strconv.ParseInt(sVal, 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("%s must be a number", key)
+		}
+		return int32(castVal), nil
+	}
+
+	getString := func(key string) (string, error) {
+		val, ok := params[key]
+		if !ok {
+			return "", fmt.Errorf("%s is required", key)
+		}
+		sVal, ok := val.(string)
+		if !ok {
+			return "", fmt.Errorf("%s must be a string", key)
+		}
+		return sVal, nil
+	}
+
+	// 获取并验证所有必需参数
+	rp := requiredParams{}
+
+	// 获取并转换 ds_id
+	iDsID, err := getInt32("ds_id")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+	rp.dsID = iDsID
+
+	// 获取表名
+	rp.tableName, err = getString("table_name")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	// 获取过滤列
+	rp.filterCols, err = getString("filter_cols")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	// 获取并解析列信息
+	columnsStr, err := getString("columns")
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	if err = json.Unmarshal([]byte(columnsStr), &rp.columns); err != nil {
+		return *response.Failure(fmt.Sprintf("failed to parse columns: %v", err))
+	}
+
+	// 调用工作函数生成SQL
+	sql, err := workerProxy.GenerateInsertFromClickHouseSQL(
+		userID,
+		rp.dsID,
+		rp.tableName,
+		rp.columns,
+		rp.filterCols,
+	)
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+
+	return *response.ReturnStr(*sql)
+}
+
+func GetDestTableColumns(userID int32, params map[string]any) response.TResponse {
+	strJobName, ok := params["job_name"]
+	if !ok {
+		return *response.Failure("jobName is empty")
+	}
+	var job ctl.TPushJob
+	var err error
+	job.JobName = strJobName.(string)
+	job.UserID = userID
+	if err = job.InitJobByName(); err != nil {
+		return *response.Failure(err.Error())
+	}
+
 	tableName, ok := params["table_name"]
 	if !ok {
 		return *response.Failure("tableName is empty")
 	}
 	strTableName := tableName.(string)
-	cols, err := workerProxy.GetTableColumns(nil, &strTableName)
+	cols, err := workerProxy.GetDestTableColumns(userID, job.DsID, strTableName)
 	if err != nil {
 		return *response.Failure(err.Error())
 	}
@@ -180,26 +283,44 @@ func GetTableColumns(_ int32, params map[string]any) response.TResponse {
 	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(cols))})
 }
 
-func GetSourceTableDDL(_ int32, params map[string]any) response.TResponse {
+func GetSourceTableColumns(_ int32, params map[string]any) response.TResponse {
+	tableName, ok := params["table_name"]
+	if !ok {
+		return *response.Failure("tableName is empty")
+	}
+	strTableName := tableName.(string)
+	cols, err := workerProxy.GetSourceTableColumns(nil, &strTableName)
+	if err != nil {
+		return *response.Failure(err.Error())
+	}
+	var arrData []byte
+	if arrData, err = msgpack.Marshal(cols); err != nil {
+		return *response.Failure(err.Error())
+	}
+	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(cols))})
+}
+
+func GetSourceTableDDL(userID int32, params map[string]any) response.TResponse {
 	tableName, ok := params["source_table"]
 	if !ok {
 		return *response.Failure("source_table is empty") //"", fmt.Errorf("tableName is empty")
 	}
 	strTableName := tableName.(string)
 
-	strDDL, err := GetTableScript(strTableName)
+	dsID, ok := params["ds_id"]
+	if !ok {
+		return *response.Failure("ds_id is empty")
+	}
+	sDsID := dsID.(string)
+	iDsID, err := strconv.Atoi(sDsID)
 	if err != nil {
 		return *response.Failure(err.Error())
 	}
-	if strDDL == "" {
-		var tmpDDL *string
-		tmpDDL, err = workerProxy.GetTableDDL(strTableName)
-		if err != nil {
-			return *response.Failure(err.Error())
-		}
-		return *response.ReturnStr(*tmpDDL)
+	strDDL, err := workerProxy.GetTableDDL(userID, int32(iDsID), strTableName)
+	if err != nil {
+		return *response.Failure(err.Error())
 	}
-	return *response.ReturnStr(strDDL)
+	return *response.ReturnStr(*strDDL)
 }
 
 func CheckJobTable(userID int32, params map[string]any) response.TResponse {
@@ -449,17 +570,21 @@ func GetSourceConnOption(_ int32, _ map[string]any) response.TResponse {
 	return *response.Success(&response.TRespDataSet{ArrData: options, Total: int64(len(options))})
 }
 
-func GetSourceQuoteFlag(userID int32, params map[string]any) response.TResponse {
-	if userID == 0 {
-		return *response.Failure("need UserID")
-	}
-	dbDriver, ok := params["ds_id"]
-	if !ok {
-		return *response.Failure("ds_id is empty")
-	}
-	strFlag, err := workerProxy.GetSourceQuoteFlag(userID, int32(dbDriver.(float64)))
-	if err != nil {
-		return *response.Failure(err.Error())
-	}
-	return *response.ReturnStr(strFlag)
+func GetSourceQuoteFlag(_ int32, _ map[string]any) response.TResponse {
+	/*
+		if userID == 0 {
+			return *response.Failure("need UserID")
+		}
+		dbDriver, ok := params["ds_id"]
+		if !ok {
+			return *response.Failure("ds_id is empty")
+		}
+
+		strFlag, err := workerProxy.GetSourceQuoteFlag()
+		if err != nil {
+			return *response.Failure(err.Error())
+		}
+	*/
+	return *response.ReturnStr(workerProxy.GetSourceQuoteFlag())
+
 }

@@ -81,12 +81,21 @@ func (op *DriverOperation) ConvertToClickHouseDDL(tableName string) *driverInter
 func (op *DriverOperation) ConvertFromClickHouseDDL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
 	return op.lib.ConvertFromClickHouseDDL(tableName, columns)
 }
-func (op *DriverOperation) GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
-	return op.lib.GenerateInsertToClickHouseSQL(tableName, columns)
+
+func (op *DriverOperation) GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo, filterCol string) *driverInterface.HandleResult {
+	return op.lib.GenerateInsertToClickHouseSQL(tableName, columns, filterCol)
 }
-func (op *DriverOperation) GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) *driverInterface.HandleResult {
-	return op.lib.GenerateInsertFromClickHouseSQL(tableName, columns)
+func (op *DriverOperation) GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo, filterCol string) *driverInterface.HandleResult {
+	return op.lib.GenerateInsertFromClickHouseSQL(tableName, columns, filterCol)
 }
+
 func (op *DriverOperation) GetQuoteFlag() *driverInterface.HandleResult {
 	return op.lib.GetQuoteFlag()
 }
+
+/*
+func (op *DriverOperation) GetParamSign() *driverInterface.HandleResult {
+	return op.lib.GetParamSign()
+}
+
+*/

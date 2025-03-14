@@ -156,19 +156,19 @@ func (c *TPluginControl) SetLicenseCode(productSN, licenseCode string) *response
 
 func (c *TPluginControl) AlterPlugin() *response.TResponse {
 	// PluginFile不修改的情况下修改插件信息，需要取回PluginFile信息防止修改丢失
-	var tmpPlugin module.TPlugin
-	tmpPlugin.PluginUUID = c.PluginUUID
-	err := tmpPlugin.InitByUUID()
-	if err != nil {
-		return response.Failure(err.Error())
-	}
-	if c.PluginFileName == "" {
-		c.PluginFileName = tmpPlugin.PluginFileName
-	}
-	if c.RunType != tmpPlugin.RunType || c.PluginConfig != tmpPlugin.PluginConfig {
-		return response.Failure("此接口不支持修改运行方式和配置信息，请调用其它接口")
-	}
-	if err = c.ModifyPlugin(); err != nil {
+	//var tmpPlugin module.TPlugin
+	//tmpPlugin.PluginUUID = c.PluginUUID
+	//err := tmpPlugin.InitByUUID()
+	//if err != nil {
+	//	return response.Failure(err.Error())
+	//}
+	//if c.PluginFileName == "" {
+	//	c.PluginFileName = tmpPlugin.PluginFileName
+	//}
+	//if c.RunType != tmpPlugin.RunType || c.PluginConfig != tmpPlugin.PluginConfig {
+	//	return response.Failure("此接口不支持修改运行方式和配置信息，请调用其它接口")
+	//}
+	if err := c.ModifyPlugin(); err != nil {
 		return response.Failure(err.Error())
 	}
 	return response.Success(nil)

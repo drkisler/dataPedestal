@@ -10,8 +10,8 @@
       "host_reply_url": "ipc:///tmp/ReqRep.ipc",
       "plugin_uuid": "a2f3a76f-13f6-4518-8a52-dad000656530",
       "host_pub_url": "ipc:///tmp/PubSub.ipc"
-    },
-   },
+    }
+  },
   "test_operations": {
     "getSourceTables": {
       "user_id": 1,
@@ -23,11 +23,28 @@
         "table_name": "default.CASE"
       }
     },
+    "addTable": {
+      "user_id": 1,
+      "plugin_uuid": "a2f3a76f-13f6-4518-8a52-dad000656530",
+      "params": {
+        "job_id": 1,
+        "job_name": "推送",
+        "dest_table": "case",
+        "source_table": "CASE",
+        "select_sql": "SELECT\r\nid,\r\ncode,\r\ncase_channel_id,\r\ncase_source_id,\r\ncase_source_name,\r\ncase_type_id,\r\ncase_type_name,\r\ncase_main_type_id,\r\ncase_main_type_name,\r\ncase_sub_type_id,\r\ncase_sub_type_name,\r\nstreet_id,\r\nstreet_name,\r\ncommunity_id,\r\ncommunity_name,\r\ngrid_id,\r\ngrid_name,\r\naddress,\r\ndescription,\r\nlongitude,\r\nlatitude,\r\ncoord_point,\r\ngeohash,\r\nx,\r\ny,\r\nreport_user_id,\r\nreport_user_name,\r\nreport_unit_id,\r\nreport_unit_name,\r\nreport_time,\r\nis_simple,\r\nis_invalid,\r\nis_evaluate,\r\ninvalid_type_id,\r\nis_closed,\r\nclose_time,\r\nis_delay,\r\nis_expire,\r\nis_important,\r\nis_supervise,\r\nis_handle,\r\nhandle_unit_id,\r\nhandle_unit_name,\r\nhandle_time,\r\ngmt_create,\r\ngmt_modified,\r\nis_top\r\nFROM CASE\r\nWHERE pull_time >= $1",
+        "filter_col": "gmt_modified",
+        "filter_val": "[{\"column\":\"gmt_modified\",\"dataType\":\"datetime\",\"value\":\"1970-01-01 00:00:01\"}]",
+        "key_col": "gmt_modified",
+        "buffer": 2000,
+        "status": "disabled"
+      }
+    },
     "getTableScript": {
       "user_id": 1,
       "plugin_uuid": "a2f3a76f-13f6-4518-8a52-dad000656530",
       "params": {
-        "source_table": "CASE"
+        "source_table": "CASE",
+        "ds_id": "1"
       }
     }
   }

@@ -230,223 +230,222 @@ func (driver *TMySQLDriver) ConvertToClickHouseDDL(tableName string) (*string, e
 	result := sb.String()
 	return &result, nil
 }
-func (driver *TMySQLDriver) GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error) {
-	if columns == nil || len(*columns) == 0 {
+
+func (driver *TMySQLDriver) GenerateInsertFromClickHouseSQL(tableName string, clickColumns *[]tableInfo.ColumnInfo, filterCol string) (*string, error) {
+	// clickCOls 为通过用户选择的字段信息
+	if clickColumns == nil || len(*clickColumns) == 0 {
 		return nil, fmt.Errorf("columns is nil or empty")
 	}
 	var sb utils.StringBuffer
 	sb.AppendStr("SELECT\n")
 
 	isFirst := true
-	for _, col := range *columns {
+	strColumnName := ""
+	for _, clickCol := range *clickColumns {
 		if !isFirst {
 			sb.AppendStr(",\n")
 		}
 		isFirst = false
+		if clickCol.ColumnCode == clickCol.AliasName {
+			strColumnName = clickCol.ColumnCode
+		} else {
+			strColumnName = fmt.Sprintf("%s as %s", clickCol.ColumnCode, clickCol.AliasName)
+		}
 
 		// 处理不同的数据类型转换
 		switch {
-		case strings.HasPrefix(col.DataType, "DateTime64"):
-			if col.Precision > 6 {
+		case strings.HasPrefix(clickCol.DataType, "DateTime64"):
+			if clickCol.Precision > 6 {
 				// 对于超出 MySQL datetime 精度范围的，转为字符串
-				sb.AppendStr(fmt.Sprintf("toString(%s) as %s", col.ColumnCode, col.ColumnCode))
+				sb.AppendStr(fmt.Sprintf("toString(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 			} else {
 				// 符合 MySQL 精度范围的，保持原样
-				sb.AppendStr(col.ColumnCode)
+				sb.AppendStr(strColumnName)
 			}
 
-		case strings.HasPrefix(col.DataType, "DateTime"):
-			if col.Precision > 6 {
-				sb.AppendStr(fmt.Sprintf("toString(%s) as %s", col.ColumnCode, col.ColumnCode))
+		case strings.HasPrefix(clickCol.DataType, "DateTime"):
+			if clickCol.Precision > 6 {
+				sb.AppendStr(fmt.Sprintf("toString(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 			} else {
-				sb.AppendStr(col.ColumnCode)
+				sb.AppendStr(strColumnName)
 			}
 
-		case strings.HasPrefix(col.DataType, "Decimal"):
-			if col.Precision > 65 || col.Scale > 30 {
+		case strings.HasPrefix(clickCol.DataType, "Decimal"):
+			if clickCol.Precision > 65 || clickCol.Scale > 30 {
 				// 超出 MySQL decimal 范围的，转为字符串
-				sb.AppendStr(fmt.Sprintf("toString(%s) as %s", col.ColumnCode, col.ColumnCode))
+				sb.AppendStr(fmt.Sprintf("toString(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 			} else {
-				sb.AppendStr(col.ColumnCode)
+				sb.AppendStr(strColumnName)
 			}
 
-		case col.DataType == "UUID":
+		case clickCol.DataType == "UUID":
 			// UUID 转为字符串
-			sb.AppendStr(fmt.Sprintf("toString(%s) as %s", col.ColumnCode, col.ColumnCode))
+			sb.AppendStr(fmt.Sprintf("toString(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "Array"):
+		case strings.HasPrefix(clickCol.DataType, "Array"):
 			// 数组类型转为 JSON 字符串
-			sb.AppendStr(fmt.Sprintf("JSONStringify(%s) as %s", col.ColumnCode, col.ColumnCode))
+			sb.AppendStr(fmt.Sprintf("JSONStringify(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "Map"):
+		case strings.HasPrefix(clickCol.DataType, "Map"):
 			// Map 类型转为 JSON 字符串
-			sb.AppendStr(fmt.Sprintf("JSONStringify(%s) as %s", col.ColumnCode, col.ColumnCode))
+			sb.AppendStr(fmt.Sprintf("JSONStringify(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 
-		case col.DataType == "IPv4" || col.DataType == "IPv6":
+		case clickCol.DataType == "IPv4" || clickCol.DataType == "IPv6":
 			// IP 地址转为字符串
-			sb.AppendStr(fmt.Sprintf("IPv6NumToString(%s) as %s", col.ColumnCode, col.ColumnCode))
+			sb.AppendStr(fmt.Sprintf("IPv6NumToString(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "FixedString"):
+		case strings.HasPrefix(clickCol.DataType, "FixedString"):
 			// FixedString 转为普通字符串
-			sb.AppendStr(fmt.Sprintf("toString(%s) as %s", col.ColumnCode, col.ColumnCode))
+			sb.AppendStr(fmt.Sprintf("toString(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 
-		case col.DataType == "Enum8" || col.DataType == "Enum16":
+		case clickCol.DataType == "Enum8" || clickCol.DataType == "Enum16":
 			// Enum 转为字符串值
-			sb.AppendStr(fmt.Sprintf("cast(%s, 'String') as %s", col.ColumnCode, col.ColumnCode))
+			sb.AppendStr(fmt.Sprintf("cast(%s, 'String') as %s", clickCol.ColumnCode, clickCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "Int") ||
-			strings.HasPrefix(col.DataType, "UInt") ||
-			strings.HasPrefix(col.DataType, "Float") ||
-			col.DataType == "String" ||
-			col.DataType == "Date":
+		case strings.HasPrefix(clickCol.DataType, "Int") ||
+			strings.HasPrefix(clickCol.DataType, "UInt") ||
+			strings.HasPrefix(clickCol.DataType, "Float") ||
+			clickCol.DataType == "String" ||
+			clickCol.DataType == "Date":
 			// 基础类型保持不变
-			sb.AppendStr(col.ColumnCode)
+			sb.AppendStr(strColumnName)
 
 		default:
 			// 其他未知类型转为字符串
-			sb.AppendStr(fmt.Sprintf("toString(%s) as %s", col.ColumnCode, col.ColumnCode))
+			sb.AppendStr(fmt.Sprintf("toString(%s) as %s", clickCol.ColumnCode, clickCol.AliasName))
 		}
 	}
 
 	// 添加 FROM 子句和可能的分区条件
-	sb.AppendStr("\nFROM ").AppendStr(tableName)
+	sb.AppendStr("\nFROM ").AppendStr(fmt.Sprintf("%s%s%s", "`", tableName, "`"))
 
 	// 添加 WHERE 条件
-	sb.AppendStr("\nWHERE pull_time >= $1")
-	// sb.AppendStr("\nLIMIT 1000")
+	if filterCol != "" {
+		sb.AppendStr("\nWHERE ").AppendStr(strings.Replace(filterCol, ",", "=? AND ", -1)).AppendStr("=?")
+	}
 
 	result := sb.String()
 	return &result, nil
 }
-func (driver *TMySQLDriver) GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error) {
-	if columns == nil || len(*columns) == 0 {
+
+func (driver *TMySQLDriver) GenerateInsertToClickHouseSQL(tableName string, myColumns *[]tableInfo.ColumnInfo, filterCol string) (*string, error) {
+	if myColumns == nil || len(*myColumns) == 0 {
 		return nil, fmt.Errorf("columns is nil or empty")
 	}
 
-	Cols, err := driver.GetColumns(tableName)
-	if err != nil {
-		return nil, err
-	}
-
-	selectColumns := make(map[string]string)
-	for _, col := range *columns {
-		selectColumns[col.ColumnCode] = col.AliasName
-	}
 	var sb utils.StringBuffer
 	sb.AppendStr("SELECT\n")
 	isFirst := true
-	for _, col := range Cols {
-		//if slices.Contains[[]string, string]()
-		colItem, ok := selectColumns[col.ColumnCode]
-		if !ok {
-			continue
-		}
-		if colItem == "" {
-			colItem = col.ColumnCode
-		}
+	strColumnName := ""
+	for _, myCol := range *myColumns {
 		if !isFirst {
 			sb.AppendStr(",\n")
 		}
 		isFirst = false
 
-		noCastName := col.ColumnCode
-		if col.ColumnCode != colItem {
-			noCastName = fmt.Sprintf("%s as %s", col.ColumnCode, colItem)
+		if myCol.ColumnCode == myCol.AliasName {
+			strColumnName = myCol.ColumnCode
+		} else {
+			strColumnName = fmt.Sprintf("%s as %s", myCol.ColumnCode, myCol.AliasName)
 		}
 		// 处理不同的数据类型转换
 		switch {
-		case strings.HasPrefix(col.DataType, "decimal"):
-			if col.Precision > 38 {
+		case strings.HasPrefix(myCol.DataType, "decimal"):
+			if myCol.Precision > 38 {
 				// 超出 ClickHouse decimal 范围的转为字符串
-				sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", col.ColumnCode, colItem))
+				sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", myCol.ColumnCode, myCol.AliasName))
 			} else {
-				sb.AppendStr(noCastName)
+				sb.AppendStr(strColumnName)
 			}
 
-		case strings.HasPrefix(col.DataType, "datetime") ||
-			strings.HasPrefix(col.DataType, "timestamp"):
-			if col.Precision > 9 {
+		case strings.HasPrefix(myCol.DataType, "datetime") ||
+			strings.HasPrefix(myCol.DataType, "timestamp"):
+			if myCol.Precision > 9 {
 				// 超出 ClickHouse DateTime64 精度范围的转为字符串
 				sb.AppendStr(fmt.Sprintf("DATE_FORMAT(%s, '%%Y-%%m-%%d %%H:%%i:%%s.%%f') as %s",
-					col.ColumnCode, colItem))
+					myCol.ColumnCode, myCol.AliasName))
 			} else {
-				sb.AppendStr(noCastName)
+				sb.AppendStr(strColumnName)
 			}
 
-		case strings.HasPrefix(col.DataType, "time"):
+		case strings.HasPrefix(myCol.DataType, "time"):
 			// TIME 类型转为字符串，因为 ClickHouse 没有对应的时间类型
 			sb.AppendStr(fmt.Sprintf("TIME_FORMAT(%s, '%%H:%%i:%%s.%%f') as %s",
-				col.ColumnCode, colItem))
+				myCol.ColumnCode, myCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "year"):
+		case strings.HasPrefix(myCol.DataType, "year"):
 			// YEAR 类型转为字符串
-			sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", col.ColumnCode, colItem))
+			sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", myCol.ColumnCode, myCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "bit"):
+		case strings.HasPrefix(myCol.DataType, "bit"):
 			// BIT 类型转为字符串
-			sb.AppendStr(fmt.Sprintf("BIN(%s) as %s", col.ColumnCode, colItem))
+			sb.AppendStr(fmt.Sprintf("BIN(%s) as %s", myCol.ColumnCode, myCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "enum") ||
-			strings.HasPrefix(col.DataType, "set"):
+		case strings.HasPrefix(myCol.DataType, "enum") ||
+			strings.HasPrefix(myCol.DataType, "set"):
 			// ENUM 和 SET 类型转为字符串
-			sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", col.ColumnCode, colItem))
+			sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", myCol.ColumnCode, myCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "binary") ||
-			strings.HasPrefix(col.DataType, "varbinary") ||
-			col.DataType == "blob" ||
-			col.DataType == "tinyblob" ||
-			col.DataType == "mediumblob" ||
-			col.DataType == "longblob":
+		case strings.HasPrefix(myCol.DataType, "binary") ||
+			strings.HasPrefix(myCol.DataType, "varbinary") ||
+			myCol.DataType == "blob" ||
+			myCol.DataType == "tinyblob" ||
+			myCol.DataType == "mediumblob" ||
+			myCol.DataType == "longblob":
 			// 二进制类型转为 base64 字符串
-			sb.AppendStr(fmt.Sprintf("TO_BASE64(%s) as %s", col.ColumnCode, colItem))
+			sb.AppendStr(fmt.Sprintf("TO_BASE64(%s) as %s", myCol.ColumnCode, myCol.AliasName))
 
-		case col.DataType == "json":
+		case myCol.DataType == "json":
 			// JSON 类型转为字符串
 			sb.AppendStr(fmt.Sprintf("JSON_UNQUOTE(JSON_EXTRACT(%s, '$')) as %s",
-				col.ColumnCode, colItem))
+				myCol.ColumnCode, myCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "geometry") ||
-			strings.HasPrefix(col.DataType, "point") ||
-			strings.HasPrefix(col.DataType, "linestring") ||
-			strings.HasPrefix(col.DataType, "polygon") ||
-			strings.HasPrefix(col.DataType, "multipoint") ||
-			strings.HasPrefix(col.DataType, "multilinestring") ||
-			strings.HasPrefix(col.DataType, "multipolygon") ||
-			strings.HasPrefix(col.DataType, "geometrycollection"):
+		case strings.HasPrefix(myCol.DataType, "geometry") ||
+			strings.HasPrefix(myCol.DataType, "point") ||
+			strings.HasPrefix(myCol.DataType, "linestring") ||
+			strings.HasPrefix(myCol.DataType, "polygon") ||
+			strings.HasPrefix(myCol.DataType, "multipoint") ||
+			strings.HasPrefix(myCol.DataType, "multilinestring") ||
+			strings.HasPrefix(myCol.DataType, "multipolygon") ||
+			strings.HasPrefix(myCol.DataType, "geometrycollection"):
 			// 空间数据类型转为 WKT 字符串
-			sb.AppendStr(fmt.Sprintf("ST_AsText(%s) as %s", col.ColumnCode, colItem))
+			sb.AppendStr(fmt.Sprintf("ST_AsText(%s) as %s", myCol.ColumnCode, myCol.AliasName))
 
-		case strings.HasPrefix(col.DataType, "tinyint") ||
-			strings.HasPrefix(col.DataType, "smallint") ||
-			strings.HasPrefix(col.DataType, "mediumint") ||
-			strings.HasPrefix(col.DataType, "int") ||
-			strings.HasPrefix(col.DataType, "bigint") ||
-			strings.HasPrefix(col.DataType, "float") ||
-			strings.HasPrefix(col.DataType, "double") ||
-			col.DataType == "date" ||
-			strings.HasPrefix(col.DataType, "char") ||
-			strings.HasPrefix(col.DataType, "varchar") ||
-			col.DataType == "text" ||
-			col.DataType == "tinytext" ||
-			col.DataType == "mediumtext" ||
-			col.DataType == "longtext":
+		case strings.HasPrefix(myCol.DataType, "tinyint") ||
+			strings.HasPrefix(myCol.DataType, "smallint") ||
+			strings.HasPrefix(myCol.DataType, "mediumint") ||
+			strings.HasPrefix(myCol.DataType, "int") ||
+			strings.HasPrefix(myCol.DataType, "bigint") ||
+			strings.HasPrefix(myCol.DataType, "float") ||
+			strings.HasPrefix(myCol.DataType, "double") ||
+			myCol.DataType == "date" ||
+			strings.HasPrefix(myCol.DataType, "char") ||
+			strings.HasPrefix(myCol.DataType, "varchar") ||
+			myCol.DataType == "text" ||
+			myCol.DataType == "tinytext" ||
+			myCol.DataType == "mediumtext" ||
+			myCol.DataType == "longtext":
 			// 基础类型保持不变
-			sb.AppendStr(noCastName)
+			sb.AppendStr(strColumnName)
 
 		default:
 			// 其他未知类型转为字符串
-			sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", col.ColumnCode, colItem))
+			sb.AppendStr(fmt.Sprintf("CAST(%s AS CHAR) as %s", myCol.ColumnCode, myCol.AliasName))
 		}
 	}
 
 	// 添加 FROM 子句
-	sb.AppendStr("\nFROM ").AppendStr(tableName)
+	sb.AppendStr("\nFROM ").AppendStr(fmt.Sprintf("%s%s%s", "`", tableName, "`"))
 
-	// where 条件 由客户端维护
+	// where 条件
+	if filterCol != "" {
+		sb.AppendStr("\nWHERE ").AppendStr(strings.Replace(filterCol, ",", "=? AND ", -1)).AppendStr("=?")
+	}
 
 	result := sb.String()
 	return &result, nil
 }
+
 func (driver *TMySQLDriver) OpenConnect(connectJson string, maxIdleTime, maxOpenConnections, connMaxLifetime, maxIdleConnections int) error {
 	var connOptions map[string]string
 	if err := json.Unmarshal([]byte(connectJson), &connOptions); err != nil {
@@ -822,6 +821,12 @@ func (driver *TMySQLDriver) PushData(tableName string, batch int, rows *sql.Rows
 func (driver *TMySQLDriver) GetQuoteFlag() string {
 	return "`"
 }
+
+/*
+func (driver *TMySQLDriver) GetParamSign() string {
+	return "?"
+}
+*/
 
 func (driver *TMySQLDriver) GetSchema() string {
 	return driver.Schema

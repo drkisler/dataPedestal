@@ -95,6 +95,25 @@ func TestGetSourceTables(t *testing.T) {
 
 }
 
+func TestAddTable(t *testing.T) {
+	config, err := getPluginConfig("default")
+	assert.NoError(t, err, "Failed to load config")
+
+	pl := service.PluginServ
+	resp := pl.Run(config)
+	assert.GreaterOrEqual(t, resp.Code, int64(0), "Plugin run failed: %s", resp.Info)
+
+	defer pl.Stop()
+	time.Sleep(2 * time.Second)
+	// 加载操作配置
+	operate, err := getOperationConfig("addTable")
+	assert.NoError(t, err, "Failed to load operation config")
+
+	result := pl.CustomInterface(*operate)
+	assert.GreaterOrEqual(t, result.Code, int64(0), "addTable failed: %s", result.Info)
+	fmt.Println(fmt.Sprintf("addTable result: %v", result.Info))
+}
+
 func TestGetSourceTableDDL(t *testing.T) {
 	// 加载默认配置
 	config, err := getPluginConfig("default")

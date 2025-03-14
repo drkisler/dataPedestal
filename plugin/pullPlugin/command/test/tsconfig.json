@@ -10,7 +10,7 @@
       "host_reply_url": "ipc:///tmp/ReqRep.ipc",
       "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
       "host_pub_url": "ipc:///tmp/PubSub.ipc"
-    },
+    }
   },
 
   "test_operations": {
@@ -20,7 +20,15 @@
       "params": {
         "page_size": 50,
         "page_index": 1,
+        "job_name": "测试"
+      }
+    },
+    "getDestTableColumns": {
+      "user_id": 1,
+      "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
+      "params": {
         "job_name": "测试",
+        "table_name": "CASE"
       }
     },
     "checkJobTable": {
@@ -28,7 +36,7 @@
       "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
       "params": {
         "job_name": "测试",
-        "table_id": 1,
+        "table_id": 1
       }
     },
     "getTableScript": {

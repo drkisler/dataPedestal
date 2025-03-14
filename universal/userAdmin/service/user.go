@@ -18,6 +18,12 @@ var IsDebug bool
 func Login(ctx *gin.Context) {
 	var usr usrCtl.TUserControl
 	var strToken string
+	result, _ := ctx.Get("verify_result")
+	message, _ := ctx.Get("verify_message")
+	if result != nil && result != "success" {
+		ctx.JSON(200, response.Failure(message.(string)))
+		return
+	}
 
 	if err := ctx.ShouldBind(&usr); err != nil {
 		ctx.JSON(200, response.Failure(err.Error()))
