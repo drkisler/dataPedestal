@@ -23,14 +23,13 @@ type TPushTable struct {
 	SourceTable string `json:"source_table,omitempty" msgpack:"source_table,omitempty"` //源表
 	InsertCol   string `json:"insert_col,omitempty" msgpack:"insert_col,omitempty"`     //插入列
 	SelectSql   string `json:"select_sql,omitempty" msgpack:"select_sql,omitempty"`     //查询SQL
-	//SourceUpdated int64  `json:"source_updated,omitempty" msgpack:"source_updated,omitempty"`// 源表更新时间
-	FilterCol string `json:"filter_col,omitempty" msgpack:"filter_col,omitempty"` // 过滤列
-	FilterVal string `json:"filter_val,omitempty" msgpack:"filter_val,omitempty"` // 过滤值
-	KeyCol    string `json:"key_col,omitempty" msgpack:"key_col,omitempty"`       //
-	Buffer    int    `json:"buffer,omitempty" msgpack:"buffer,omitempty"`
-	Status    string `json:"status,omitempty" msgpack:"status,omitempty"`
-	LastRun   int64  `json:"-" msgpack:"-"`                                   //任务运行时间，与日志表关联,同时写入数据表pull_time字段
-	RunInfo   string `json:"run_info,omitempty" msgpack:"run_info,omitempty"` //虚拟字段，记录最近一次运行的结果
+	FilterCol   string `json:"filter_col,omitempty" msgpack:"filter_col,omitempty"`     // 过滤列
+	FilterVal   string `json:"filter_val,omitempty" msgpack:"filter_val,omitempty"`     // 过滤值
+	KeyCol      string `json:"key_col,omitempty" msgpack:"key_col,omitempty"`           //
+	Buffer      int    `json:"buffer,omitempty" msgpack:"buffer,omitempty"`
+	Status      string `json:"status,omitempty" msgpack:"status,omitempty"`
+	LastRun     int64  `json:"-" msgpack:"-"`                                   //任务运行时间，与日志表关联,同时写入数据表pull_time字段
+	RunInfo     string `json:"run_info,omitempty" msgpack:"run_info,omitempty"` //虚拟字段，记录最近一次运行的结果
 }
 
 // TPushJobLog 前端交换用，存储时需要转换为存储格式

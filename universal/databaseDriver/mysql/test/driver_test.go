@@ -197,7 +197,7 @@ func TestGenerateInsertToClickHouseSQL(t *testing.T) {
 		t.Fatalf("Failed to unmarshal columns: %v", err)
 	}
 	columns[1].AliasName = "case_code"
-	resp = lib.GenerateInsertToClickHouseSQL(testTableName, &columns)
+	resp = lib.GenerateInsertToClickHouseSQL(testTableName, &columns, "gmt_modified,gmt_create")
 	if resp.HandleCode < 0 {
 		t.Fatalf("GenerateInsertToClickHouseSQL failed: %s", resp.HandleMsg)
 	}
@@ -242,7 +242,7 @@ func TestGenerateInsertFromClickHouseSQL(t *testing.T) {
 		t.Fatalf("Failed to get table columns: %v", err)
 	}
 
-	resp := lib.GenerateInsertFromClickHouseSQL(testTableName, &columns)
+	resp := lib.GenerateInsertFromClickHouseSQL(testTableName, &columns, "gmt_modified,gmt_create")
 	if resp.HandleCode < 0 {
 		t.Fatalf("GenerateInsertFromClickHouseSQL failed: %s", resp.HandleMsg)
 	}

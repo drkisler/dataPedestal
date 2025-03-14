@@ -314,7 +314,8 @@ func (pw *TWorkerProxy) initDataSource(userID int32, dsID int32) (*module.TDataS
 	}
 	return &ds, nil
 }
-func (pw *TWorkerProxy) GetSourceQuoteFlag(userID int32, dsID int32) (string, error) {
+
+func (pw *TWorkerProxy) GetDBQuoteFlag(userID int32, dsID int32) (string, error) {
 	ds, err := pw.initDataSource(userID, dsID)
 	if err != nil {
 		return "", err
@@ -330,6 +331,25 @@ func (pw *TWorkerProxy) GetSourceQuoteFlag(userID int32, dsID int32) (string, er
 	}
 	return hr.HandleMsg, nil
 }
+
+/*
+func (pw *TWorkerProxy) GetDBParamSign(userID int32, dsID int32) (string, error) {
+	ds, err := pw.initDataSource(userID, dsID)
+	if err != nil {
+		return "", err
+	}
+	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
+	if err != nil {
+		return "", err
+	}
+	defer dbOp.FreeDriver()
+	hr := dbOp.GetParamSign()
+	if hr.HandleCode < 0 {
+		return "", fmt.Errorf("get quote flag failed: %s", hr.HandleMsg)
+	}
+	return hr.HandleMsg, nil
+}
+*/
 
 func (pw *TWorkerProxy) GetSourceTables(userID int32, dsID int32) ([]tableInfo.TableInfo, error) {
 	ds, err := pw.initDataSource(userID, dsID)
@@ -356,7 +376,7 @@ func (pw *TWorkerProxy) GetSourceTables(userID int32, dsID int32) ([]tableInfo.T
 
 }
 
-func (pw *TWorkerProxy) GetTableColumns(userID int32, dsID int32, tableName string) ([]tableInfo.ColumnInfo, error) {
+func (pw *TWorkerProxy) GetSourceTableColumns(userID int32, dsID int32, tableName string) ([]tableInfo.ColumnInfo, error) {
 	ds, err := pw.initDataSource(userID, dsID)
 	if err != nil {
 		return nil, err
@@ -377,6 +397,10 @@ func (pw *TWorkerProxy) GetTableColumns(userID int32, dsID int32, tableName stri
 	return columns, nil
 }
 
+func (pw *TWorkerProxy) GetDestTableColumns(_ map[string]string, tableCode string) ([]tableInfo.ColumnInfo, error) {
+	return clickHouse.GetTableColumns(tableCode)
+}
+
 func (pw *TWorkerProxy) ConvertToClickHouseDDL(userID int32, dsID int32, tableName string) (*string, error) {
 	ds, err := pw.initDataSource(userID, dsID)
 	if err != nil {
@@ -394,6 +418,25 @@ func (pw *TWorkerProxy) ConvertToClickHouseDDL(userID int32, dsID int32, tableNa
 	var ddl string
 	ddl = hr.HandleMsg
 	return &ddl, nil
+}
+
+func (pw *TWorkerProxy) GenerateInsertToClickHouseSQL(userID int32, dsID int32, tableCode string, columns []tableInfo.ColumnInfo, filterCols string) (*string, error) {
+	ds, err := pw.initDataSource(userID, dsID)
+	if err != nil {
+		return nil, err
+	}
+	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
+	if err != nil {
+		return nil, err
+	}
+	defer dbOp.FreeDriver()
+	hr := dbOp.GenerateInsertToClickHouseSQL(tableCode, &columns, filterCols)
+	if hr.HandleCode < 0 {
+		return nil, fmt.Errorf("generate insert sql to clickhouse failed: %s", hr.HandleMsg)
+	}
+	var sql string
+	sql = hr.HandleMsg
+	return &sql, nil
 }
 
 func (pw *TWorkerProxy) CheckSQLValid(userID int32, dsID int32, strSQL, filterVal string) ([]tableInfo.ColumnInfo, error) {

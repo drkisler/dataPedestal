@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/afocus/captcha"
 	"github.com/drkisler/dataPedestal/common/genService"
 	"github.com/drkisler/dataPedestal/initializers"
 	"github.com/drkisler/dataPedestal/portal/control"
@@ -17,11 +19,14 @@ import (
 	"github.com/drkisler/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/takama/daemon"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -31,8 +36,147 @@ const (
 	usageHelp   = "Usage: pluginService install | remove | start | stop | status"
 )
 
+// TManagerDaemon 用于管理插件服务的守护进程
 type TManagerDaemon struct {
 	daemon.Daemon
+}
+
+// TCaptcha 用于存储验证码信息
+type TCaptcha struct {
+	Code      string    // 验证码内容
+	CreatedAt time.Time // 创建时间
+	ExpiresIn int       // 有效期（秒）
+}
+
+// TRateLimit 用于存储请求频率信息
+type TRateLimit struct {
+	Count     int       // 请求次数
+	LastReset time.Time // 上次重置时间
+}
+
+// 存储验证码和频率限制数据
+var (
+	captchaStore   = make(map[string]TCaptcha)
+	rateLimitStore = make(map[string]TRateLimit)
+	storeMutex     sync.Mutex
+)
+
+// 频率限制中间件
+func rateLimitMiddleware() gin.HandlerFunc {
+	const maxRequests = 10
+	const windowSize = time.Minute
+
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		now := time.Now()
+
+		storeMutex.Lock()
+
+		rl, exists := rateLimitStore[ip]
+		if !exists || now.Sub(rl.LastReset) >= windowSize {
+			rl = TRateLimit{Count: 0, LastReset: now}
+		}
+
+		if rl.Count >= maxRequests {
+			storeMutex.Unlock()
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "请求过于频繁，请稍后再试"})
+			c.Abort()
+			return
+		}
+
+		rl.Count++
+		rateLimitStore[ip] = rl
+		storeMutex.Unlock()
+		c.Next()
+	}
+}
+
+// 生成验证码并返回 Base64
+func generateCaptcha(c *gin.Context) {
+	capt := captcha.New()
+	capt.SetSize(80, 30)
+
+	err := capt.SetFont(filepath.Join(os.Getenv("FilePath"), "fonts", initializers.PortalCfg.ImageFontDir)) // 可选字体设置 imageCaptchaFont.ttf Comic.ttf
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "设置字体失败:" + err.Error()})
+		return
+	}
+	capt.SetDisturbance(captcha.HIGH) // 可选干扰设置
+	// 设置背景色为淡蓝色
+	capt.SetBkgColor(color.RGBA{173, 216, 230, 255})
+
+	img, code := capt.Create(4, captcha.NUM)
+
+	captchaID := fmt.Sprintf("captcha_%d", time.Now().UnixNano())
+
+	storeMutex.Lock()
+	captchaStore[captchaID] = TCaptcha{
+		Code:      code,
+		CreatedAt: time.Now(),
+		ExpiresIn: 300,
+	}
+	storeMutex.Unlock()
+
+	// 将图片编码为 PNG 并转为 Base64
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成验证码失败"})
+		return
+	}
+	base64Img := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	// 返回 JSON 响应
+	c.JSON(http.StatusOK, struct {
+		Code      string `json:"code"`
+		CaptchaID string `json:"captcha_id"`
+		Image     string `json:"image"`
+	}{
+		Code:      "0",
+		CaptchaID: captchaID,
+		Image:     "data:image/png;base64," + base64Img, // 前端可直接使用
+	})
+}
+
+// 验证码验证中间件
+func verifyCaptchaMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		captchaID := c.Query("captcha_id")
+		userInput := c.Query("code")
+
+		storeMutex.Lock()
+		capt, exists := captchaStore[captchaID]
+		storeMutex.Unlock()
+
+		if !exists {
+			c.Set("verify_result", "error")
+			c.Set("verify_message", "验证码不存在")
+			c.Next()
+			return
+		}
+
+		if time.Since(capt.CreatedAt).Seconds() > float64(capt.ExpiresIn) {
+			storeMutex.Lock()
+			delete(captchaStore, captchaID)
+			storeMutex.Unlock()
+			c.Set("verify_result", "error")
+			c.Set("verify_message", "验证码已过期")
+			c.Next()
+			return
+		}
+
+		if capt.Code == userInput {
+			storeMutex.Lock()
+			delete(captchaStore, captchaID)
+			storeMutex.Unlock()
+			c.Set("verify_result", "success")
+			c.Set("verify_message", "验证码正确")
+		} else {
+			c.Set("verify_result", "error")
+			c.Set("verify_message", "验证码错误")
+		}
+
+		c.Next()
+	}
 }
 
 func createAndStartGinService() {
@@ -41,7 +185,8 @@ func createAndStartGinService() {
 	r := gin.Default()
 	r.MaxMultipartMemory = 8 << 20
 
-	r.POST("/login", usrServ.Login)
+	r.GET("/generate-captcha", rateLimitMiddleware(), generateCaptcha)
+	r.POST("/login", verifyCaptchaMiddleware(), usrServ.Login)
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"code": -1, "message": "portal api not found:" + c.Request.URL.Path})
 	})
@@ -281,14 +426,15 @@ func Logger() gin.HandlerFunc {
 		} else {
 			requestJSON = "Empty body"
 		}
-
-		// 如果请求体或响应体太长，可以只记录一部分
-		if len(requestJSON) > 1000 {
-			requestJSON = requestJSON[:1000] + "..."
-		}
-		if len(responseJSON) > 1000 {
-			responseJSON = responseJSON[:1000] + "..."
-		}
+		/*
+			// 如果请求体或响应体太长，可以只记录一部分
+			if len(requestJSON) > 1000 {
+				requestJSON = requestJSON[:1000] + "..."
+			}
+			if len(responseJSON) > 1000 {
+				responseJSON = responseJSON[:1000] + "..."
+			}
+		*/
 
 		userID, ok := c.Get("userid")
 		if !ok {

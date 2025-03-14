@@ -157,12 +157,14 @@ func (mp *TMyPlugin) Run(config string) (resp response.TResponse) {
 
 // Stop 停止程序，释放资源
 func (mp *TMyPlugin) Stop() (resp response.TResponse) {
-	defer func() {
-		if err := recover(); err != nil {
-			logService.LogWriter.WriteError(fmt.Sprintf("插件停止失败:%s", err), false)
-			resp = *response.Failure(fmt.Sprintf("插件停止失败:%s", err))
-		}
-	}()
+	/*
+		defer func() {
+			if err := recover(); err != nil {
+				logService.LogWriter.WriteError(fmt.Sprintf("插件停止失败:%s", err), false)
+				resp = *response.Failure(fmt.Sprintf("插件停止失败:%s", err))
+			}
+		}()
+	*/
 	mp.TBasePlugin.Stop()
 	// 停止长期任务，对于scheduler的停止，需要单独处理
 	workerProxy.StopRun()

@@ -2,6 +2,7 @@ package queryFilter
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -45,9 +46,15 @@ func JSONToFilterConditions(jsonString *string) ([]FilterCondition, error) {
 	return conditions, nil
 }
 
-func JSONToFilterValues(jsonString *string) ([]FilterValue, error) {
+func JSONToFilterValues(filterJson *string) ([]FilterValue, error) {
+	if filterJson == nil {
+		return nil, fmt.Errorf("filterJson is nil")
+	}
+	if *filterJson == "" {
+		return make([]FilterValue, 0), nil
+	}
 	var conditions []FilterCondition
-	err := json.Unmarshal([]byte(*jsonString), &conditions)
+	err := json.Unmarshal([]byte(*filterJson), &conditions)
 	if err != nil {
 		return nil, err
 	}

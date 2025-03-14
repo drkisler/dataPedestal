@@ -24,9 +24,12 @@ func checkSQLAndRetrieveCols(ptc *ctl.TPushTableControl) error {
 	return nil
 }
 
+/*
 func GetTableScript(strTableName string) (string, error) {
 
 	var tbl ctl.TPushTable
 	tbl.SourceTable = strTableName
 	return tbl.GetSourceTableDDL()
 }
+
+*/

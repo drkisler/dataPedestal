@@ -88,6 +88,104 @@ func GetTableNames() ([]tableInfo.TableInfo, error) {
 	return tables, nil
 }
 
+func GetTableColumns(tableName string) ([]tableInfo.ColumnInfo, error) {
+	driver, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
+	if err != nil {
+		return nil, err
+	}
+	strSchema := driver.GetDatabaseName()
+	strTable := tableName
+	arrTmp := strings.Split(strTable, ".")
+	if len(arrTmp) == 2 {
+		strSchema = arrTmp[0]
+		strTable = arrTmp[1]
+	}
+	if strings.Index(strTable, "`") >= 0 {
+		strTable = strings.ReplaceAll(strTable, "`", "")
+	}
+	const strSQL = "select " +
+		"name," +
+		"case when is_in_primary_key=0 then '否' else '是' END is_key," +
+		"CASE WHEN type LIKE 'Nullable%' THEN substring(type,10,LENGTH(type)-10) ELSE type END data_type," +
+		" COALESCE(toInt64OrNull(arrayElement(splitByChar('_',comment), -1)),0) max_length," +
+		" COALESCE(numeric_precision,0)+COALESCE(datetime_precision,0) precision," +
+		" COALESCE(numeric_scale,0)numeric_scale," +
+		" CASE WHEN type LIKE 'Nullable%' THEN '是' ELSE '否' end null_able," +
+		" comment " +
+		"from system.columns where database ={database:String} and table={table:String}"
+	var columns []tableInfo.ColumnInfo
+
+	ctx := context.Background()
+	var resultData = []proto.Column{
+		&proto.ColStr{},    // name
+		&proto.ColStr{},    // is_key
+		&proto.ColStr{},    // data_type
+		&proto.ColInt64{},  // max_length
+		&proto.ColUInt64{}, // precision
+		&proto.ColUInt64{}, // numeric_scale
+		&proto.ColStr{},    // null_able
+		&proto.ColStr{},    // comment
+	}
+	var result = proto.Results{
+		proto.ResultColumn{
+			Name: "name",
+			Data: resultData[0],
+		},
+		proto.ResultColumn{
+			Name: "is_key",
+			Data: resultData[1],
+		},
+		proto.ResultColumn{
+			Name: "data_type",
+			Data: resultData[2],
+		},
+		proto.ResultColumn{
+			Name: "max_length",
+			Data: resultData[3],
+		},
+		proto.ResultColumn{
+			Name: "precision",
+			Data: resultData[4],
+		},
+		proto.ResultColumn{
+			Name: "numeric_scale",
+			Data: resultData[5],
+		},
+		proto.ResultColumn{
+			Name: "null_able",
+			Data: resultData[6],
+		},
+		proto.ResultColumn{
+			Name: "comment",
+			Data: resultData[7],
+		},
+	}
+
+	param := make(map[string]any)
+	param["database"] = strSchema
+	param["table"] = strTable
+	if err = driver.QuerySQL(ctx, strSQL, param, result); err != nil {
+		return nil, err
+	}
+
+	if resultData[0].Rows() > 0 {
+		for i := 0; i < resultData[0].Rows(); i++ {
+			columns = append(columns, tableInfo.ColumnInfo{
+				ColumnCode: resultData[0].(*proto.ColStr).Row(i),
+				IsKey:      resultData[1].(*proto.ColStr).Row(i),
+				DataType:   resultData[2].(*proto.ColStr).Row(i),
+				MaxLength:  int(resultData[3].(*proto.ColInt64).Row(i)),
+				Precision:  int(resultData[4].(*proto.ColUInt64).Row(i)),
+				Scale:      int(resultData[5].(*proto.ColUInt64).Row(i)),
+				IsNullable: resultData[6].(*proto.ColStr).Row(i),
+				Comment:    resultData[7].(*proto.ColStr).Row(i),
+			})
+		}
+	}
+	return columns, nil
+
+}
+
 func GetMaxFilter(tableName string, filterValue *string) (string, error) {
 	driver, err := clickHouseLocal.GetClickHouseLocalDriver(nil)
 	if err != nil {

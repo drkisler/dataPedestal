@@ -9,10 +9,10 @@ typedef uintptr_t driver_handle;
 */
 import "C"
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
+	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
 	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/universal/databaseDriver/driverInterface"
 	"sync"
@@ -153,15 +153,21 @@ func IsConnected(handle C.driver_handle) C.uintptr_t {
 }
 
 //export PushData
-func PushData(handle C.driver_handle, strSQL *C.char, batch C.int, rowsPtr C.uintptr_t) C.uintptr_t {
+func PushData(handle C.driver_handle, strSQL, filterVal, destTable *C.char, batch C.int, clickClientPtr C.uintptr_t) C.uintptr_t {
 	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	rows := (*sql.Rows)(unsafe.Pointer(uintptr(rowsPtr)))
-	count, err := driver.PushData(C.GoString(strSQL), int(batch), rows)
+	clickClient := (*clickHouseSQL.TClickHouseSQL)(unsafe.Pointer(uintptr(clickClientPtr)))
+	count, err := driver.PushData(
+		C.GoString(strSQL),
+		C.GoString(filterVal),
+		C.GoString(destTable),
+		int(batch),
+		clickClient,
+	)
 	if err != nil {
 		result.HandleFailed(err.Error())
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
@@ -231,14 +237,14 @@ func ConvertFromClickHouseDDL(handle C.driver_handle, tableName *C.char, columns
 }
 
 //export GenerateInsertToClickHouseSQL
-func GenerateInsertToClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t) C.uintptr_t {
+func GenerateInsertToClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t, filterCol *C.char) C.uintptr_t {
 	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	ptrResult, err := driver.GenerateInsertToClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))))
+	ptrResult, err := driver.GenerateInsertToClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))), C.GoString(filterCol))
 	if err != nil {
 		result.HandleFailed(err.Error())
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
@@ -249,14 +255,14 @@ func GenerateInsertToClickHouseSQL(handle C.driver_handle, tableName *C.char, co
 }
 
 //export GenerateInsertFromClickHouseSQL
-func GenerateInsertFromClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t) C.uintptr_t {
+func GenerateInsertFromClickHouseSQL(handle C.driver_handle, tableName *C.char, columns C.uintptr_t, filterCol *C.char) C.uintptr_t {
 	var result driverInterface.HandleResult
 	driver, ok := drivers[handle]
 	if !ok {
 		result.HandleFailed("driver not found")
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 	}
-	ptrResult, err := driver.GenerateInsertFromClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))))
+	ptrResult, err := driver.GenerateInsertFromClickHouseSQL(C.GoString(tableName), (*[]tableInfo.ColumnInfo)(unsafe.Pointer(uintptr(columns))), C.GoString(filterCol))
 	if err != nil {
 		result.HandleFailed(err.Error())
 		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))

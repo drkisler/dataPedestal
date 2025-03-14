@@ -22,7 +22,7 @@ func (pt *TPushTable) AddTable() (int64, error) {
 		"cet_push as(select table_id from %s.push_table where job_id=$1),cet_id as( "+
 		"select "+
 		"min(a.table_id)+1 tblid from (select table_id from cet_push union all select 0) a left join cet_push b on a.table_id+1=b.table_id "+
-		"where b.table_id is null )"+
+		"where b.table_id is null )insert "+
 		"into %s.push_table(job_id,table_id,dest_table,source_table,insert_col,select_sql,filter_col,filter_val,key_col,buffer,status) "+
 		"select $2,tblid,$3,$4,$5,$6,$7,$8,$9,$10,$11 "+
 		"from cet_id returning table_id", dbs.GetSchema(), dbs.GetSchema())
@@ -41,28 +41,29 @@ func (pt *TPushTable) AddTable() (int64, error) {
 	return tableID, nil
 }
 
-func (pt *TPushTable) GetSourceTableDDL() (string, error) {
-	dbs, err := metaDataBase.GetPgServ()
-	if err != nil {
-		return "", err
-	}
-	strSQL := fmt.Sprintf("select source_ddl "+
-		"from %s.pull_table where dest_table=$1 limit 1", dbs.GetSchema())
-	rows, err := dbs.QuerySQL(strSQL, pt.SourceTable)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	var sourceTable string
-	for rows.Next() {
-		err = rows.Scan(&sourceTable)
+/*
+	func (pt *TPushTable) GetSourceTableDDL() (string, error) {
+		dbs, err := metaDataBase.GetPgServ()
 		if err != nil {
 			return "", err
 		}
+		strSQL := fmt.Sprintf("select source_ddl "+
+			"from %s.pull_table where dest_table=$1 limit 1", dbs.GetSchema())
+		rows, err := dbs.QuerySQL(strSQL, pt.SourceTable)
+		if err != nil {
+			return "", err
+		}
+		defer rows.Close()
+		var sourceTable string
+		for rows.Next() {
+			err = rows.Scan(&sourceTable)
+			if err != nil {
+				return "", err
+			}
+		}
+		return sourceTable, nil
 	}
-	return sourceTable, nil
-}
-
+*/
 func (pt *TPushTable) InitTableByID() error {
 	dbs, err := metaDataBase.GetPgServ()
 	if err != nil {
@@ -128,7 +129,7 @@ func (pt *TPushTable) GetTables(ids *string) ([]pushJob.TPushTable, error) {
 	strSQL := fmt.Sprintf(
 		"SELECT a.job_id,a.table_id,a.dest_table,a.source_table,a.insert_col,a.select_sql,a.filter_col,a.filter_val,a.key_col,a.buffer,a.status,"+
 			"a.last_run,COALESCE(c.status,''),COALESCE(c.error_info,'') "+
-			"from (select * from %s.push_table where job_id=$1 and table_id =any(array(SELECT unnest(string_to_array('%s', ','))::bigint)) a "+
+			"from (select * from %s.push_table where job_id=$1 and table_id =any(array(SELECT unnest(string_to_array('%s', ','))::bigint)) )a "+
 			"left join %s.push_table_log c on a.job_id=c.job_id and a.table_id =c.table_id and a.last_run=c.start_time "+
 			"order by a.table_id", dbs.GetSchema(), *ids, dbs.GetSchema())
 

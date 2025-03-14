@@ -312,74 +312,98 @@ func (pw *TWorkerProxy) initDataSource(userID int32, dsID int32) (*module.TDataS
 	}
 	return &ds, nil
 }
-func (pw *TWorkerProxy) GetSourceQuoteFlag(userID int32, dsID int32) (string, error) {
-	ds, err := pw.initDataSource(userID, dsID)
-	if err != nil {
-		return "", err
-	}
-	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
-	if err != nil {
-		return "", err
-	}
-	defer dbOp.FreeDriver()
-	hr := dbOp.GetQuoteFlag()
-	if hr.HandleCode < 0 {
-		return "", fmt.Errorf("get quote flag failed: %s", hr.HandleMsg)
-	}
-	return hr.HandleMsg, nil
+func (pw *TWorkerProxy) GetSourceQuoteFlag() string {
+	return clickHouse.GetQuoteFlag()
+	/*
+		ds, err := pw.initDataSource(userID, dsID)
+		if err != nil {
+			return "", err
+		}
+		dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
+		if err != nil {
+			return "", err
+		}
+		defer dbOp.FreeDriver()
+		hr := dbOp.GetQuoteFlag()
+		if hr.HandleCode < 0 {
+			return "", fmt.Errorf("get quote flag failed: %s", hr.HandleMsg)
+		}
+		return hr.HandleMsg, nil
+	*/
+
 }
 
 func (pw *TWorkerProxy) GetSourceTables(_ map[string]string) ([]tableInfo.TableInfo, error) {
 	return clickHouse.GetTableNames()
 }
 
-func (pw *TWorkerProxy) GetTableDDL(tableName string) (*string, error) {
-	return clickHouse.GetTableDDL(tableName)
+func (pw *TWorkerProxy) GetTableDDL(userID int32, dsID int32, tableName string) (*string, error) {
+	ds, err := pw.initDataSource(userID, dsID)
+	if err != nil {
+		return nil, err
+	}
+	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
+	if err != nil {
+		return nil, err
+	}
+	defer dbOp.FreeDriver()
+
+	cols, err := clickHouse.GetTableColumns(&tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	hr := dbOp.ConvertFromClickHouseDDL(tableName, &cols)
+	if hr.HandleCode < 0 {
+		return nil, fmt.Errorf("get table columns failed: %s", hr.HandleMsg)
+	}
+	strDDL := hr.HandleMsg
+	return &strDDL, nil
 }
 
-func (pw *TWorkerProxy) GetTableColumns(_ map[string]string, tableCode *string) ([]tableInfo.ColumnInfo, error) {
+func (pw *TWorkerProxy) GetSourceTableColumns(_ map[string]string, tableCode *string) ([]tableInfo.ColumnInfo, error) {
 	return clickHouse.GetTableColumns(tableCode)
 }
 
-/*
-// GetSourceTableDDL 获取源表DDL(不是clickhouse的),用于生成目标表
-
-	func (pw *TWorkerProxy) GetSourceTableDDL(tableInfo map[string]string, _ *string) (*string, error) {
-		var sourceTable ctl.TPushTableControl
-		var funcGetIDs = func(tableInfo map[string]string) (int32, int32, error) {
-			strJobID, ok := tableInfo["job_id"]
-			if !ok {
-				return 0, 0, fmt.Errorf("job_id not found")
-			}
-			strTableID, ok := tableInfo["table_id"]
-			if !ok {
-				return 0, 0, fmt.Errorf("table_id not found")
-			}
-			jobID, err := strconv.ParseInt(strJobID, 10, 32)
-			if err != nil {
-				return 0, 0, fmt.Errorf("job_id not int")
-			}
-			tableID, err := strconv.ParseInt(strTableID, 10, 32)
-			if err != nil {
-				return 0, 0, fmt.Errorf("table_id not int")
-			}
-			return int32(jobID), int32(tableID), nil
-		}
-		var err error
-		if sourceTable.JobID, sourceTable.TableID, err = funcGetIDs(tableInfo); err != nil {
-			return nil, err
-		}
-		if err = sourceTable.InitTableByID(); err != nil {
-			return nil, err
-		}
-		var strDDL string
-		strDDL, err = sourceTable.TPushTable.GetSourceTableDDL()
-		if err != nil {
-			return nil, err
-		}
-		return &strDDL, nil
+func (pw *TWorkerProxy) GetDestTableColumns(userID int32, dsID int32, tableName string) ([]tableInfo.ColumnInfo, error) {
+	ds, err := pw.initDataSource(userID, dsID)
+	if err != nil {
+		return nil, err
 	}
-*/
+	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
+	if err != nil {
+		return nil, err
+	}
+	defer dbOp.FreeDriver()
+	hr := dbOp.GetColumns(tableName)
+	if hr.HandleCode < 0 {
+		return nil, fmt.Errorf("get table columns failed: %s", hr.HandleMsg)
+	}
+	var columns []tableInfo.ColumnInfo
+	if err = json.Unmarshal([]byte(hr.HandleMsg), &columns); err != nil {
+		return nil, err
+	}
+	return columns, nil
+}
+
+func (pw *TWorkerProxy) GenerateInsertFromClickHouseSQL(userID int32, dsID int32, tableCode string, columns []tableInfo.ColumnInfo, filterCols string) (*string, error) {
+	ds, err := pw.initDataSource(userID, dsID)
+	if err != nil {
+		return nil, err
+	}
+	dbOp, err := databaseDriver.NewDriverOperation(pw.DriverDir, ds)
+	if err != nil {
+		return nil, err
+	}
+	defer dbOp.FreeDriver()
+	hr := dbOp.GenerateInsertFromClickHouseSQL(tableCode, &columns, filterCols)
+	if hr.HandleCode < 0 {
+		return nil, fmt.Errorf("generate insert sql from clickhouse failed: %s", hr.HandleMsg)
+	}
+	var sql string
+	sql = hr.HandleMsg
+	return &sql, nil
+}
 func (pw *TWorkerProxy) GetSourceConnOption() ([]string, error) {
 	return clickHouse.GetConnOptions(), nil
 }
