@@ -26,9 +26,9 @@ type IDbDriver interface {
 	ConvertToClickHouseDDL(tableName string) (*string, error)
 	ConvertFromClickHouseDDL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error)
 	// GenerateInsertToClickHouseSQL columns 用户选择查询的字段列表，只含有字段名
-	GenerateInsertToClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error)
+	GenerateInsertToClickHouseSQL(tableName string, myColumns *[]tableInfo.ColumnInfo, filterCol string) (*string, error)
 	// GenerateInsertFromClickHouseSQL columns 需要调用方处理用户选择的字段列表，并结合clickHouse获取的字段信息
-	GenerateInsertFromClickHouseSQL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error)
+	GenerateInsertFromClickHouseSQL(tableName string, clickColumns *[]tableInfo.ColumnInfo, filterCol string) (*string, error)
 	GetQuoteFlag() string
 	GetSchema() string
 	IsConnected() bool
