@@ -1,9 +1,9 @@
 package driverInterface
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
+	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
 	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/jmoiron/sqlx"
 	"regexp"
@@ -22,7 +22,7 @@ type IDbDriver interface {
 	// PullData 从数据库中拉取数据，并写入到clickhouse中
 	PullData(strSQL, filterVal, destTable string, batch int, iTimestamp int64, clickClient *clickHouseLocal.TClickHouseDriver) (int64, error)
 	// PushData 从clickhouse中读取数据，并写入到数据库中
-	PushData(tableName string, batch int, rows *sql.Rows) (int64, error) //作为函数参数
+	PushData(selectSQL, filterVal, tableName string, batch int, clickClient *clickHouseSQL.TClickHouseSQL) (int64, error) //作为函数参数
 	ConvertToClickHouseDDL(tableName string) (*string, error)
 	ConvertFromClickHouseDDL(tableName string, columns *[]tableInfo.ColumnInfo) (*string, error)
 	// GenerateInsertToClickHouseSQL columns 用户选择查询的字段列表，只含有字段名
