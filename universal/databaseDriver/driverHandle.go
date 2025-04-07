@@ -16,7 +16,7 @@ typedef uintptr_t (*get_columns_fn)(driver_handle, char*);
 typedef uintptr_t (*get_tables_fn)(driver_handle);
 typedef uintptr_t (*check_sql_valid_fn)(driver_handle, char*, char*);
 typedef uintptr_t (*is_connected_fn)(driver_handle);
-typedef uintptr_t (*push_data_fn)(driver_handle, char*, int, uintptr_t);
+typedef uintptr_t (*push_data_fn)(driver_handle, char*, char*, char*, int, uintptr_t);
 typedef uintptr_t (*pull_data_fn)(driver_handle, char*, char*, char*, int, int64_t, uintptr_t);
 typedef uintptr_t (*convert_to_click_ddl_fn)(driver_handle, char*);
 typedef uintptr_t (*convert_from_click_ddl_fn)(driver_handle, char*, uintptr_t);
@@ -76,9 +76,10 @@ uintptr_t call_is_connected(void* fn, driver_handle handle) {
     return f(handle);
 }
 
-uintptr_t call_push_data(void* fn, driver_handle handle, char* sql, int batch, uintptr_t rowsPtr) {
+uintptr_t call_push_data(void* fn, driver_handle handle, char* sql, char* filterVal,
+    char* destTable, int batch, uintptr_t clickClientPtr) {
     push_data_fn f = (push_data_fn)fn;
-    return f(handle, sql, batch, rowsPtr);
+    return f(handle, sql, filterVal, destTable, batch, clickClientPtr);
 }
 
 uintptr_t call_pull_data(void* fn, driver_handle handle, char* sql, char* filterVal,
@@ -118,9 +119,9 @@ void close_library(void* handle) {
 */
 import "C"
 import (
-	"database/sql"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
+	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
 	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/universal/databaseDriver/driverInterface"
 	"unsafe"
@@ -258,12 +259,15 @@ func (l *DriverLib) PullData(strSQL, filterVal, destTable string, batch int, iTi
 	return parseResponse(result)
 }
 
-func (l *DriverLib) PushData(strSQL string, batch int, rows *sql.Rows) *driverInterface.HandleResult {
+func (l *DriverLib) PushData(strSQL, filterVal, destTable string, batch int, clickClient *clickHouseSQL.TClickHouseSQL) *driverInterface.HandleResult {
 	cSQL := C.CString(strSQL)
 	defer C.free(unsafe.Pointer(cSQL))
 
-	rowsPtr := uintptr(unsafe.Pointer(rows))
-	result := C.call_push_data(l.pushDataFn, l.driverHandle, cSQL, C.int(batch), C.uintptr_t(rowsPtr))
+	cFilterVal := C.CString(filterVal)
+	defer C.free(unsafe.Pointer(cFilterVal))
+	cDestTable := C.CString(destTable)
+	defer C.free(unsafe.Pointer(cDestTable))
+	result := C.call_push_data(l.pullDataFn, l.driverHandle, cSQL, cFilterVal, cDestTable, C.int(batch), C.uintptr_t(uintptr(unsafe.Pointer(clickClient))))
 	return parseResponse(result)
 }
 
@@ -308,14 +312,10 @@ func (l *DriverLib) GetQuoteFlag() *driverInterface.HandleResult {
 	return parseResponse(result)
 }
 
-/*
-func (l *DriverLib) GetParamSign() *driverInterface.HandleResult {
-	result := C.call_param_sign(l.getParamSignFn, l.driverHandle)
-	return parseResponse(result)
+func (l *DriverLib) GetDriverHandle() C.uintptr_t {
+	return l.driverHandle
 }
-*/
 
-// parseResponse converts the C uintptr_t response to a Go Response struct
 func parseResponse(ptr C.uintptr_t) *driverInterface.HandleResult {
 	return (*driverInterface.HandleResult)(unsafe.Pointer(uintptr(ptr)))
 }

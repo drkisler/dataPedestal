@@ -1,9 +1,9 @@
 package databaseDriver
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/clickHouseLocal"
+	"github.com/drkisler/dataPedestal/common/clickHouseSQL"
 	"github.com/drkisler/dataPedestal/common/tableInfo"
 	"github.com/drkisler/dataPedestal/universal/dataSource/module"
 	"github.com/drkisler/dataPedestal/universal/databaseDriver/driverInterface"
@@ -28,7 +28,7 @@ func NewDriverOperation(dbDriverDir string, ds *module.TDataSource) (*DriverOper
 		return nil, err
 	}
 	lib.CreateDriver()
-	if lib.driverHandle == 0 {
+	if lib.GetDriverHandle() == 0 {
 		lib.Close()
 		return nil, fmt.Errorf("db driver %s create driver failed", ds.DatabaseDriver)
 	}
@@ -71,8 +71,8 @@ func (op *DriverOperation) PullData(strSQL, filterVal, destTable string, batch i
 }
 
 // PushData strSQL : insert into table_name (col1, col2,...)
-func (op *DriverOperation) PushData(strSQL string, batch int, rows *sql.Rows) *driverInterface.HandleResult {
-	return op.lib.PushData(strSQL, batch, rows)
+func (op *DriverOperation) PushData(strSQL, filterVal, destTable string, batch int, clickClient *clickHouseSQL.TClickHouseSQL) *driverInterface.HandleResult {
+	return op.lib.PushData(strSQL, filterVal, destTable, batch, clickClient)
 }
 
 func (op *DriverOperation) ConvertToClickHouseDDL(tableName string) *driverInterface.HandleResult {
@@ -92,10 +92,3 @@ func (op *DriverOperation) GenerateInsertFromClickHouseSQL(tableName string, col
 func (op *DriverOperation) GetQuoteFlag() *driverInterface.HandleResult {
 	return op.lib.GetQuoteFlag()
 }
-
-/*
-func (op *DriverOperation) GetParamSign() *driverInterface.HandleResult {
-	return op.lib.GetParamSign()
-}
-
-*/

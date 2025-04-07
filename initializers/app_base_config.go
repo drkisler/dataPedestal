@@ -2,113 +2,138 @@ package initializers
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/BurntSushi/toml"
 	"github.com/drkisler/dataPedestal/common/genService"
 	"github.com/drkisler/dataPedestal/common/license"
-	"os"
-	"strings"
 )
 
+// IConfigLoader 定义配置加载接口
 type IConfigLoader interface {
 	SetDefault()
 }
+
+// TAppBaseConfig 配置结构体
 type TAppBaseConfig struct {
-	IsDebug     bool  `toml:"is_debug"`
-	ServicePort int32 `toml:"service_port"`
-	//DirFlag     string `toml:"dir_flag"`
-	filePath     string
+	IsDebug      bool   `toml:"is_debug"`
+	ServicePort  int32  `toml:"service_port"`
 	DBConnection string `toml:"db_connection"`
+	filePath     string // 不导出，仅内部使用
 }
 
+// 默认数据库连接字符串常量
+const defaultDBConnection = "user=postgres password=secret host=localhost port=5432 dbname=postgres sslmode=disable pool_max_conns=10 client_encoding=UTF8"
+
+// SetDefault 设置默认配置
 func (cfg *TAppBaseConfig) SetDefault() {
 	cfg.IsDebug = false
 	cfg.ServicePort = 8080
-	cfg.DBConnection = "user=postgres password=secret host=localhost port=5432 dbname=postgres sslmode=disable pool_max_conns=10 client_encoding=UTF8"
-	//cfg.DirFlag = "/"
+	cfg.DBConnection = defaultDBConnection
 }
 
-// LoadConfig 加载配置文件
+// LoadConfig 加载配置文件，如果不存在则创建并初始化
 func (cfg *TAppBaseConfig) LoadConfig(cfgParentFullPath, cfgFile string, config IConfigLoader) error {
-	// check the dir exists if not create
-	if _, err := os.Stat(cfgParentFullPath); err != nil {
-		if os.IsNotExist(err) {
-			err = os.Mkdir(cfgParentFullPath, 0755)
-			if err != nil {
-				return fmt.Errorf("创建目录%s出错:%s", cfgParentFullPath, err.Error())
-			}
-		} else {
-			return fmt.Errorf("读取目录%s出错:%s", cfgParentFullPath, err.Error())
-		}
+	// 确保父目录存在
+	if err := os.MkdirAll(cfgParentFullPath, 0755); err != nil {
+		return fmt.Errorf("创建目录 %s 失败: %w", cfgParentFullPath, err)
 	}
-	// check the config file exists if not create
-	genService.GenFilePath()
 
-	cfg.filePath = cfgParentFullPath + os.Getenv("Separator") + cfgFile
-	if _, err := os.Stat(cfg.filePath); err != nil {
-		if os.IsNotExist(err) {
-			file, fileErr := os.Create(cfg.filePath)
-			if fileErr != nil {
-				return fileErr
-			}
-			defer func() {
-				_ = file.Close()
-			}()
-			config.SetDefault()
-			if err = toml.NewEncoder(file).Encode(config); err != nil {
-				return err
-			}
-			return fmt.Errorf("请配置系统配置信息")
-		} else {
-			// other error
+	// 构造配置文件完整路径
+	cfg.filePath = filepath.Join(cfgParentFullPath, cfgFile)
+	genService.GenFilePath() // 保留原有逻辑，假设其必要性
+
+	// 检查并创建配置文件
+	if _, err := os.Stat(cfg.filePath); os.IsNotExist(err) {
+		if err := cfg.createDefaultConfig(config); err != nil {
 			return err
 		}
+		return fmt.Errorf("配置文件 %s 已创建，请配置系统信息", cfg.filePath)
+	} else if err != nil {
+		return fmt.Errorf("检查配置文件 %s 失败: %w", cfg.filePath, err)
 	}
+
+	// 解析配置文件
 	if _, err := toml.DecodeFile(cfg.filePath, config); err != nil {
-		return err
+		return fmt.Errorf("解析配置文件 %s 失败: %w", cfg.filePath, err)
+	}
+
+	return nil
+}
+
+// Update 更新配置文件
+func (cfg *TAppBaseConfig) Update(config IConfigLoader) error {
+	file, err := os.OpenFile(cfg.filePath, os.O_RDWR|os.O_TRUNC, 0666)
+	if err != nil {
+		return fmt.Errorf("打开配置文件 %s 失败: %w", cfg.filePath, err)
+	}
+	defer file.Close()
+
+	if err := toml.NewEncoder(file).Encode(config); err != nil {
+		return fmt.Errorf("写入配置文件 %s 失败: %w", cfg.filePath, err)
 	}
 	return nil
 }
-func (cfg *TAppBaseConfig) Update(config IConfigLoader) error {
-	file, err := os.OpenFile(cfg.filePath, os.O_RDWR, 0666)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-	return toml.NewEncoder(file).Encode(config)
-}
 
-// GetConnection 获取数据库连接,如果数据库连接为明文，则先加密，写入toml文件，如果已经加密则返回解密后的连接字符串
+// GetConnection 获取解密的数据库连接参数
 func (cfg *TAppBaseConfig) GetConnection() (map[string]string, error) {
-	var err error
 	if cfg.DBConnection == "" {
 		return nil, fmt.Errorf("数据库连接字符串为空")
 	}
-	if cfg.DBConnection, err = license.DecryptAES(cfg.DBConnection, license.GetDefaultKey()); err != nil {
-		return nil, err
+	// 尝试解密，如果已是明文则加密并更新文件
+	decrypted, err := license.DecryptAES(cfg.DBConnection, license.GetDefaultKey())
+	if err != nil {
+		// 假设未解密成功是因为已是明文，加密后更新
+		encrypted, encryptErr := license.EncryptAES(cfg.DBConnection, license.GetDefaultKey())
+		if encryptErr != nil {
+			return nil, fmt.Errorf("加密数据库连接字符串失败: %w", encryptErr)
+		}
+		cfg.DBConnection = encrypted
+		if updateErr := cfg.Update(cfg); updateErr != nil {
+			return nil, fmt.Errorf("更新加密后的配置文件失败: %w", updateErr)
+		}
+		return parseToMap(cfg.DBConnection), nil
 	}
-	return parseToMap(cfg.DBConnection), nil
+
+	// 解密成功，返回解析后的连接参数
+	cfg.DBConnection = decrypted
+	// 检查是否为默认值
+	if cfg.DBConnection == defaultDBConnection {
+		return nil, fmt.Errorf("数据库连接字符串为默认值，请在 %s 中配置实际参数", cfg.filePath)
+	}
+
+	return parseToMap(decrypted), nil
 }
 
+// createDefaultConfig 创建并写入默认配置文件
+func (cfg *TAppBaseConfig) createDefaultConfig(config IConfigLoader) error {
+	file, err := os.Create(cfg.filePath)
+	if err != nil {
+		return fmt.Errorf("创建配置文件 %s 失败: %w", cfg.filePath, err)
+	}
+	defer file.Close()
+
+	config.SetDefault()
+	if err := toml.NewEncoder(file).Encode(config); err != nil {
+		return fmt.Errorf("写入默认配置到 %s 失败: %w", cfg.filePath, err)
+	}
+	return nil
+}
+
+// parseToMap 将连接字符串解析为 map
 func parseToMap(input string) map[string]string {
 	result := make(map[string]string)
-
-	// 将输入字符串按空白字符（包括空格、制表符、换行符）分割
 	parts := strings.Fields(input)
 
 	for _, part := range parts {
-		// 查找第一个"="的位置
-		equalIndex := strings.Index(part, "=")
-		if equalIndex == -1 {
-			continue // 跳过不包含"="的部分
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
 		}
-
-		// 提取键和值
-		key := strings.TrimSpace(part[:equalIndex])
-		value := strings.TrimSpace(part[equalIndex+1:])
-
-		// 将键值对添加到map中
+		key := strings.TrimSpace(kv[0])
+		value := strings.TrimSpace(kv[1])
 		if key != "" {
 			result[key] = value
 		}
