@@ -285,4 +285,19 @@ func GetQuoteFlag(handle C.driver_handle) C.uintptr_t {
 	return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
 }
 
+/*
+//export GetParamSign
+
+	func GetParamSign(handle C.driver_handle) C.uintptr_t {
+		var result driverInterface.HandleResult
+		driver, ok := drivers[handle]
+		if !ok {
+			result.HandleFailed("driver not found")
+			return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+		}
+		paramSign := driver.GetParamSign()
+		result.HandleSuccess(0, paramSign)
+		return C.uintptr_t(uintptr(unsafe.Pointer(&result)))
+	}
+*/
 func main() {}
