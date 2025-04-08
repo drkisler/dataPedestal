@@ -95,8 +95,13 @@ func rateLimitMiddleware() gin.HandlerFunc {
 func generateCaptcha(c *gin.Context) {
 	capt := captcha.New()
 	capt.SetSize(80, 30)
-
-	err := capt.SetFont(filepath.Join(os.Getenv("FilePath"), "fonts", initializers.PortalCfg.ImageFontDir)) // 可选字体设置 imageCaptchaFont.ttf Comic.ttf
+	_ = os.MkdirAll(filepath.Join(os.Getenv("FilePath"), "fonts"), 0755)
+	/*
+		if err := os.MkdirAll(filepath.Join(os.Getenv("FilePath"), "fonts"), 0755); err != nil {
+			fmt.Println(err.Error())
+		}
+	*/
+	err := capt.SetFont(filepath.Join(os.Getenv("FilePath"), "fonts", initializers.PortalCfg.ImageFont)) // 可选字体设置 imageCaptchaFont.ttf Comic.ttf
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "设置字体失败:" + err.Error()})
 		return
@@ -119,7 +124,7 @@ func generateCaptcha(c *gin.Context) {
 
 	// 将图片编码为 PNG 并转为 Base64
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	if err = png.Encode(&buf, img); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成验证码失败"})
 		return
 	}
@@ -313,7 +318,7 @@ func main() {
 		logService.LogWriter.WriteLocal(fmt.Sprintf("加载配置文件失败：%s", err.Error()))
 		os.Exit(1)
 	}
-	connectStr, err := initializers.PortalCfg.GetConnection()
+	connectStr, err := initializers.PortalCfg.GetConnection(&initializers.PortalCfg)
 	if err != nil {
 		fmt.Println(err.Error())
 		logService.LogWriter.WriteLocal(fmt.Sprintf("获取数据库连接信息失败：%s", err.Error()))

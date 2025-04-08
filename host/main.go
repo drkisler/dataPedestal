@@ -118,7 +118,7 @@ func main() {
 
 	// endregion
 	// 连接数据库
-	connectStr, err := initializers.HostConfig.GetConnection()
+	connectStr, err := initializers.HostConfig.GetConnection(&initializers.HostConfig)
 	if err != nil {
 		logService.LogWriter.WriteError(fmt.Sprintf("获取数据库信息失败：%s", err.Error()), true)
 		os.Exit(1)

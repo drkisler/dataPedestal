@@ -2,13 +2,12 @@ package initializers
 
 import (
 	"fmt"
+	"github.com/drkisler/dataPedestal/common/license"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/drkisler/dataPedestal/common/genService"
-	"github.com/drkisler/dataPedestal/common/license"
 )
 
 // IConfigLoader 定义配置加载接口
@@ -25,7 +24,7 @@ type TAppBaseConfig struct {
 }
 
 // 默认数据库连接字符串常量
-const defaultDBConnection = "user=postgres password=secret host=localhost port=5432 dbname=postgres sslmode=disable pool_max_conns=10 client_encoding=UTF8"
+const defaultDBConnection = "user=postgres password=secret host=localhost port=5432 dbname=postgres schema=enjoyor sslmode=disable pool_max_conns=10 client_encoding=UTF8"
 
 // SetDefault 设置默认配置
 func (cfg *TAppBaseConfig) SetDefault() {
@@ -43,7 +42,6 @@ func (cfg *TAppBaseConfig) LoadConfig(cfgParentFullPath, cfgFile string, config 
 
 	// 构造配置文件完整路径
 	cfg.filePath = filepath.Join(cfgParentFullPath, cfgFile)
-	genService.GenFilePath() // 保留原有逻辑，假设其必要性
 
 	// 检查并创建配置文件
 	if _, err := os.Stat(cfg.filePath); os.IsNotExist(err) {
@@ -78,10 +76,11 @@ func (cfg *TAppBaseConfig) Update(config IConfigLoader) error {
 }
 
 // GetConnection 获取解密的数据库连接参数
-func (cfg *TAppBaseConfig) GetConnection() (map[string]string, error) {
+func (cfg *TAppBaseConfig) GetConnection(fullConfig IConfigLoader) (map[string]string, error) {
 	if cfg.DBConnection == "" {
 		return nil, fmt.Errorf("数据库连接字符串为空")
 	}
+
 	// 尝试解密，如果已是明文则加密并更新文件
 	decrypted, err := license.DecryptAES(cfg.DBConnection, license.GetDefaultKey())
 	if err != nil {
@@ -91,7 +90,7 @@ func (cfg *TAppBaseConfig) GetConnection() (map[string]string, error) {
 			return nil, fmt.Errorf("加密数据库连接字符串失败: %w", encryptErr)
 		}
 		cfg.DBConnection = encrypted
-		if updateErr := cfg.Update(cfg); updateErr != nil {
+		if updateErr := cfg.Update(fullConfig); updateErr != nil { // 使用 fullConfig 更新
 			return nil, fmt.Errorf("更新加密后的配置文件失败: %w", updateErr)
 		}
 		return parseToMap(cfg.DBConnection), nil
@@ -99,7 +98,6 @@ func (cfg *TAppBaseConfig) GetConnection() (map[string]string, error) {
 
 	// 解密成功，返回解析后的连接参数
 	cfg.DBConnection = decrypted
-	// 检查是否为默认值
 	if cfg.DBConnection == defaultDBConnection {
 		return nil, fmt.Errorf("数据库连接字符串为默认值，请在 %s 中配置实际参数", cfg.filePath)
 	}
@@ -116,7 +114,7 @@ func (cfg *TAppBaseConfig) createDefaultConfig(config IConfigLoader) error {
 	defer file.Close()
 
 	config.SetDefault()
-	if err := toml.NewEncoder(file).Encode(config); err != nil {
+	if err = toml.NewEncoder(file).Encode(config); err != nil {
 		return fmt.Errorf("写入默认配置到 %s 失败: %w", cfg.filePath, err)
 	}
 	return nil

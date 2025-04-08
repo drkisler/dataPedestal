@@ -31,13 +31,14 @@ func (cfg *THostConfig) SetDefault() {
 	cfg.PublishPoolSize = 1000
 	cfg.SelfName = "host001"
 	cfg.SelfIP = "127.0.0.1"
-	cfg.ServicePort = 8081
+	cfg.ServicePort = 8080
 	cfg.FileServPort = 8902
 	cfg.MessagePort = 8903
 	cfg.PluginDir = "plugin"
 	cfg.DbDriverDir = "dbDriver"
-	cfg.ClickhouseCfg = ""
+	cfg.ClickhouseCfg = "host=localhost:9000 user=default password=InfoC0re! dbname=default cluster=default"
 }
+
 func (cfg *THostConfig) LoadConfig(cfgDir, cfgFile string) error {
 	return cfg.TAppBaseConfig.LoadConfig(cfgDir, cfgFile, cfg)
 }
