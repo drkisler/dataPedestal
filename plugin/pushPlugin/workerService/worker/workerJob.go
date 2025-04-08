@@ -145,7 +145,7 @@ func (wj *TWorkerJob) PushTable(tableID int32, dbOperator *databaseDriver.Driver
 	}
 	if err = client.QuerySQL(tbl.SelectSql,
 		func(rows *sql.Rows) error {
-			hr := dbOperator.PushData(tbl.DestTable, tbl.Buffer, rows)
+			hr := dbOperator.PushData(tbl.SelectSql, tbl.FilterVal, tbl.DestTable, tbl.Buffer, client)
 			if hr.HandleCode < 0 {
 				return fmt.Errorf("数据写入失败：%s", hr.HandleMsg)
 			}

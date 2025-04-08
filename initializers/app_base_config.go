@@ -67,7 +67,9 @@ func (cfg *TAppBaseConfig) Update(config IConfigLoader) error {
 	if err != nil {
 		return fmt.Errorf("打开配置文件 %s 失败: %w", cfg.filePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	if err := toml.NewEncoder(file).Encode(config); err != nil {
 		return fmt.Errorf("写入配置文件 %s 失败: %w", cfg.filePath, err)
@@ -85,6 +87,7 @@ func (cfg *TAppBaseConfig) GetConnection(fullConfig IConfigLoader) (map[string]s
 	decrypted, err := license.DecryptAES(cfg.DBConnection, license.GetDefaultKey())
 	if err != nil {
 		// 假设未解密成功是因为已是明文，加密后更新
+		decrypted = cfg.DBConnection
 		encrypted, encryptErr := license.EncryptAES(cfg.DBConnection, license.GetDefaultKey())
 		if encryptErr != nil {
 			return nil, fmt.Errorf("加密数据库连接字符串失败: %w", encryptErr)
@@ -111,8 +114,9 @@ func (cfg *TAppBaseConfig) createDefaultConfig(config IConfigLoader) error {
 	if err != nil {
 		return fmt.Errorf("创建配置文件 %s 失败: %w", cfg.filePath, err)
 	}
-	defer file.Close()
-
+	defer func() {
+		_ = file.Close()
+	}()
 	config.SetDefault()
 	if err = toml.NewEncoder(file).Encode(config); err != nil {
 		return fmt.Errorf("写入默认配置到 %s 失败: %w", cfg.filePath, err)

@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/genService"
+	"github.com/drkisler/dataPedestal/common/license"
 	"github.com/drkisler/dataPedestal/common/plugins"
 	"github.com/drkisler/dataPedestal/host/control"
 	"github.com/drkisler/dataPedestal/host/service"
@@ -112,6 +113,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 解密ClickHouse连接信息
+	decrypted, err := license.DecryptAES(initializers.HostConfig.ClickhouseCfg, license.GetDefaultKey())
+	if err != nil {
+		var encrypted string
+		decrypted = initializers.HostConfig.ClickhouseCfg
+		if encrypted, err = license.EncryptAES(initializers.HostConfig.ClickhouseCfg, license.GetDefaultKey()); err != nil {
+			fmt.Println("加密ClickHouse连接信息失败：", err.Error())
+			os.Exit(1)
+		}
+		initializers.HostConfig.ClickhouseCfg = encrypted
+		if err = initializers.HostConfig.Update(&initializers.HostConfig); err != nil {
+			fmt.Println("更新ClickHouse连接信息失败：", err.Error())
+			os.Exit(1)
+		}
+	}
+	initializers.HostConfig.ClickhouseCfg = decrypted
+
 	service.IsDebug = initializers.HostConfig.IsDebug
 
 	logService.LogWriter = logService.NewLogWriter(fmt.Sprintf("%s(%s)", initializers.HostConfig.SelfName, initializers.HostConfig.SelfIP))
@@ -137,8 +155,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	//_ = os.Setenv("host_rep_url", initializers.HostConfig.LocalRepUrl)
-	//_ = os.Setenv("host_database_connection", initializers.HostConfig.DBConnection)
 	// region 创建并启动消息应答服务，处理来自门户的服务转发请求
 	msg, err := messager.NewMessageServer(
 		[]string{fmt.Sprintf("tcp://%s:%d", initializers.HostConfig.SelfIP, initializers.HostConfig.MessagePort),
