@@ -49,28 +49,29 @@ func (ds *TDataSource) InitByID(key string) error {
 	return nil
 }
 
-func (ds *TDataSource) AddDataSource(key string) (int64, error) {
+func (ds *TDataSource) AddDataSource(key string) (int64, string, error) {
 	storage, err := metaDataBase.GetPgServ()
 	if err != nil {
-		return -1, err
+		return -1, "", err
 	}
 	strSQL := fmt.Sprintf("with cet_id as(select %d user_id,ds_id from %s.data_source where user_id=$1 union all select %d, 0)INSERT "+
 		"INTO %s.data_source(user_id,ds_id,ds_name,max_idle_time,max_open_connections,conn_max_lifetime,max_idle_connections,database_driver,connect_string)"+
 		"select $2,min(a.ds_id)+1,$3, $4, $5, $6, $7, $8, encrypt_string($9, $10) "+
 		"from cet_id a left join %s.data_source b on a.user_id = b.user_id and a.ds_id+1 = b.ds_id "+
-		"where b.ds_id is null returning ds_id", ds.UserID, storage.GetSchema(), ds.UserID, storage.GetSchema(), storage.GetSchema())
+		"where b.ds_id is null returning ds_id,connect_string", ds.UserID, storage.GetSchema(), ds.UserID, storage.GetSchema(), storage.GetSchema())
 	rows, err := storage.QuerySQL(strSQL, ds.UserID, ds.UserID, ds.DsName, ds.MaxIdleTime, ds.MaxOpenConnections, ds.ConnMaxLifetime, ds.MaxIdleConnections, ds.DatabaseDriver, ds.ConnectString, key)
 	if err != nil {
-		return -1, err
+		return -1, "", err
 	}
 	defer rows.Close()
 	var dsId int64
+	var connectString string
 	for rows.Next() {
-		if err = rows.Scan(&dsId); err != nil {
-			return -1, err
+		if err = rows.Scan(&dsId, &connectString); err != nil {
+			return -1, "", err
 		}
 	}
-	return dsId, nil
+	return dsId, connectString, nil
 }
 
 func (ds *TDataSource) UpdateDataSource(key string) error {

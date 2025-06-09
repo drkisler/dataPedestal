@@ -77,7 +77,7 @@ func (s *TSurvey) HandleOperate(msg []byte) []byte {
 func (s *TSurvey) GetHostInfoByID(hostUUID string) (*TActiveHost, error) {
 	result, ok := s.hostInfo[hostUUID]
 	if !ok {
-		return nil, fmt.Errorf("%s不存在或已经离线", hostUUID)
+		return nil, fmt.Errorf("%s不存在或已经离线，请确保对应的host真实存在", hostUUID)
 	}
 	return result, nil
 }

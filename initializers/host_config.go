@@ -31,7 +31,7 @@ func (cfg *THostConfig) SetDefault() {
 	cfg.PublishPoolSize = 1000
 	cfg.SelfName = "host001"
 	cfg.SelfIP = "127.0.0.1"
-	cfg.ServicePort = 8080
+	cfg.ServicePort = 8081
 	cfg.FileServPort = 8902
 	cfg.MessagePort = 8903
 	cfg.PluginDir = "plugin"

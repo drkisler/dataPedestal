@@ -31,7 +31,7 @@ func InitPlugin() {
 	operateMap["getDestTableColumns"] = GetDestTableColumns
 	operateMap["generateInsertFromClickHouseSQL"] = GenerateInsertFromClickHouseSQL
 
-	operateMap["getTableScript"] = GetSourceTableDDL
+	operateMap["createDestTableDDL"] = ConvertFromClickHouseDDL //createDestTableDDL
 	operateMap["checkJobTable"] = CheckJobTable
 	operateMap["checkSQLValid"] = CheckSQLValid
 	operateMap["clearJobLog"] = ClearJobLog
@@ -300,7 +300,7 @@ func GetSourceTableColumns(_ int32, params map[string]any) response.TResponse {
 	return *response.Success(&response.TRespDataSet{ArrData: arrData, Total: int64(len(cols))})
 }
 
-func GetSourceTableDDL(userID int32, params map[string]any) response.TResponse {
+func ConvertFromClickHouseDDL(userID int32, params map[string]any) response.TResponse {
 	tableName, ok := params["source_table"]
 	if !ok {
 		return *response.Failure("source_table is empty") //"", fmt.Errorf("tableName is empty")
@@ -316,7 +316,7 @@ func GetSourceTableDDL(userID int32, params map[string]any) response.TResponse {
 	if err != nil {
 		return *response.Failure(err.Error())
 	}
-	strDDL, err := workerProxy.GetTableDDL(userID, int32(iDsID), strTableName)
+	strDDL, err := workerProxy.ConvertFromClickHouseDDL(userID, int32(iDsID), strTableName)
 	if err != nil {
 		return *response.Failure(err.Error())
 	}

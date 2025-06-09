@@ -24,11 +24,12 @@ func (dsc *TDataSourceControl) InitByID() error {
 }
 
 func (dsc *TDataSourceControl) AddDataSource() *response.TResponse {
-	dsID, err := dsc.TDataSource.AddDataSource(license.GetDefaultKey())
+	dsID, connectString, err := dsc.TDataSource.AddDataSource(license.GetDefaultKey())
 	if err != nil {
 		return response.Failure(err.Error())
 	}
-	return response.ReturnInt(dsID)
+
+	return &response.TResponse{Code: dsID, Info: connectString}
 }
 
 func (dsc *TDataSourceControl) UpdateDataSource() *response.TResponse {

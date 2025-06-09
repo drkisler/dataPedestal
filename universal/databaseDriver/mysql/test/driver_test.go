@@ -56,7 +56,7 @@ func teardownDriver(lib *driver.DriverLib) {
 	lib.Close()
 }
 
-func TestConnection(t *testing.T) {
+func TestIsConnected(t *testing.T) {
 	lib := setupDriver(t)
 	defer teardownDriver(lib)
 
@@ -68,6 +68,26 @@ func TestConnection(t *testing.T) {
 	if connectedResp.HandleMsg != "true" {
 		t.Error("Expected connected status to be true")
 	}
+}
+
+func TestConnection(t *testing.T) {
+	lib := setupDriver(t)
+	defer teardownDriver(lib)
+	// `{"host":"192.168.110.130:3306","dbname":"sanyu","user":"sanyu","password":"sanyu"}`
+
+	strConnect := `{"host":"192.168.110.130:3306","dbname":"sanyu0","user":"sanyu","password":"sanyu"}`
+	// 测试连接
+	resp := lib.OpenConnect(
+		strConnect,
+		testMaxIdle,
+		testMaxOpen,
+		testMaxLifetime,
+		testMaxIdleConns,
+	)
+	if resp.HandleCode < 0 {
+		t.Fatalf("Connection failed: %s", resp.HandleMsg)
+	}
+	t.Logf("Connection successful: %s", resp.HandleMsg)
 }
 
 func TestGetTables(t *testing.T) {

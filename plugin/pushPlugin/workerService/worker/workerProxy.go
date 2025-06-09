@@ -337,7 +337,7 @@ func (pw *TWorkerProxy) GetSourceTables(_ map[string]string) ([]tableInfo.TableI
 	return clickHouse.GetTableNames()
 }
 
-func (pw *TWorkerProxy) GetTableDDL(userID int32, dsID int32, tableName string) (*string, error) {
+func (pw *TWorkerProxy) ConvertFromClickHouseDDL(userID int32, dsID int32, tableName string) (*string, error) {
 	ds, err := pw.initDataSource(userID, dsID)
 	if err != nil {
 		return nil, err
