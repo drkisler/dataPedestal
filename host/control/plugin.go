@@ -243,10 +243,7 @@ func (c *TPluginControl) GenPluginConfig() (string, error) {
 	configMap["host_reply_url"] = initializers.HostConfig.LocalRepUrl
 	configMap["host_pub_url"] = initializers.HostConfig.PublishUrl
 	configMap["db_driver_dir"] = filepath.Join(os.Getenv("FilePath"), initializers.HostConfig.DbDriverDir) //将路径转换为绝对路径
-	if configMap["clickhouse_cfg"], err = license.DecryptAES(initializers.HostConfig.ClickhouseCfg, license.GetDefaultKey()); err != nil {
-		return "", err
-	}
-
+	configMap["clickhouse_cfg"] = initializers.HostConfig.ClickhouseCfg
 	data, err := json.Marshal(&configMap)
 	if err != nil {
 		return "", err

@@ -494,7 +494,7 @@ func (driver *TMySQLDriver) OpenConnect(connectJson string, maxIdleTime, maxOpen
 	if err != nil {
 		return err
 	}
-	driver.Db.SetConnMaxIdleTime(time.Duration(maxIdleTime) * time.Minute)
+	driver.Db.SetConnMaxIdleTime(time.Duration(maxIdleTime) * time.Second)
 	driver.Db.SetMaxOpenConns(maxOpenConnections)
 	driver.Db.SetConnMaxLifetime(time.Duration(connMaxLifetime) * time.Minute)
 	driver.Db.SetMaxIdleConns(maxIdleConnections)

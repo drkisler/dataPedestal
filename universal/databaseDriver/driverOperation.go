@@ -38,9 +38,10 @@ func NewDriverOperation(dbDriverDir string, ds *module.TDataSource) (*DriverOper
 		int(ds.ConnMaxLifetime),
 		int(ds.MaxIdleConnections))
 	if hr.HandleCode < 0 {
+		errMsg := hr.HandleMsg
 		lib.DestroyDriver()
 		lib.Close()
-		return nil, fmt.Errorf("db driver %s open connect failed: %s", ds.DatabaseDriver, hr.HandleMsg)
+		return nil, fmt.Errorf("db driver %s open connect failed: %s", ds.DatabaseDriver, errMsg)
 	}
 	return &DriverOperation{lib: lib}, nil
 }

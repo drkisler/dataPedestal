@@ -304,6 +304,7 @@ func (c *TPluginControl) UpdatePlugFileName() *response.TResponse {
 		return response.Success(nil)
 	}
 */
+
 func (c *TPluginControl) SendRequest(opType messager.OperateType, checkExpired bool, reqData []byte) *response.TResponse {
 	if c.HostUUID == "" {
 		return response.Failure(fmt.Sprintf("%s待部署", c.PluginUUID))
@@ -342,10 +343,11 @@ func (c *TPluginControl) SendRequest(opType messager.OperateType, checkExpired b
 		return c.SendRequest(messager.OperateUnloadPlugin, true, []byte(c.PluginUUID))
 	}
 */
+
 func (c *TPluginControl) RunPlugin() *response.TResponse {
 	var err error
 	if err = c.InitByUUID(); err != nil {
-		return response.Failure(err.Error())
+		return response.Failure(fmt.Sprintf("init plugin fail, %s", err.Error()))
 	}
 	return c.SendRequest(messager.OperateRunPlugin, true, []byte(c.PluginUUID))
 }

@@ -264,7 +264,7 @@ func createAndStartGinService() {
 	go func() {
 		_ = srv.ListenAndServe()
 	}()
-	logService.LogWriter.WriteInfo("portal服务启动成功", true)
+	logService.LogWriter.WriteInfo(fmt.Sprintf("portal服务启动成功,监听端口：%d", initializers.PortalCfg.ServicePort), true)
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
@@ -318,6 +318,14 @@ func main() {
 		logService.LogWriter.WriteLocal(fmt.Sprintf("加载配置文件失败：%s", err.Error()))
 		os.Exit(1)
 	}
+
+	for _, strDir := range []string{"fonts", initializers.PortalCfg.PluginDir, initializers.PortalCfg.DbDriverDir} {
+		if err = os.MkdirAll(filepath.Join(os.Getenv("FilePath"), strDir), 0755); err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+	}
+
 	connectStr, err := initializers.PortalCfg.GetConnection(&initializers.PortalCfg)
 	if err != nil {
 		fmt.Println(err.Error())

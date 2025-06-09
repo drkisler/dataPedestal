@@ -113,6 +113,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	for _, strDir := range []string{"fonts", initializers.HostConfig.PluginDir, initializers.HostConfig.DbDriverDir} {
+		if err = os.MkdirAll(filepath.Join(os.Getenv("FilePath"), strDir), 0755); err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+	}
+
 	// 解密ClickHouse连接信息
 	decrypted, err := license.DecryptAES(initializers.HostConfig.ClickhouseCfg, license.GetDefaultKey())
 	if err != nil {

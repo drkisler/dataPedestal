@@ -81,7 +81,7 @@ func (p *TPlugin) QueryPlugin(pageSize int32, pageIndex int32) ([]TPlugin, int, 
 	var rows pgx.Rows
 	var strSQL string
 	strSQL = fmt.Sprintf("select * "+
-		"from %s.plugins where user_id= $1 order by plugin_uuid", storage.GetSchema())
+		"from %s.plugins where user_id= $1 ", storage.GetSchema())
 	if p.PluginType != "全部插件" {
 		strSQL += fmt.Sprintf("and plugin_type = '%s' ", p.PluginType)
 	}
@@ -89,7 +89,7 @@ func (p *TPlugin) QueryPlugin(pageSize int32, pageIndex int32) ([]TPlugin, int, 
 		strSQL += fmt.Sprintf("and plugin_name like '%%%s%%' ", p.PluginName)
 	}
 	rows, err = storage.QuerySQL(fmt.Sprintf("select user_id,plugin_uuid, plugin_name, plugin_type, plugin_desc, plugin_file_name, plugin_config, plugin_version,host_uuid,host_name,host_ip,run_type "+
-		"from (%s)t limit $2 offset ($3-1)*$4 ", strSQL), p.UserID, pageSize, pageIndex, pageSize)
+		"from (%s order by plugin_uuid )t limit $2 offset ($3-1)*$4 ", strSQL), p.UserID, pageSize, pageIndex, pageSize)
 
 	if err != nil {
 		return nil, 0, err

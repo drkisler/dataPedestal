@@ -21,16 +21,16 @@ var workerProxy *worker.TWorkerProxy
 func InitPlugin() {
 	PluginServ = CreateMyPullPlugin()
 	operateMap = make(map[string]TPluginFunc)
-	operateMap["deleteTable"] = DeleteTable                       //删除抽取任务表,同时删除相关的日志
-	operateMap["addTable"] = AddTable                             //添加抽取任务表
-	operateMap["alterTable"] = AlterTable                         //修改抽取任务表
-	operateMap["getPullTables"] = GetPullTables                   //获取抽取任务表清单
-	operateMap["setTableStatus"] = SetTableStatus                 //设置抽取任务表状态
-	operateMap["getSourceTables"] = GetSourceTables               //获取可抽取源表清单
-	operateMap["getDestTables"] = GetDestTables                   //获取可写入目标表清单
-	operateMap["getSourceTableColumns"] = GetSourceTableColumns   //获取指定源表字段信息，目标表字段名称与源表字段名称一致，顺序不限
-	operateMap["getDestTableColumns"] = GetDestTableColumns       //获取指定目标表字段信息
-	operateMap["convertToClickHouseDDL"] = ConvertToClickHouseDDL //获取指定源表的建表脚本，该脚本用于创建目标表，脚本已经经过初步的转换
+	operateMap["deleteTable"] = DeleteTable                     //删除抽取任务表,同时删除相关的日志
+	operateMap["addTable"] = AddTable                           //添加抽取任务表
+	operateMap["alterTable"] = AlterTable                       //修改抽取任务表
+	operateMap["getPullTables"] = GetPullTables                 //获取抽取任务表清单
+	operateMap["setTableStatus"] = SetTableStatus               //设置抽取任务表状态
+	operateMap["getSourceTables"] = GetSourceTables             //获取可抽取源表清单
+	operateMap["getDestTables"] = GetDestTables                 //获取可写入目标表清单
+	operateMap["getSourceTableColumns"] = GetSourceTableColumns //获取指定源表字段信息，目标表字段名称与源表字段名称一致，顺序不限
+	operateMap["getDestTableColumns"] = GetDestTableColumns     //获取指定目标表字段信息
+	operateMap["createDestTableDDL"] = ConvertToClickHouseDDL   //获取指定源表的建表脚本，该脚本用于创建目标表，脚本已经经过初步的转换
 
 	operateMap["generateInsertToClickHouseSQL"] = GenerateInsertToClickHouseSQL
 	operateMap["checkJobTable"] = CheckJobTable //测试指定抽取任务表是否正确
