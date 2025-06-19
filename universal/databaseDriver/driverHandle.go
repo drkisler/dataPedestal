@@ -267,7 +267,7 @@ func (l *DriverLib) PushData(strSQL, filterVal, destTable string, batch int, cli
 	defer C.free(unsafe.Pointer(cFilterVal))
 	cDestTable := C.CString(destTable)
 	defer C.free(unsafe.Pointer(cDestTable))
-	result := C.call_push_data(l.pullDataFn, l.driverHandle, cSQL, cFilterVal, cDestTable, C.int(batch), C.uintptr_t(uintptr(unsafe.Pointer(clickClient))))
+	result := C.call_push_data(l.pushDataFn, l.driverHandle, cSQL, cFilterVal, cDestTable, C.int(batch), C.uintptr_t(uintptr(unsafe.Pointer(clickClient))))
 	return parseResponse(result)
 }
 

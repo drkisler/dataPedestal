@@ -1,181 +1,204 @@
 package enMap
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
-func GetInt32ValueFromMap(key string, data map[string]interface{}) (int32, error) {
-	iValue, err := GetIntValueFromMap(key, data)
-	if err != nil {
-		return 0, err
+// 泛型函数：根据目标类型 T 提取对应值
+func ExtractValueFromMap[T any](key string, data map[string]interface{}) (T, error) {
+	var zero T
+	if data == nil {
+		return zero, fmt.Errorf("map is nil")
 	}
-	return int32(iValue), nil
+	val, ok := data[key]
+	if !ok {
+		return zero, nil
+	}
+
+	// 使用类型断言来匹配目标类型
+	switch any(zero).(type) {
+	case int:
+		v, err := convertToInt(val)
+		return any(v).(T), err
+	case int32:
+		v, err := convertToInt32(val)
+		return any(v).(T), err
+	case int64:
+		v, err := convertToInt64(val)
+		return any(v).(T), err
+	case float64:
+		v, err := convertToFloat64(val)
+		return any(v).(T), err
+	case string:
+		v, err := convertToString(val)
+		return any(v).(T), err
+	case bool:
+		v, err := convertToBool(val)
+		return any(v).(T), err
+	case time.Time:
+		v, err := convertToTime(val)
+		return any(v).(T), err
+	default:
+		return zero, fmt.Errorf("unsupported type for key %q", key)
+	}
 }
 
-func GetIntValueFromMap(key string, data map[string]interface{}) (int, error) {
-	if data == nil {
-		return 0, fmt.Errorf("data is nil")
-	}
-	if value, ok := data[key]; ok {
-		if intValue, ok := value.(int); ok {
-			return intValue, nil
-		} else if int32Value, ok := value.(int32); ok {
-			return int(int32Value), nil
-		} else if float64Value, ok := value.(float64); ok {
-			return int(float64Value), nil
-		} else if int64Value, ok := value.(int64); ok {
-			return int(int64Value), nil
-		} else {
-			return 0, fmt.Errorf("value is not int or int32 or float64 or int64  by key %s", key)
+func convertToInt(val interface{}) (int, error) {
+	switch v := val.(type) {
+	case int:
+		return v, nil
+	case int32:
+		return int(v), nil
+	case int64:
+		// int64 与 int 在 64 位架构下范围相同，无需额外检查
+		return int(v), nil
+	case float64:
+		if v > 9223372036854775807.0 || v < -9223372036854775808.0 {
+			return 0, fmt.Errorf("float64 value out of int range: %f", v)
 		}
-	}
-	return 0, nil
-}
-
-func GetInt64ValueFromMap(key string, data map[string]interface{}) (int64, error) {
-	if data == nil {
-		return 0, fmt.Errorf("data is nil")
-	}
-	if value, ok := data[key]; ok {
-		if int64Value, ok := value.(int64); ok {
-			return int64Value, nil
-		} else if int32Value, ok := value.(int32); ok {
-			return int64(int32Value), nil
-		} else {
-			return 0, fmt.Errorf("value is not int64 or int32  by key %s", key)
+		if v != float64(int64(v)) { // 检查是否会因截断丢失精度
+			return 0, fmt.Errorf("float64 value cannot be accurately converted to int: %f", v)
 		}
-	}
-	return 0, nil
-}
-
-func GetFloat64ValueFromMap(key string, data map[string]interface{}) (float64, error) {
-	if data == nil {
-		return 0, fmt.Errorf("data is nil")
-	}
-	if value, ok := data[key]; ok {
-		if float64Value, ok := value.(float64); ok {
-			return float64Value, nil
-		} else if int32Value, ok := value.(int32); ok {
-			return float64(int32Value), nil
-		} else {
-			return 0, fmt.Errorf("value is not float64 or int32  by key %s", key)
+		return int(v), nil
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			return 0, fmt.Errorf("cannot convert string to int: %s", err)
 		}
+		return i, nil
+	default:
+		return 0, fmt.Errorf("cannot convert %T to int", val)
 	}
-	return 0, nil
 }
 
-func GetStringValueFromMap(key string, data map[string]interface{}) (string, error) {
-	if data == nil {
-		return "", fmt.Errorf("data is nil")
-	}
-	if value, ok := data[key]; ok {
-		if stringValue, ok := value.(string); ok {
-			return stringValue, nil
-		} else {
-			return "", fmt.Errorf("value is not string  by key %s", key)
+func convertToInt32(val interface{}) (int32, error) {
+	switch v := val.(type) {
+	case int:
+		if v > 2147483647 || v < -2147483648 {
+			return 0, fmt.Errorf("int value out of int32 range: %d", v)
 		}
+		return int32(v), nil
+	case int32:
+		return v, nil
+	case int64:
+		if v > 2147483647 || v < -2147483648 {
+			return 0, fmt.Errorf("int64 value out of int32 range: %d", v)
+		}
+		return int32(v), nil
+	case float64:
+		if v > 2147483647.0 || v < -2147483648.0 {
+			return 0, fmt.Errorf("float64 value out of int32 range: %f", v)
+		}
+		if v != float64(int32(v)) { // 检查是否会因截断丢失精度
+			return 0, fmt.Errorf("float64 value cannot be accurately converted to int32: %f", v)
+		}
+		return int32(v), nil
+	case string:
+		i, err := strconv.ParseInt(strings.TrimSpace(v), 10, 32)
+		return int32(i), err
+	default:
+		return 0, fmt.Errorf("cannot convert %T to int32", val)
 	}
-	return "", nil
 }
 
-func GetIntArrayFromMap(key string, data map[string]interface{}) ([]int, error) {
-	if data == nil {
-		return nil, fmt.Errorf("data is nil")
+func convertToInt64(val interface{}) (int64, error) {
+	switch v := val.(type) {
+	case int:
+		return int64(v), nil
+	case int32:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	case float64:
+		if v > float64(^uint64(0)>>1) || v < -float64(^uint64(0)>>1) {
+			return 0, fmt.Errorf("float64 value out of int64 range: %f", v)
+		}
+		return int64(v), nil
+	case string:
+		return strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %T to int64", val)
 	}
-	var strValue string
-	var err error
-	if value, ok := data[key]; ok {
-		if strValue, ok = value.(string); ok {
-			strTmp := strings.Split(strValue, ",")
-			result := make([]int, len(strTmp))
-			for i, str := range strTmp {
-				result[i], err = strconv.Atoi(str)
-				if err != nil {
-					return nil, fmt.Errorf("value is not int array  by key %s", key)
-				}
+}
+
+func convertToFloat64(val interface{}) (float64, error) {
+	switch v := val.(type) {
+	case float64:
+		return v, nil
+	case float32:
+		return float64(v), nil
+	case int:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case string:
+		return strconv.ParseFloat(strings.TrimSpace(v), 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %T to float64", val)
+	}
+}
+
+func convertToString(val interface{}) (string, error) {
+	switch v := val.(type) {
+	case string:
+		return v, nil
+	case int, int32, int64, float32, float64, bool:
+		return fmt.Sprintf("%v", v), nil
+	default:
+		return "", fmt.Errorf("cannot convert %T to string", val)
+	}
+}
+
+func convertToBool(val interface{}) (bool, error) {
+	switch v := val.(type) {
+	case bool:
+		return v, nil
+	case string:
+		return strconv.ParseBool(strings.TrimSpace(v))
+	default:
+		return false, fmt.Errorf("cannot convert %T to bool", val)
+	}
+}
+
+func convertToTime(val interface{}) (time.Time, error) {
+	switch v := val.(type) {
+	case time.Time:
+		return v, nil
+	case int64:
+		return time.Unix(v, 0), nil
+	case float64:
+		return time.Unix(int64(v), 0), nil
+	case string:
+		layouts := []string{
+			time.RFC3339,
+			time.RFC3339Nano,
+			time.RFC3339,
+			time.RFC822,
+			time.RFC850,
+			"2006-01-02 15:04:05.999999999",
+			"2006-01-02 15:04:05.999999",
+			"2006-01-02 15:04:05.999",
+			"2006-01-02 15:04:05",
+			"2006-01-02",
+			"2006-01-02T15:04:05",
+			"2006-01-02T15:04:05Z07:00",
+			"2006-01-02T15:04:05Z",
+			"2006年01月02日 15时04分05秒",
+			"2006年01月02日15时04分05秒",
+		}
+		s := strings.TrimSpace(v)
+		for _, layout := range layouts {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t, nil
 			}
-			return result, nil
-
-		} else {
-			return nil, fmt.Errorf("value is not string  by key %s", key)
 		}
+		return time.Time{}, fmt.Errorf("invalid time string format: %q", v)
+	default:
+		return time.Time{}, fmt.Errorf("cannot convert %T to time.Time", val)
 	}
-	return nil, nil
-}
-
-func MapToString(data *map[string]interface{}) string {
-	if data == nil {
-		return ""
-	}
-	// return key1=value1,key2=value2,key3=value3
-	var builder strings.Builder
-
-	for key, value := range *data {
-		builder.WriteString(fmt.Sprintf("%s=%v,", key, value))
-	}
-	// 删除最后一个逗号
-	result := builder.String()
-	if len(result) > 0 {
-		result = result[:len(result)-1]
-	}
-	return result
-}
-
-func StringToMap(source *string) (map[string]string, error) {
-	if source == nil {
-		return nil, fmt.Errorf("source is nil")
-	}
-	var values map[string]interface{}
-	err := json.Unmarshal([]byte(*source), &values)
-	if err != nil {
-		return nil, err
-	}
-
-	return ConvertToStrMap(values)
-
-	/*
-		for key, value := range values {
-			switch v := value.(type) {
-			case string:
-				result[key] = v
-			case float64:
-				if math.Floor(v) == v {
-					result[key] = strconv.FormatInt(int64(v), 10)
-				} else {
-					result[key] = strconv.FormatFloat(v, 'f', -1, 64)
-				}
-			case bool:
-				result[key] = strconv.FormatBool(v)
-			case nil:
-				result[key] = ""
-			case []interface{}:
-				// 将数组转换为逗号分隔的字符串
-				var strArr []string
-				for _, item := range v {
-					strArr = append(strArr, fmt.Sprintf("%v", item))
-				}
-				result[key] = strings.Join(strArr, ",")
-			default:
-				return nil, fmt.Errorf("value is not a supported type for key %s", key)
-			}
-		}
-
-		return result, nil
-	*/
-}
-func ConvertToStrMap(values map[string]interface{}) (map[string]string, error) {
-	result := make(map[string]string, len(values))
-	// 只考虑基本类型
-	for key, value := range values {
-		switch v := value.(type) {
-		case int, int8, int16, int32, int64, float32, float64, string, bool:
-			result[key] = fmt.Sprintf("%v", v)
-		default:
-			return nil, fmt.Errorf("value is not a supported type for key %s", key)
-		}
-	}
-	return result, nil
 }

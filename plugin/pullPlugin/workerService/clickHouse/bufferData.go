@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/ClickHouse/ch-go/proto"
+	"github.com/drkisler/dataPedestal/common/dataConvert"
+	"github.com/drkisler/dataPedestal/common/timeExtense"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"net/netip"
@@ -322,71 +324,66 @@ func (bd *TBufferData) Append(val any) error {
 			bd.Data.(*proto.ColNullable[proto.Nothing]).Append(proto.NewNullable[proto.Nothing](v))
 		}
 	case proto.ColumnTypeInt8:
-		value, ok := val.(int8)
-		if !ok {
-			return errors.Errorf("%v is not the type int8", val)
+		value, err := dataConvert.ToInt8(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColInt8).Append(value)
 	case proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt8):
 		if val == nil {
 			bd.Data.(*proto.ColNullable[int8]).Append(proto.Null[int8]())
 		} else {
-			value, ok := val.(int8)
-			if !ok {
-				return errors.Errorf("%v is not the type int8", val)
+			value, err := dataConvert.ToInt8(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[int8]).Append(proto.NewNullable[int8](value))
 		}
 	case proto.ColumnTypeInt16:
-		value, ok := val.(int16)
-		if !ok {
-			return errors.Errorf("%v is not the type int16", val)
+		value, err := dataConvert.ToInt16(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColInt16).Append(value)
-		//bd.Data = new(proto.ColInt16)
 	case proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt16):
 		if val == nil {
 			bd.Data.(*proto.ColNullable[int16]).Append(proto.Null[int16]())
 		} else {
-			value, ok := val.(int16)
-			if !ok {
-				return errors.Errorf("%v is not the type int16", val)
+			value, err := dataConvert.ToInt16(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[int16]).Append(proto.NewNullable[int16](value))
 		}
-		//bd.Data = new(proto.ColInt16).Nullable()
 	case proto.ColumnTypeInt32:
-		value, ok := val.(int32)
-		if !ok {
-			return errors.Errorf("%v is not the type int32", val)
+		value, err := dataConvert.ToInt32(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColInt32).Append(value)
-		//bd.Data = new(proto.ColInt32)
 	case proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt32):
 		if val == nil {
 			bd.Data.(*proto.ColNullable[int32]).Append(proto.Null[int32]())
 		} else {
-			value, ok := val.(int32)
-			if !ok {
-				return errors.Errorf("%v is not the type int32", val)
+			value, err := dataConvert.ToInt32(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[int32]).Append(proto.NewNullable[int32](value))
 		}
-		//bd.Data = new(proto.ColInt32).Nullable()
 	case proto.ColumnTypeInt64:
-		value, ok := val.(int64)
-		if !ok {
-			return errors.Errorf("%v is not the type int64", val)
+		value, err := dataConvert.ToInt64(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColInt64).Append(value)
-		//bd.Data = new(proto.ColInt64)
 	case proto.ColumnTypeNullable.Sub(proto.ColumnTypeInt64):
 		if val == nil {
 			bd.Data.(*proto.ColNullable[int64]).Append(proto.Null[int64]())
 		} else {
-			value, ok := val.(int64)
-			if !ok {
-				return errors.Errorf("%v is not the type int64", val)
+			value, err := dataConvert.ToInt64(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[int64]).Append(proto.NewNullable[int64](value))
 		}
@@ -428,27 +425,26 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColInt256).Nullable()
 	case proto.ColumnTypeUInt8:
-		value, ok := val.(uint8)
-		if !ok {
-			return errors.Errorf("%v is not the type uint8", val)
+		value, err := dataConvert.ToUint8(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColUInt8).Append(value)
-		//bd.Data = new(proto.ColUInt8)
 	case proto.ColumnTypeNullable.Sub(proto.ColumnTypeUInt8):
 		if val == nil {
 			bd.Data.(*proto.ColNullable[uint8]).Append(proto.Null[uint8]())
 		} else {
-			value, ok := val.(uint8)
-			if !ok {
-				return errors.Errorf("%v is not the type uint8", val)
+			value, err := dataConvert.ToUint8(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[uint8]).Append(proto.NewNullable[uint8](value))
 		}
 		//bd.Data = new(proto.ColUInt8).Nullable()
 	case proto.ColumnTypeUInt16:
-		value, ok := val.(uint16)
-		if !ok {
-			return errors.Errorf("%v is not the type uint16", val)
+		value, err := dataConvert.ToUint16(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColUInt16).Append(value)
 		//bd.Data = new(proto.ColUInt16)
@@ -456,17 +452,17 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[uint16]).Append(proto.Null[uint16]())
 		} else {
-			value, ok := val.(uint16)
-			if !ok {
-				return errors.Errorf("%v is not the type uint16", val)
+			value, err := dataConvert.ToUint16(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[uint16]).Append(proto.NewNullable[uint16](value))
 		}
 		//bd.Data = new(proto.ColUInt16).Nullable()
 	case proto.ColumnTypeUInt32:
-		value, ok := val.(uint32)
-		if !ok {
-			return errors.Errorf("%v is not the type uint32", val)
+		value, err := dataConvert.ToUint32(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColUInt32).Append(value)
 		//bd.Data = new(proto.ColUInt32)
@@ -474,17 +470,17 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[uint32]).Append(proto.Null[uint32]())
 		} else {
-			value, ok := val.(uint32)
-			if !ok {
-				return errors.Errorf("%v is not the type uint32", val)
+			value, err := dataConvert.ToUint32(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[uint32]).Append(proto.NewNullable[uint32](value))
 		}
 		//bd.Data = new(proto.ColUInt32).Nullable()
 	case proto.ColumnTypeUInt64:
-		value, ok := val.(uint64)
-		if !ok {
-			return errors.Errorf("%v is not the type uint64", val)
+		value, err := dataConvert.ToUint64(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColUInt64).Append(value)
 		//bd.Data = new(proto.ColUInt64)
@@ -492,17 +488,17 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[uint64]).Append(proto.Null[uint64]())
 		} else {
-			value, ok := val.(uint64)
-			if !ok {
-				return errors.Errorf("%v is not the type uint64", val)
+			value, err := dataConvert.ToUint64(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[uint64]).Append(proto.NewNullable[uint64](value))
 		}
 		//bd.Data = new(proto.ColUInt64).Nullable()
 	case proto.ColumnTypeUInt128:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		uInt128, err := UInt128FromHex(value)
 		if err != nil {
@@ -514,9 +510,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.UInt128]).Append(proto.Null[proto.UInt128]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			uInt128, err := UInt128FromHex(value)
 			if err != nil {
@@ -526,9 +522,9 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColUInt128).Nullable()
 	case proto.ColumnTypeUInt256:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		uInt256, err := UInt256FromHex(value)
 		if err != nil {
@@ -540,9 +536,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.UInt256]).Append(proto.Null[proto.UInt256]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			uInt256, err := UInt256FromHex(value)
 			if err != nil {
@@ -552,9 +548,9 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColUInt256).Nullable()
 	case proto.ColumnTypeFloat32:
-		value, ok := val.(float32)
-		if !ok {
-			return errors.Errorf("%v is not the type float32", val)
+		value, err := dataConvert.ToFloat32(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColFloat32).Append(value)
 		//bd.Data = new(proto.ColFloat32)
@@ -562,17 +558,17 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[float32]).Append(proto.Null[float32]())
 		} else {
-			value, ok := val.(float32)
-			if !ok {
-				return errors.Errorf("%v is not the type float32", val)
+			value, err := dataConvert.ToFloat32(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[float32]).Append(proto.NewNullable[float32](value))
 		}
 		//bd.Data = new(proto.ColFloat32).Nullable()
 	case proto.ColumnTypeFloat64:
-		value, ok := val.(float64)
-		if !ok {
-			return errors.Errorf("%v is not the type float64", val)
+		value, err := dataConvert.ToFloat64(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColFloat64).Append(value)
 		//bd.Data = new(proto.ColFloat64)
@@ -580,17 +576,17 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[float64]).Append(proto.Null[float64]())
 		} else {
-			value, ok := val.(float64)
-			if !ok {
-				return errors.Errorf("%v is not the type float64", val)
+			value, err := dataConvert.ToFloat64(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[float64]).Append(proto.NewNullable[float64](value))
 		}
 		//bd.Data = new(proto.ColFloat64).Nullable()
 	case proto.ColumnTypeString:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColStr).Append(value)
 		//bd.Data = new(proto.ColStr)
@@ -598,31 +594,36 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[string]).Append(proto.Null[string]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			bd.Data.(*proto.ColNullable[string]).Append(proto.NewNullable[string](value))
 		}
 		//bd.Data = new(proto.ColStr).Nullable()
 	case proto.ColumnTypeFixedString:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		bd.Data.(*proto.ColFixedStr).Append([]byte(value))
 		//bd.Data = new(proto.ColFixedStr)
 	case proto.ColumnTypeArray:
 		value, ok := val.([]string)
 		if !ok {
-			return errors.Errorf("%v is not the type []string", val)
+			StrValue, ok := val.(string)
+			if ok {
+				value = strings.Split(StrValue, ",")
+			} else {
+				return errors.Errorf("%v is not the type []string or string", val)
+			}
 		}
 		bd.Data.(*proto.ColArr[string]).Append(value)
 		//bd.Data = new(proto.ColArr[string])
 	case proto.ColumnTypeIPv4:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		ip, err := netip.ParseAddr(value)
 		if err != nil {
@@ -635,9 +636,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.IPv4]).Append(proto.Null[proto.IPv4]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			ip, err := netip.ParseAddr(value)
 			if err != nil {
@@ -648,9 +649,9 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColIPv4).Nullable()
 	case proto.ColumnTypeIPv6:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		ip, err := netip.ParseAddr(value)
 		if err != nil {
@@ -664,9 +665,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.IPv6]).Append(proto.Null[proto.IPv6]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			ip, err := netip.ParseAddr(value)
 			if err != nil {
@@ -677,7 +678,7 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColIPv6).Nullable()
 	case proto.ColumnTypeDateTime:
-		value, err := convertToTime(val)
+		value, err := timeExtense.ConvertToTime(val)
 		if err != nil {
 			return err
 		}
@@ -686,14 +687,14 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, err := convertToTime(val)
+			value, err := timeExtense.ConvertToTime(val)
 			if err != nil {
 				return err
 			}
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.NewNullable[time.Time](value))
 		}
 	case proto.ColumnTypeDateTime64:
-		value, err := convertToTime(val)
+		value, err := timeExtense.ConvertToTime(val)
 		if err != nil {
 			return err
 		}
@@ -702,7 +703,7 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, err := convertToTime(val)
+			value, err := timeExtense.ConvertToTime(val)
 			if err != nil {
 				return err
 			}
@@ -710,7 +711,7 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = proto.NewColNullable[time.Time](new(proto.ColDateTime64).WithPrecision(proto.PrecisionMicro))
 	case proto.ColumnTypeDate:
-		value, err := convertToTime(val)
+		value, err := timeExtense.ConvertToTime(val)
 		if err != nil {
 			return err
 		}
@@ -720,7 +721,7 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, err := convertToTime(val)
+			value, err := timeExtense.ConvertToTime(val)
 			if err != nil {
 				return err
 			}
@@ -729,7 +730,7 @@ func (bd *TBufferData) Append(val any) error {
 
 		//bd.Data = new(proto.ColDate).Nullable()
 	case proto.ColumnTypeDate32:
-		value, err := convertToTime(val)
+		value, err := timeExtense.ConvertToTime(val)
 		if err != nil {
 			return err
 		}
@@ -739,7 +740,7 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[time.Time]).Append(proto.Null[time.Time]())
 		} else {
-			value, err := convertToTime(val)
+			value, err := timeExtense.ConvertToTime(val)
 			if err != nil {
 				return err
 			}
@@ -748,9 +749,9 @@ func (bd *TBufferData) Append(val any) error {
 
 		//bd.Data = new(proto.ColDate32).Nullable()
 	case proto.ColumnTypeUUID:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		uuidVal, err := uuid.Parse(value)
 		if err != nil {
@@ -762,9 +763,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[uuid.UUID]).Append(proto.Null[uuid.UUID]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			uuidVal, err := uuid.Parse(value)
 			if err != nil {
@@ -774,10 +775,11 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColUUID).Nullable()
 	case proto.ColumnTypeEnum8:
-		value, ok := val.(int8)
-		if !ok {
-			return errors.Errorf("%v is not the type int8", val)
+		value, err := dataConvert.ToInt8(val)
+		if err != nil {
+			return err
 		}
+
 		vEnum8 := proto.Enum8(value)
 		bd.Data.(*proto.ColEnum8).Append(vEnum8)
 		//bd.Data = new(proto.ColEnum8)
@@ -785,18 +787,18 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.Enum8]).Append(proto.Null[proto.Enum8]())
 		} else {
-			value, ok := val.(int8)
-			if !ok {
-				return errors.Errorf("%v is not the type int8", val)
+			value, err := dataConvert.ToInt8(val)
+			if err != nil {
+				return err
 			}
 			vEnum8 := proto.Enum8(value)
 			bd.Data.(*proto.ColNullable[proto.Enum8]).Append(proto.NewNullable[proto.Enum8](vEnum8))
 		}
 		//bd.Data = new(proto.ColEnum8).Nullable()
 	case proto.ColumnTypeEnum16:
-		value, ok := val.(int16)
-		if !ok {
-			return errors.Errorf("%v is not the type int16", val)
+		value, err := dataConvert.ToInt16(val)
+		if err != nil {
+			return err
 		}
 		vEnum16 := proto.Enum16(value)
 		bd.Data.(*proto.ColEnum16).Append(vEnum16)
@@ -805,9 +807,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.Enum16]).Append(proto.Null[proto.Enum16]())
 		} else {
-			value, ok := val.(int16)
-			if !ok {
-				return errors.Errorf("%v is not the type int16", val)
+			value, err := dataConvert.ToInt16(val)
+			if err != nil {
+				return err
 			}
 			vEnum16 := proto.Enum16(value)
 			bd.Data.(*proto.ColNullable[proto.Enum16]).Append(proto.NewNullable[proto.Enum16](vEnum16))
@@ -839,9 +841,9 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColBool).Nullable()
 	case proto.ColumnTypeDecimal32:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is need convert to string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		numValue, err := convertDecimalToNumber(value)
 		if err != nil {
@@ -854,9 +856,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.Decimal32]).Append(proto.Null[proto.Decimal32]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is need convert to string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			numValue, err := convertDecimalToNumber(value)
 			if err != nil {
@@ -867,9 +869,9 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColDecimal32).Nullable()
 	case proto.ColumnTypeDecimal64:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is need convert to string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		numValue, err := convertDecimalToNumber(value)
 		if err != nil {
@@ -883,9 +885,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.Decimal64]).Append(proto.Null[proto.Decimal64]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is need convert to string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			numValue, err := convertDecimalToNumber(value)
 			if err != nil {
@@ -896,9 +898,9 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColDecimal64).Nullable()
 	case proto.ColumnTypeDecimal128:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		uInt128, err := UInt128FromHex(value)
 		if err != nil {
@@ -910,9 +912,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.Decimal128]).Append(proto.Null[proto.Decimal128]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			uInt128, err := UInt128FromHex(value)
 			if err != nil {
@@ -923,9 +925,9 @@ func (bd *TBufferData) Append(val any) error {
 
 		//bd.Data = new(proto.ColDecimal128).Nullable()
 	case proto.ColumnTypeDecimal256:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		uInt256, err := UInt256FromHex(value)
 		if err != nil {
@@ -937,9 +939,9 @@ func (bd *TBufferData) Append(val any) error {
 		if val == nil {
 			bd.Data.(*proto.ColNullable[proto.Decimal256]).Append(proto.Null[proto.Decimal256]())
 		} else {
-			value, ok := val.(string)
-			if !ok {
-				return errors.Errorf("%v is not the type string", val)
+			value, err := dataConvert.ToString(val)
+			if err != nil {
+				return err
 			}
 			uInt256, err := UInt256FromHex(value)
 			if err != nil {
@@ -949,9 +951,9 @@ func (bd *TBufferData) Append(val any) error {
 		}
 		//bd.Data = new(proto.ColDecimal256).Nullable()
 	case proto.ColumnTypePoint:
-		value, ok := val.(string)
-		if !ok {
-			return errors.Errorf("%v is not the type string", val)
+		value, err := dataConvert.ToString(val)
+		if err != nil {
+			return err
 		}
 		point, err := PointFromStr(value)
 		if err != nil {
@@ -1101,56 +1103,4 @@ func (bd *TBufferData) Reset() {
 	case proto.ColumnTypeInterval:
 		bd.Data.(*proto.ColInterval).Reset()
 	}
-}
-
-func convertToTime(val interface{}) (time.Time, error) {
-	// 首先尝试类型断言
-	if timeVal, ok := val.(time.Time); ok {
-		return timeVal, nil
-	}
-	// 尝试多种常见的时间格式
-	layouts := []string{
-		"2006-01-02 15:04:05.999999", // 微秒格式
-		"2006-01-02 15:04:05.9999",   // 4位小数秒
-		"2006-01-02 15:04:05.999",    // 毫秒格式
-		time.RFC3339Nano,             // 2006-01-02T15:04:05.999999999Z07:00
-		time.RFC3339,                 // 2006-01-02T15:04:05Z07:00
-		"2006-01-02 15:04:05",        // 标准日期时间格式
-		"2006-01-02",                 // 仅日期格式
-		time.RFC822,                  // 02 Jan 06 15:04 MST
-		time.RFC850,                  // Monday, 02-Jan-06 15:04:05 MST
-	}
-	// 尝试从字符串转换
-	if strVal, ok := val.(string); ok {
-
-		for _, layout := range layouts {
-			if t, err := time.Parse(layout, strVal); err == nil {
-				return t, nil
-			}
-		}
-		return time.Time{}, errors.Errorf("无法将字符串 '%s' 解析为时间格式", strVal)
-	}
-
-	// 尝试从 []uint8 ([]byte) 转换
-	if byteVal, ok := val.([]uint8); ok {
-		strVal := string(byteVal)
-		for _, layout := range layouts {
-			if t, err := time.Parse(layout, strVal); err == nil {
-				return t, nil
-			}
-		}
-		return time.Time{}, errors.Errorf("无法将 []uint8 '%s' 解析为时间格式", strVal)
-	}
-
-	// 尝试从 Unix 时间戳转换
-	switch v := val.(type) {
-	case int64:
-		return time.Unix(v, 0), nil
-	case int:
-		return time.Unix(int64(v), 0), nil
-	case float64:
-		return time.Unix(int64(v), 0), nil
-	}
-
-	return time.Time{}, errors.Errorf("不支持将类型 %T 转换为 time.Time", val)
 }

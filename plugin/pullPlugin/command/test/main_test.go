@@ -83,7 +83,7 @@ func TestGetSourceTableColumns(t *testing.T) {
 	defer pl.Stop()
 
 	// 加载操作配置
-	operate, err := getOperationConfig("getDestTableColumns")
+	operate, err := getOperationConfig("getSourceTableColumns")
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -95,7 +95,73 @@ func TestGetSourceTableColumns(t *testing.T) {
 	}
 
 	//assert.GreaterOrEqual(t, result.Code, int64(0), "getDestTableColumns failed: %s", result.Info)
-	fmt.Println(fmt.Sprintf("getDestTableColumns result: %v", result.Data.ArrData))
+	fmt.Println(fmt.Sprintf("getSourceTableColumns result: %v", result.Data.ArrData))
+}
+
+func TestCreateDestTableDDL(t *testing.T) {
+	// getDestTableColumns
+	config, err := getPluginConfig("default")
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	assert.NoError(t, err, "Failed to load config")
+
+	pl := service.PluginServ
+	resp := pl.Run(config)
+	if resp.Code < 0 {
+		t.Fatalf("Plugin run failed: %s", resp.Info)
+	}
+	assert.GreaterOrEqual(t, resp.Code, int64(0), "Plugin run failed: %s", resp.Info)
+
+	defer pl.Stop()
+
+	// 加载操作配置
+	operate, err := getOperationConfig("createDestTableDDL")
+	if err != nil {
+		assert.Fail(t, err.Error())
+	}
+	//assert.NoError(t, err, "Failed to load operation config")
+
+	result := pl.CustomInterface(*operate)
+	if result.Code < 0 {
+		t.Fatalf("Plugin run failed: %s", result.Info)
+	}
+
+	//assert.GreaterOrEqual(t, result.Code, int64(0), "getDestTableColumns failed: %s", result.Info)
+	fmt.Println(fmt.Sprintf("createDestTableDDL result: %v", result.Info))
+}
+
+func TestCheckJobTable(t *testing.T) {
+	// getDestTableColumns
+	config, err := getPluginConfig("default")
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	assert.NoError(t, err, "Failed to load config")
+
+	pl := service.PluginServ
+	resp := pl.Run(config)
+	if resp.Code < 0 {
+		t.Fatalf("Plugin run failed: %s", resp.Info)
+	}
+	assert.GreaterOrEqual(t, resp.Code, int64(0), "Plugin run failed: %s", resp.Info)
+
+	defer pl.Stop()
+
+	// 加载操作配置
+	operate, err := getOperationConfig("checkJobTable")
+	if err != nil {
+		assert.Fail(t, err.Error())
+	}
+	//assert.NoError(t, err, "Failed to load operation config")
+
+	result := pl.CustomInterface(*operate)
+	if result.Code < 0 {
+		t.Fatalf("Plugin run failed: %s", result.Info)
+	}
+
+	//assert.GreaterOrEqual(t, result.Code, int64(0), "getDestTableColumns failed: %s", result.Info)
+	fmt.Println(fmt.Sprintf("checkJobTable result: %v", result.Info))
 }
 
 func TestSystemUsage(t *testing.T) {

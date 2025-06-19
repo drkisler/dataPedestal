@@ -301,6 +301,7 @@ func GetSourceTableColumns(_ int32, params map[string]any) response.TResponse {
 }
 
 func ConvertFromClickHouseDDL(userID int32, params map[string]any) response.TResponse {
+
 	tableName, ok := params["source_table"]
 	if !ok {
 		return *response.Failure("source_table is empty") //"", fmt.Errorf("tableName is empty")

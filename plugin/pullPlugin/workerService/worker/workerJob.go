@@ -271,7 +271,7 @@ func (wj *TWorkerJob) PullTables(dbOperator *databaseDriver.DriverOperation) err
 				}
 				continue
 			}
-			if err = tableLog.StopTableLog(iStartTime, fmt.Sprintf("[%s]拉取数据成功，共%d条", time.Now().Format("2006-01-02 15:04:05"), tableLog.RecordCount)); err != nil {
+			if err = tableLog.StopTableLog(iStartTime, ""); err != nil {
 				logService.LogWriter.WriteError(fmt.Sprintf("记录表[%d]结束信息失败：%s", tbl.TableID, err.Error()), false)
 			}
 			// 发布表数据变动消息

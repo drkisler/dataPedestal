@@ -26,48 +26,43 @@ func ParsePushJobControl(data map[string]any) (*TPushJobControl, error) {
 	var err error
 	var result TPushJobControl
 
-	/*if result.OperatorID, err = common.GetInt32ValueFromMap("operator_id", data); err != nil {
+	if result.PageSize, err = enMap.ExtractValueFromMap[int32]("page_size", data); err != nil {
 		return nil, err
 	}
-	result.UserID = result.OperatorID*/
-
-	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageIndex, err = enMap.ExtractValueFromMap[int32]("page_index", data); err != nil {
 		return nil, err
 	}
-	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
+	if result.JobID, err = enMap.ExtractValueFromMap[int32]("job_id", data); err != nil {
 		return nil, err
 	}
-	if result.JobID, err = enMap.GetInt32ValueFromMap("job_id", data); err != nil {
+	if result.JobName, err = enMap.ExtractValueFromMap[string]("job_name", data); err != nil {
 		return nil, err
 	}
-	if result.JobName, err = enMap.GetStringValueFromMap("job_name", data); err != nil {
+	if result.DsID, err = enMap.ExtractValueFromMap[int32]("ds_id", data); err != nil {
 		return nil, err
 	}
-	if result.DsID, err = enMap.GetInt32ValueFromMap("ds_id", data); err != nil {
+	if result.PluginUUID, err = enMap.ExtractValueFromMap[string]("plugin_uuid", data); err != nil {
 		return nil, err
 	}
-	if result.PluginUUID, err = enMap.GetStringValueFromMap("plugin_uuid", data); err != nil {
+	if result.CronExpression, err = enMap.ExtractValueFromMap[string]("cron_expression", data); err != nil {
 		return nil, err
 	}
-	if result.CronExpression, err = enMap.GetStringValueFromMap("cron_expression", data); err != nil {
+	if result.SkipHour, err = enMap.ExtractValueFromMap[string]("skip_hour", data); err != nil {
 		return nil, err
 	}
-	if result.SkipHour, err = enMap.GetStringValueFromMap("skip_hour", data); err != nil {
+	if result.IsDebug, err = enMap.ExtractValueFromMap[string]("is_debug", data); err != nil {
 		return nil, err
 	}
-	if result.IsDebug, err = enMap.GetStringValueFromMap("is_debug", data); err != nil {
+	if result.Status, err = enMap.ExtractValueFromMap[string]("status", data); err != nil {
 		return nil, err
 	}
-	if result.Status, err = enMap.GetStringValueFromMap("status", data); err != nil {
+	if result.LastRun, err = enMap.ExtractValueFromMap[int64]("last_run", data); err != nil {
 		return nil, err
 	}
-	if result.LastRun, err = enMap.GetInt64ValueFromMap("last_run", data); err != nil {
+	if result.PageIndex, err = enMap.ExtractValueFromMap[int32]("page_index", data); err != nil {
 		return nil, err
 	}
-	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
-		return nil, err
-	}
-	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageSize, err = enMap.ExtractValueFromMap[int32]("page_size", data); err != nil {
 		return nil, err
 	}
 	if result.PageIndex == 0 {

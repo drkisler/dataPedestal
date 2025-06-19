@@ -129,7 +129,7 @@ func (pc *TPullTableControl) SetLastRun(iStartTime int64) error {
 func ParsePullTableControl(data map[string]any) (*TPullTableControl, *TPullJob, error) {
 	var err error
 	var result TPullTableControl
-	if result.JobName, err = enMap.GetStringValueFromMap("job_name", data); err != nil {
+	if result.JobName, err = enMap.ExtractValueFromMap[string]("job_name", data); err != nil {
 		return nil, nil, err
 	}
 	if result.JobName == "" {
@@ -143,43 +143,43 @@ func ParsePullTableControl(data map[string]any) (*TPullTableControl, *TPullJob, 
 		return nil, nil, err
 	}
 	result.JobID = job.JobID
-	if result.TableID, err = enMap.GetInt32ValueFromMap("table_id", data); err != nil {
+	if result.TableID, err = enMap.ExtractValueFromMap[int32]("table_id", data); err != nil {
 		return nil, nil, err
 	}
-	if result.TableName, err = enMap.GetStringValueFromMap("table_name", data); err != nil {
+	if result.TableName, err = enMap.ExtractValueFromMap[string]("table_name", data); err != nil {
 		return nil, nil, err
 	}
-	if result.TableCode, err = enMap.GetStringValueFromMap("table_code", data); err != nil {
+	if result.TableCode, err = enMap.ExtractValueFromMap[string]("table_code", data); err != nil {
 		return nil, nil, err
 	}
-	if result.DestTable, err = enMap.GetStringValueFromMap("dest_table", data); err != nil {
+	if result.DestTable, err = enMap.ExtractValueFromMap[string]("dest_table", data); err != nil {
 		return nil, nil, err
 	}
-	if result.SelectSql, err = enMap.GetStringValueFromMap("select_sql", data); err != nil {
+	if result.SelectSql, err = enMap.ExtractValueFromMap[string]("select_sql", data); err != nil {
 		return nil, nil, err
 	}
-	if result.FilterCol, err = enMap.GetStringValueFromMap("filter_col", data); err != nil {
+	if result.FilterCol, err = enMap.ExtractValueFromMap[string]("filter_col", data); err != nil {
 		return nil, nil, err
 	}
-	if result.FilterVal, err = enMap.GetStringValueFromMap("filter_val", data); err != nil {
+	if result.FilterVal, err = enMap.ExtractValueFromMap[string]("filter_val", data); err != nil {
 		return nil, nil, err
 	}
-	if result.KeyCol, err = enMap.GetStringValueFromMap("key_col", data); err != nil {
+	if result.KeyCol, err = enMap.ExtractValueFromMap[string]("key_col", data); err != nil {
 		return nil, nil, err
 	}
-	if result.Buffer, err = enMap.GetIntValueFromMap("buffer", data); err != nil {
+	if result.Buffer, err = enMap.ExtractValueFromMap[int]("buffer", data); err != nil {
 		return nil, nil, err
 	}
-	if result.Status, err = enMap.GetStringValueFromMap("status", data); err != nil {
+	if result.Status, err = enMap.ExtractValueFromMap[string]("status", data); err != nil {
 		return nil, nil, err
 	}
-	if result.LastRun, err = enMap.GetInt64ValueFromMap("last_run", data); err != nil {
+	if result.LastRun, err = enMap.ExtractValueFromMap[int64]("last_run", data); err != nil {
 		return nil, nil, err
 	}
-	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
+	if result.PageIndex, err = enMap.ExtractValueFromMap[int32]("page_index", data); err != nil {
 		return nil, nil, err
 	}
-	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageSize, err = enMap.ExtractValueFromMap[int32]("page_size", data); err != nil {
 		return nil, nil, err
 	}
 	if result.PageIndex == 0 {

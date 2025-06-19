@@ -3,8 +3,8 @@ package queryFilter
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/drkisler/dataPedestal/common/timeExtense"
 	"strconv"
-	"time"
 )
 
 type DataType string
@@ -74,22 +74,24 @@ func JSONToFilterValues(filterJson *string) ([]FilterValue, error) {
 			if err != nil {
 				return nil, err
 			}
-		case Date:
-			value, err = time.Parse("2006-01-02", condition.Value)
+		case Date, Datetime, Timestamp:
+			value, err = timeExtense.ConvertToTime(condition.Value)
 			if err != nil {
 				return nil, err
 			}
-		case Datetime:
-			value, err = time.Parse("2006-01-02 15:04:05", condition.Value)
-			if err != nil {
-				return nil, err
-			}
-		case Timestamp:
-			value, err = time.Parse("2006-01-02 15:04:05.999999999", condition.Value)
-			if err != nil {
-				return nil, err
-			}
+			/*
+				case Datetime:
+					value, err = timeExtense.ConvertToTime(condition.Value)
+					if err != nil {
+						return nil, err
+					}
+				case Timestamp:
+					value, err = time.Parse("2006-01-02 15:04:05.999999999", condition.Value)
+					if err != nil {
+						return nil, err
+					}*/
 		}
+
 		result = append(result, FilterValue{
 			Column: condition.Column,
 			Value:  value,

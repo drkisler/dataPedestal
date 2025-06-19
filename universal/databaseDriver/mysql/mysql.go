@@ -533,7 +533,7 @@ func (driver *TMySQLDriver) CheckSQLValid(strSQL, strFilterVal string) ([]tableI
 
 	tables := driverInterface.ExtractTableNames(strSQL)
 	if len(tables) == 0 {
-		return nil, fmt.Errorf("table not found in sql " + strSQL)
+		return nil, fmt.Errorf("table not found in sql %s", strSQL)
 	}
 	upperTables := make([]string, len(tables))
 	for i, s := range tables {
@@ -649,7 +649,7 @@ func (driver *TMySQLDriver) GetColumns(tableName string) ([]tableInfo.ColumnInfo
 		iRowNum++
 	}
 	if iRowNum == 0 {
-		return nil, fmt.Errorf("table not found " + tableName)
+		return nil, fmt.Errorf("table %s not found ", tableName)
 	}
 	return data, nil
 }
@@ -711,15 +711,15 @@ func (driver *TMySQLDriver) PullData(strSQL, filterVal, destTable string, batch 
 // 返回值:
 //   - int64: 成功插入的总行数
 //   - error: 错误信息
-func (driver *TMySQLDriver) PushData(selectSQL, filterVal, tableName string, batch int, clickClient *clickHouseSQL.TClickHouseSQL) (int64, error) {
+func (driver *TMySQLDriver) PushData(selectSQL, filterVal, destTable string, batch int, clickClient *clickHouseSQL.TClickHouseSQL) (int64, error) {
 	var paramValues []interface{}
 	var filterValues []queryFilter.FilterValue
 	var err error
 
-	_, err = driver.CheckSQLValid(selectSQL, filterVal)
-	if err != nil {
-		return 0, err
+	if !genService.IsSafeSQL(selectSQL + filterVal) {
+		return -1, fmt.Errorf("unsafe sql")
 	}
+
 	filterValues, err = queryFilter.JSONToFilterValues(&filterVal)
 	for _, item := range filterValues {
 		paramValues = append(paramValues, item.Value)
@@ -734,12 +734,12 @@ func (driver *TMySQLDriver) PushData(selectSQL, filterVal, tableName string, bat
 
 	var keyRows *sql.Row
 	// 解析表名，支持schema.tableName格式
-	if strings.Index(tableName, ".") > 0 {
-		schema := tableName[:strings.Index(tableName, ".")]
-		tableName = tableName[strings.Index(tableName, ".")+1:]
-		keyRows = driver.Db.QueryRow(strGetTablePrimaryKeySQL, schema, tableName)
+	if strings.Index(destTable, ".") > 0 {
+		schema := destTable[:strings.Index(destTable, ".")]
+		destTable = destTable[strings.Index(destTable, ".")+1:]
+		keyRows = driver.Db.QueryRow(strGetTablePrimaryKeySQL, schema, destTable)
 	} else {
-		keyRows = driver.Db.QueryRow(strGetTablePrimaryKeySQL, driver.Schema, tableName)
+		keyRows = driver.Db.QueryRow(strGetTablePrimaryKeySQL, driver.Schema, destTable)
 	}
 
 	// 检查查询结果
@@ -756,12 +756,13 @@ func (driver *TMySQLDriver) PushData(selectSQL, filterVal, tableName string, bat
 	// 如果表没有主键，在插入前清空表数据
 	if iTablePrimaryKeyCount == 0 {
 		strTruncateSQL := fmt.Sprintf("TRUNCATE "+
-			"TABLE %s", tableName)
+			"TABLE %s", destTable)
 		if _, err := driver.Db.Exec(strTruncateSQL); err != nil {
 			return -1, err
 		}
 	}
 	totalCount := int64(0)
+
 	if err = clickClient.QuerySQL(
 		selectSQL,
 		func(rows *sql.Rows) error {
@@ -804,7 +805,7 @@ func (driver *TMySQLDriver) PushData(selectSQL, filterVal, tableName string, bat
 
 				// 达到批量插入的数量后执行插入
 				if iRowNum >= batch {
-					if rowHandleErr = driver.loadDataToMySQL(tableName, strCols, sParams, iRowNum, valueArgs); rowHandleErr != nil {
+					if rowHandleErr = driver.loadDataToMySQL(destTable, strCols, sParams, iRowNum, valueArgs); rowHandleErr != nil {
 						return rowHandleErr
 					}
 					// 重置计数器和参数数组
@@ -815,12 +816,13 @@ func (driver *TMySQLDriver) PushData(selectSQL, filterVal, tableName string, bat
 
 			// 处理剩余的数据
 			if iRowNum > 0 {
-				if rowHandleErr = driver.loadDataToMySQL(tableName, strCols, sParams, iRowNum, valueArgs); rowHandleErr != nil {
+				if rowHandleErr = driver.loadDataToMySQL(destTable, strCols, sParams, iRowNum, valueArgs); rowHandleErr != nil {
 					return rowHandleErr
 				}
 			}
 			return nil
 		},
+		paramValues...,
 	); err != nil {
 		return -1, err
 	}
@@ -830,12 +832,6 @@ func (driver *TMySQLDriver) PushData(selectSQL, filterVal, tableName string, bat
 func (driver *TMySQLDriver) GetQuoteFlag() string {
 	return "`"
 }
-
-/*
-func (driver *TMySQLDriver) GetParamSign() string {
-	return "?"
-}
-*/
 
 func (driver *TMySQLDriver) GetSchema() string {
 	return driver.Schema

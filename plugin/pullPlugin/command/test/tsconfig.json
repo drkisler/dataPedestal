@@ -23,7 +23,15 @@
         "job_name": "测试"
       }
     },
-    "getDestTableColumns": {
+    "createDestTableDDL": {
+      "user_id": 1,
+      "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
+      "params": {
+        "job_name": "测试",
+        "table_name": "case"
+      }
+    },
+    "getSourceTableColumns": {
       "user_id": 1,
       "plugin_uuid": "23eb248c-70bb-4b56-870a-738bf92ac0b3",
       "params": {

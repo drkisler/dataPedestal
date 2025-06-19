@@ -26,34 +26,34 @@ type TPushTableLogControl struct {
 func ParseTableLogControl(data map[string]any) (*TPushTableLogControl, error) {
 	var err error
 	var result TPushTableLogControl
-	if result.PageSize, err = enMap.GetInt32ValueFromMap("page_size", data); err != nil {
+	if result.PageSize, err = enMap.ExtractValueFromMap[int32]("page_size", data); err != nil {
 		return nil, err
 	}
-	if result.PageIndex, err = enMap.GetInt32ValueFromMap("page_index", data); err != nil {
+	if result.PageIndex, err = enMap.ExtractValueFromMap[int32]("page_index", data); err != nil {
 		return nil, err
 	}
-	if result.JobID, err = enMap.GetInt32ValueFromMap("job_id", data); err != nil {
+	if result.JobID, err = enMap.ExtractValueFromMap[int32]("job_id", data); err != nil {
 		return nil, err
 	}
-	if result.TableID, err = enMap.GetInt32ValueFromMap("table_id", data); err != nil {
+	if result.TableID, err = enMap.ExtractValueFromMap[int32]("table_id", data); err != nil {
 		return nil, err
 	}
-	if result.StartTime, err = enMap.GetStringValueFromMap("start_time", data); err != nil {
+	if result.StartTime, err = enMap.ExtractValueFromMap[string]("start_time", data); err != nil {
 		return nil, err
 	}
-	if result.StopTime, err = enMap.GetStringValueFromMap("stop_time", data); err != nil {
+	if result.StopTime, err = enMap.ExtractValueFromMap[string]("stop_time", data); err != nil {
 		return nil, err
 	}
-	if result.TimeSpent, err = enMap.GetStringValueFromMap("time_spent", data); err != nil {
+	if result.TimeSpent, err = enMap.ExtractValueFromMap[string]("time_spent", data); err != nil {
 		return nil, err
 	}
-	if result.Status, err = enMap.GetStringValueFromMap("status", data); err != nil {
+	if result.Status, err = enMap.ExtractValueFromMap[string]("status", data); err != nil {
 		return nil, err
 	}
-	if result.RecordCount, err = enMap.GetInt64ValueFromMap("record_count", data); err != nil {
+	if result.RecordCount, err = enMap.ExtractValueFromMap[int64]("record_count", data); err != nil {
 		return nil, err
 	}
-	if result.ErrorInfo, err = enMap.GetStringValueFromMap("error_info", data); err != nil {
+	if result.ErrorInfo, err = enMap.ExtractValueFromMap[string]("error_info", data); err != nil {
 		return nil, err
 	}
 
