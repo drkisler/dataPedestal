@@ -3,6 +3,7 @@ package initializers
 import (
 	"fmt"
 	"github.com/drkisler/dataPedestal/common/license"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,6 +123,52 @@ func (cfg *TAppBaseConfig) createDefaultConfig(config IConfigLoader) error {
 		return fmt.Errorf("写入默认配置到 %s 失败: %w", cfg.filePath, err)
 	}
 	return nil
+}
+
+func (cfg *TAppBaseConfig) GetActiveIP() (string, error) {
+	// 获取所有网络接口
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", fmt.Errorf("获取网络接口失败: %v", err)
+	}
+
+	// 遍历所有网络接口
+	for _, iface := range interfaces {
+		// 跳过未启用的接口
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		// 跳过回环接口
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		// 获取该接口的所有地址
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return "", fmt.Errorf("获取接口 %s 地址失败: %v", iface.Name, err)
+		}
+
+		// 遍历接口的地址
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			// 确保是 IPv4 地址且非回环地址
+			if ip == nil || ip.IsLoopback() || ip.To4() == nil {
+				continue
+			}
+
+			return ip.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("未找到有效的非回环 IPv4 地址")
 }
 
 // parseToMap 将连接字符串解析为 map

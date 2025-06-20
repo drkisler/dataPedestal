@@ -8,7 +8,7 @@ import (
 )
 
 func TestPush(t *testing.T) {
-	myDriver := NewDbDriver()
+	myDriver := NewMySQLDriver()
 	err := myDriver.OpenConnect(`{"host":"192.168.110.130:3306","dbname":"sanyu","user":"sanyu","password":"sanyu"}`,
 		10, 10, 20, 10)
 	if err != nil {

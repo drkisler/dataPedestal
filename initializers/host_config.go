@@ -1,6 +1,7 @@
 package initializers
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 )
 
@@ -23,14 +24,19 @@ type THostConfig struct {
 }
 
 func (cfg *THostConfig) SetDefault() {
+	ipAddress, err := cfg.TAppBaseConfig.GetActiveIP()
+	if err != nil {
+		ipAddress = "127.0.0.1"
+	}
+
 	cfg.TAppBaseConfig.SetDefault()
 	cfg.HostUUID = uuid.New().String()
-	cfg.SurveyUrl = "tcp://127.0.0.1:8901"
+	cfg.SurveyUrl = fmt.Sprintf("tcp://%s:8901", ipAddress)
 	cfg.PublishUrl = "ipc:///tmp/PubSub.ipc"
 	cfg.LocalRepUrl = "ipc:///tmp/ReqRep.ipc" //local_rep_url
 	cfg.PublishPoolSize = 1000
 	cfg.SelfName = "host001"
-	cfg.SelfIP = "127.0.0.1"
+	cfg.SelfIP = ipAddress
 	cfg.ServicePort = 8081
 	cfg.FileServPort = 8902
 	cfg.MessagePort = 8903

@@ -31,8 +31,8 @@ const MYSQL_KEY_WORDS = ",ACCESSIBLE,ADD,ALL,ALTER,ANALYZE,AND,AS,ASC,ASENSITIVE
 var notStringTypes = []string{"UNSIGNED TINYINT", "TINYINT", "UNSIGNED SMALLINT", "SMALLINT", "UNSIGNED INT",
 	"UNSIGNED MEDIUMINT", "INT", "MEDIUMINT", "UNSIGNED BIGINT", "BIGINT", "FLOAT", "DOUBLE", "DATE", "DATETIME", "TIMESTAMP"}
 
-// NewDbDriver creates a new database driver instance.
-func NewDbDriver() driverInterface.IDbDriver {
+// NewMySQLDriver creates a new database driver instance.
+func NewMySQLDriver() driverInterface.IDbDriver {
 	return &TMySQLDriver{driverInterface.TDBDriver{DriverName: "mysql", Connected: false}}
 }
 

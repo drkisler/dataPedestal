@@ -1,5 +1,7 @@
 package initializers
 
+import "github.com/davecgh/go-spew/spew"
+
 var PortalCfg TPortalConfig
 
 type TPortalConfig struct {
@@ -12,7 +14,11 @@ type TPortalConfig struct {
 
 func (cfg *TPortalConfig) SetDefault() {
 	cfg.TAppBaseConfig.SetDefault()
-	cfg.SurveyUrl = "tcp://127.0.0.1:8901"
+	ipAddress, err := cfg.TAppBaseConfig.GetActiveIP()
+	if err != nil {
+		ipAddress = "127.0.0.1"
+	}
+	cfg.SurveyUrl = spew.Sprintf("tcp://%s:8901", ipAddress)
 	cfg.PluginDir = "plugin"
 	cfg.DBConnection = "user=postgres password=secret host=localhost port=5432 dbname=postgres sslmode=disable pool_max_conns=10 client_encoding=UTF8"
 	cfg.DbDriverDir = "dbDriver"
